@@ -1,0 +1,1 @@
+docker run --device nvidia.com/gpu=all -d -p 8000:8000 ttsapi

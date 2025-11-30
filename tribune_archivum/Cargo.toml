@@ -1,0 +1,12 @@
+[package]
+name = "tribune_archivum"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib/mod.rs"
+
+[dependencies]
+epub = "2.1.5"
+scraper = "0.24.0"
+zip = "6.0.0"
