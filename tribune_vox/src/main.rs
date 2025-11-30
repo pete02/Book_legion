@@ -32,6 +32,7 @@ struct Args {
     #[arg(long, default_value_t = false)]
     debug: bool,
 
+    // give the starting chapter of the book
     #[arg(long, default_value_t = 0)]
     start: usize
 
