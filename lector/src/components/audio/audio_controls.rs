@@ -47,39 +47,39 @@ pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>) -> Element {
     });
 
     rsx! {
+    div {
+        class: "w-full flex flex-col items-center",
         div {
-            class: "w-full flex flex-col items-center",  // center everything horizontally
+            class: "w-[90%] relative",
             div {
-                class: "w-[90%] bg-gray-300 h-3 rounded-full overflow-hidden", // progress bar 90% width
+                class: "bg-gray-300 h-3 rounded-full overflow-hidden w-full",
                 div {
-                    class: "h-full bg-blue-500 transition-all duration-300",
+                    class: "h-full bg-blue-500 transition-all duration-300 rounded-full",
                     style: "width: {precent}%;",
                 }
             }
-            div {
-                class: "w-[90%] mt-1", // same width as progress bar
-                p {
-                    class: "text-left text-sm", // left-aligned
-                    "{cur_str()} / {total_str()}"
-                }
+            p {
+                class: "absolute left-0 -bottom-6 text-sm",
+                "{cur_str()} / {total_str()}"
             }
-            
+        }
 
-            div {
-                class: "my-2", // vertical spacing
-                button {
-                    class: "w-12 h-12 flex items-center justify-center",
-                    onclick: move |_| {
-                        playpause(playing);
-                    },
-                    img {
-                        class: "w-full h-full object-contain",
-                        src: if *playing.read() { PAUSE } else { PLAY }
-                    }
+        div {
+            class: "my-2",
+            button {
+                class: "w-12 h-12 flex items-center justify-center",
+                onclick: move |_| {
+                    playpause(playing);
+                },
+                img {
+                    class: "w-full h-full object-contain",
+                    src: if *playing.read() { PAUSE } else { PLAY }
                 }
             }
         }
     }
+}
+
 }
 
 
