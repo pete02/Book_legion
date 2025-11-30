@@ -11,7 +11,7 @@ pub struct BookStatus {
     pub time: f64,
     pub json: String,
     pub max_chapter: u32,
-    pub duration: f32
+    pub duration: f64
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
