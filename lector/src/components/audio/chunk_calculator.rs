@@ -4,15 +4,17 @@ use gloo_timers::future::TimeoutFuture;
 use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen_futures::spawn_local;
 
-use crate::models::{BookStatus, ChunkData, ChunkProgress, GlobalState};
+use crate::models::{BookStatus, ChunkData, ChunkProgress,  GlobalState};
 
 
 
 #[component]
-pub fn ChunkCalculator(time: Signal<f64>)->Element{
+pub fn ChunkCalculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>)->Element{
     let time= time.clone();
     let global = use_context::<Signal<GlobalState>>();
     let chunks = use_signal(|| Vec::<ChunkProgress>::new());
+
+
     let _ = global().book.clone();
     use_effect(move || {
         if global().book.is_none() {
@@ -24,7 +26,7 @@ pub fn ChunkCalculator(time: Signal<f64>)->Element{
         }
         spawn_local(async move {
             if global().book.is_some() {
-                load_audiomap(chunks, global).await;
+                load_audiomap(chunks, global, chunkmap).await;
             }
         });
     });
@@ -89,7 +91,10 @@ fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>, global:&
     });
 }
 
-async fn load_audiomap(chunks: Signal<Vec::<ChunkProgress>>,global:Signal<GlobalState>){
+
+
+
+async fn load_audiomap(chunks: Signal<Vec::<ChunkProgress>>,global:Signal<GlobalState>, mut chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>){
     tracing::debug!("loading map");
     let mut chunks=chunks.clone();
     let mut res=chunks();
@@ -99,6 +104,7 @@ async fn load_audiomap(chunks: Signal<Vec::<ChunkProgress>>,global:Signal<Global
             match fetch_audiomap(book).await {
                 Err(e)=>tracing::error!("could not fetch audiomap: {e}"),
                 Ok(hash)=>{
+                    chunkmap.set(Some(hash.clone()));
                     res = hash.values().cloned().collect::<Vec<_>>();
                     res.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap_or(std::cmp::Ordering::Equal));
                 }

@@ -11,12 +11,13 @@ use crate::assets::{PAUSE, PLAY};
 use crate::models::GlobalState;
 
 #[component]
-pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>) -> Element {
+pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>, audio_url: Signal<Option<String>>) -> Element {
     let globalstate = use_context::<Signal<GlobalState>>();
     let total=use_signal(||0.0);
     let total_str=use_signal(||"".to_owned());
     let cur_str=use_signal(||"".to_owned());
     let precent= use_signal(||0.0);
+    let mut audio_url=audio_url.clone();
 
     use_effect({
         let mut total=total.clone();
@@ -75,6 +76,11 @@ pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>) -> Element {
                     class: "w-full h-full object-contain",
                     src: if *playing.read() { PAUSE } else { PLAY }
                 }
+            }
+
+            button {  
+                onclick: move |_| {audio_url.set(None);},
+                "forward"
             }
         }
     }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 use dioxus_signals::Signal;
 use gloo_timers::future::TimeoutFuture;
@@ -7,7 +9,7 @@ use serde_json;
 use wasm_bindgen_futures::spawn_local;
 
 
-use crate::models::{GlobalState, BookStatus};
+use crate::models::{BookStatus, ChunkProgress, GlobalState};
 
 
 const ADVANCE_AMOUNT: u32 = 10;
@@ -15,14 +17,13 @@ const TICK_INTERVAL_MS: u32 = 100;
 const TICK_INCREMENT: f64 = TICK_INTERVAL_MS as f64 /1000.0;
 
 #[component]
-pub fn AudioPlayer(playing: Signal<bool>, total_played: Signal<f64>) -> Element {
+pub fn AudioPlayer(playing: Signal<bool>, total_played: Signal<f64>, chunkmap:Signal<Option<HashMap<String, ChunkProgress>>>, audio_url: Signal<Option<String>>) -> Element {
     let globalstate = use_context::<Signal<GlobalState>>();
-    let audio_url = use_signal(|| None::<String>);
     let fetch_trigger = use_signal(|| 0u32);
 
 
 
-    use_audio_chunk_loader(globalstate.clone(), audio_url.clone(), fetch_trigger.clone());
+    use_audio_chunk_loader(globalstate.clone(),total_played.clone(), audio_url.clone(), fetch_trigger.clone(), chunkmap.clone());
     use_playback_tick(playing.clone(), total_played.clone());
 
     if let Some(src) = audio_url() {
@@ -34,8 +35,10 @@ pub fn AudioPlayer(playing: Signal<bool>, total_played: Signal<f64>) -> Element 
 
 fn use_audio_chunk_loader(
     global: Signal<GlobalState>,
+    mut time: Signal<f64>,
     audio_url: Signal<Option<String>>,
     fetch_trigger: Signal<u32>,
+    chunkmap:Signal<Option<HashMap<String, ChunkProgress>>>
 ) {
     let ended = use_signal(|| false);
 
@@ -49,23 +52,52 @@ fn use_audio_chunk_loader(
         }
     });
 
+
+
     use_effect({
-        let mut global = global.clone();
         let mut audio_url = audio_url.clone();
-        let mut fetch_trigger = fetch_trigger.clone();
-        let mut ended=ended.clone();
+        let mut chunk=use_signal(||"".to_string());
+        let mut signal=use_signal(|| false);
+        let mut ready_to_advance = use_signal(|| false);
+
+
+
         move || {
             if audio_url().is_none()  && let Some(Some(bytes)) = resource() {
                 audio_url.set(Some(create_blob(bytes.1)));
+                signal.set(bytes.0);
+                ready_to_advance.set(true);
+                match chunkmap() {
+                    None=>{},
+                    Some(hash)=>{
+                        if hash.contains_key(&chunk()){
+                            let chunk=hash.get(&chunk()).unwrap();
+                            time.set(chunk.start_time);
+                        }
+                    }
+                }
+
                 resource.clear();
+            }
+
+
+            if resource().is_none() && ready_to_advance(){
+                let mut fetch_trigger = fetch_trigger.clone();
+                let mut global = global.clone();
+                let mut ended=false;
+
+                ready_to_advance.set(false);
+
                 global.with_mut(|state| {
                     if let Some(book) = &mut state.book {
-                        if bytes.0 {
+                        chunk.set(format!("{},{}", book.chapter as i32, book.chunk as i32));
+
+                        if signal() {
                             if book.chapter < book.max_chapter{
                                 book.chunk = 1;
                                 book.chapter += 1;
                             }else{
-                                ended.with_mut(|f|*f=true);
+                                ended=true;
                             }
                         } else {
                             book.chunk += ADVANCE_AMOUNT + 1;
@@ -73,7 +105,7 @@ fn use_audio_chunk_loader(
                     }
                 });
     
-                if !ended() {
+                if !ended {
                     fetch_trigger.set(fetch_trigger() + 1);
                 }
             }
