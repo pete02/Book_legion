@@ -32,15 +32,15 @@ pub fn ChunkCalculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<String
     });
 
 
-    check_chunk(&time, &chunks,&global);
+    check_chunk(&time, &chunks,);
 
     rsx!()
 }
 
-fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>, global:&Signal<GlobalState>) {
+fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
     let time = time.clone();
     let chunks = chunks.clone();
-    let global=global.clone();
+    let global=use_context::<Signal<GlobalState>>();
 
     let mut cur_chunk=use_signal(||ChunkProgress {
         chapter_number: 0,
@@ -56,30 +56,19 @@ fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>, global:&
         spawn_local(async move {
             while running_ref.get() {
                 TimeoutFuture::new(1000).await;
-
-                let t = time();
                 let list = chunks();
 
                 if list.is_empty() {
                     tracing::debug!("no chunks loaded yet");
                     continue;
                 }
-                let idx = list.partition_point(|c| c.start_time <= t);
+                let idx = list.partition_point(|c| c.start_time <= time());
 
-                let active = if idx == 0 {
-                    0
-                } else {
-                    idx - 1
-                };
+                let active = if idx == 0 { 0} else { idx - 1 };
 
                 let chunk = &list[active];
 
                 if *chunk != cur_chunk(){
-                    tracing::debug!(
-                        "time={t:?} → chapter={} chunk={} (index {active})",
-                        chunk.chapter_number,
-                        chunk.chunk_number
-                    );
                     cur_chunk.set(chunk.clone());
                     match global().book {
                         None=>{},
