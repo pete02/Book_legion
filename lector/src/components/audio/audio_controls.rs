@@ -12,40 +12,16 @@ use crate::models::GlobalState;
 
 #[component]
 pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>, audio_url: Signal<Option<String>>) -> Element {
-    let globalstate = use_context::<Signal<GlobalState>>();
     let total=use_signal(||0.0);
     let total_str=use_signal(||"".to_owned());
     let cur_str=use_signal(||"".to_owned());
     let precent= use_signal(||0.0);
     let mut audio_url=audio_url.clone();
 
-    use_effect({
-        let mut total=total.clone();
-        let mut total_str=total_str.clone();
+    create_total_time(total, total_str);
 
-        move ||{
-            match globalstate().book {
-                None => total.with_mut(|f| *f=0.0),
-                Some(book)=> {
-                    let t= book.duration as i32;
-                    tracing::debug!(t);
-                    total.set(book.duration);
-                    total_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60).floor(), t%60));
-                }
-            }
-        }
-    });
+    create_current_time(current, cur_str, precent, total);
 
-
-    use_effect({
-        let mut cur_str=cur_str.clone();
-        let mut precent=precent.clone();
-        move || {
-            precent.set((current()/total())*100.0);
-            let t=current() as i32;
-            cur_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60)%60, t%60));
-        }
-    });
 
     rsx! {
     div {
@@ -88,6 +64,40 @@ pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>, audio_url: Sig
 
 }
 
+
+fn create_current_time(current: Signal<f64>, cur_str: Signal<String>, precent:Signal<f64>, total:Signal<f64>){
+
+    use_effect({
+        let mut cur_str=cur_str.clone();
+        let mut precent=precent.clone();
+        move || {
+            precent.set((current()/total())*100.0);
+            let t=current() as i32;
+            cur_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60)%60, t%60));
+        }
+    });
+
+}
+
+fn create_total_time(total:Signal<f64>, total_str:Signal<String>){
+    use_effect({
+        let mut total=total.clone();
+        let mut total_str=total_str.clone();
+        let globalstate = use_context::<Signal<GlobalState>>();
+
+        move ||{
+            match globalstate().book {
+                None => total.with_mut(|f| *f=0.0),
+                Some(book)=> {
+                    let t= book.duration as i32;
+                    tracing::debug!(t);
+                    total.set(book.duration);
+                    total_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60).floor(), t%60));
+                }
+            }
+        }
+    });
+}
 
 fn playpause(playing: Signal<bool>){
     let document = web_sys::window().unwrap().document().unwrap();
