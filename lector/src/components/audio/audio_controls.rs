@@ -11,16 +11,15 @@ use crate::assets::{PAUSE, PLAY};
 use crate::models::GlobalState;
 
 #[component]
-pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>, audio_url: Signal<Option<String>>) -> Element {
+pub fn TimeBar(total_played: Signal<f64>, audio_url: Signal<Option<String>>) -> Element {
     let total=use_signal(||0.0);
     let total_str=use_signal(||"".to_owned());
     let cur_str=use_signal(||"".to_owned());
     let precent= use_signal(||0.0);
-    let mut audio_url=audio_url.clone();
 
     create_total_time(total, total_str);
 
-    create_current_time(current, cur_str, precent, total);
+    create_current_time(total_played, cur_str, precent, total);
 
 
     rsx! {
@@ -41,28 +40,47 @@ pub fn AudioControls(current: Signal<f64>, playing: Signal<bool>, audio_url: Sig
             }
         }
 
+    
+        }
+    }
+
+}
+
+
+#[component]
+pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Signal<bool>)->Element{
+    let mut forward=forward.clone();
+    let mut backward = backward.clone();
+
+    rsx! {
         div {
             class: "my-2",
             button {
                 class: "w-12 h-12 flex items-center justify-center",
                 onclick: move |_| {
                     playpause(playing);
-                },
+                    },
                 img {
                     class: "w-full h-full object-contain",
                     src: if *playing.read() { PAUSE } else { PLAY }
+                    }
                 }
-            }
 
             button {  
-                onclick: move |_| {audio_url.set(None);},
+                onclick: move |_| {forward.set(true);},
                 "forward"
-            }
+                }
+
+            button {  
+                onclick: move |_| {backward.set(true);},
+                "backwards"
+                }
         }
     }
+    
 }
 
-}
+
 
 
 fn create_current_time(current: Signal<f64>, cur_str: Signal<String>, precent:Signal<f64>, total:Signal<f64>){
