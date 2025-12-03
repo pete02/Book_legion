@@ -2,19 +2,16 @@ use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use dioxus_signals::Signal;
-use gloo_timers::future::TimeoutFuture;
 use web_sys::{Blob, BlobPropertyBag, Url};
 use js_sys::{Array, Uint8Array};
 use serde_json;
-use wasm_bindgen_futures::spawn_local;
 
 
 use crate::models::{BookStatus, ChunkProgress, GlobalState};
 
 
 const ADVANCE_AMOUNT: u32 = 10;
-const TICK_INTERVAL_MS: u32 = 100;
-const TICK_INCREMENT: f64 = TICK_INTERVAL_MS as f64 /1000.0;
+
 
 #[component]
 pub fn AudioPlayer(playing: Signal<bool>, total_played: Signal<f64>, chunkmap:Signal<Option<HashMap<String, ChunkProgress>>>, audio_url: Signal<Option<String>>) -> Element {
@@ -24,7 +21,6 @@ pub fn AudioPlayer(playing: Signal<bool>, total_played: Signal<f64>, chunkmap:Si
 
 
     use_audio_chunk_loader(globalstate.clone(),total_played.clone(), audio_url.clone(), fetch_trigger.clone(), chunkmap.clone());
-    use_playback_tick(playing.clone(), total_played.clone());
 
     if let Some(src) = audio_url() {
         render_audio(&src, playing.clone(), audio_url.clone())
@@ -110,19 +106,6 @@ fn use_audio_chunk_loader(
     });
 }
 
-
-fn use_playback_tick(playing: Signal<bool>, mut total_played: Signal<f64>) {
-    use_effect(move || {
-        spawn_local(async move {
-            loop {
-                TimeoutFuture::new(TICK_INTERVAL_MS).await;
-                if *playing.read() {
-                    total_played.with_mut(|t| *t += TICK_INCREMENT);
-                }
-            }
-        });
-    });
-}
 
 
 fn render_audio(src: &str, mut playing: Signal<bool>, mut audio_url: Signal<Option<String>>) -> Element {
