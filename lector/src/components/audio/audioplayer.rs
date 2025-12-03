@@ -15,7 +15,7 @@ fn render_audio(src: &str, mut playing: Signal<bool>, mut audio_url: Signal<Opti
         div { id: "audio-player",
             audio {
                 id: "my_audio",
-                controls: true,
+                controls: false,
                 style: "display:none",
                 autoplay: true,
                 src: "{src}",
