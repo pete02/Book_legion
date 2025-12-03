@@ -12,7 +12,7 @@ enum LoadStatus {
 }
 
 
-pub fn load_book(book_name:String, time: Signal<f64>) {
+pub fn use_load_book(book_name:String, time: Signal<f64>) {
     let global = use_context::<Signal<GlobalState>>();
     let status = use_signal(|| LoadStatus::Loading);
     let mut time=time.clone();
