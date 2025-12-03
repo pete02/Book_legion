@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, use_chunk_calculator, use_playback_tick};
+use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, use_audio_chunk_loader, use_chunk_calculator, use_playback_tick};
 use crate::components::{BookCover, use_book_parsing, use_load_book};
 use crate::models::{ChunkProgress};
 
@@ -21,17 +21,17 @@ pub fn AudioView( ) -> Element {
 
 
 
-    use_playback_tick(playing, total_played);
     use_load_book("mageling".to_string(), total_played);
-    use_chunk_calculator(total_played, chunkmap);
     use_book_parsing(book);
-
+    use_chunk_calculator(total_played, chunkmap);
+    use_playback_tick(playing, total_played);
+    use_audio_chunk_loader(total_played, audio_url, chunkmap);
 
     rsx! {
         div {
             class: "min-h-screen flex flex-col items-center justify-start",
             h1 { "Audio View" }
-            AudioPlayer { playing, total_played, chunkmap, audio_url }           
+            AudioPlayer { playing, audio_url }           
             BookCover {name: book}
         
             div {

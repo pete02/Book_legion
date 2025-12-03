@@ -10,3 +10,6 @@ pub use audio_controls::ControlButtons;
 
 mod playback_ticker;
 pub use playback_ticker::use_playback_tick;
+
+mod chunk_sourcing;
+pub use chunk_sourcing::use_audio_chunk_loader;
