@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use crate::components::audio::{AudioPlayer, ChunkCalculator, ControlButtons, TimeBar, use_playback_tick};
-use crate::components::{LoadBook,BookCover};
+use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, chunk_calculator, use_playback_tick};
+use crate::components::{load_book,BookCover};
 use crate::models::{ChunkProgress,  GlobalState};
 
 
@@ -32,25 +32,21 @@ pub fn AudioView( ) -> Element {
 
 
     use_playback_tick(playing, total_played);
+    load_book("mageling".to_string(), total_played);
+    chunk_calculator(total_played, chunkmap);
 
     rsx! {
+        div {
+            class: "min-h-screen flex flex-col items-center justify-start",
+            h1 { "Audio View" }
+            AudioPlayer { playing, total_played, chunkmap, audio_url }           
+            BookCover {name: book}
         
-        div { 
-            LoadBook { book_name:"mageling", time:total_played }
-            ChunkCalculator { time:total_played, chunkmap }
-
             div {
-                class: "min-h-screen flex flex-col items-center justify-start",
-                h1 { "Audio View" }
-                AudioPlayer { playing, total_played, chunkmap, audio_url }           
-                BookCover {name: book}
-            
-                div {
-                    class: "w-full flex flex-col items-center justify-start",
-                    TimeBar { total_played, audio_url }
-                    ControlButtons {playing, forward, backward}
-                }
-            }
+                class: "w-full flex flex-col items-center justify-start",
+                TimeBar { total_played, audio_url }
+                ControlButtons {playing, forward, backward}
+            }   
          }
     }
 }

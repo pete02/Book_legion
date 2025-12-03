@@ -7,9 +7,7 @@ use wasm_bindgen_futures::spawn_local;
 use crate::models::{BookStatus, ChunkData, ChunkProgress,  GlobalState};
 
 
-
-#[component]
-pub fn ChunkCalculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>)->Element{
+pub fn chunk_calculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>){
     let time= time.clone();
     let global = use_context::<Signal<GlobalState>>();
     let chunks = use_signal(|| Vec::<ChunkProgress>::new());
@@ -30,11 +28,8 @@ pub fn ChunkCalculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<String
             }
         });
     });
-
-
     check_chunk(&time, &chunks,);
 
-    rsx!()
 }
 
 fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
