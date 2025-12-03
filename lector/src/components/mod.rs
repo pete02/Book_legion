@@ -7,3 +7,6 @@ mod book_cover;
 pub use book_cover::BookCover;
 
 pub mod audio;
+
+mod parse_book;
+pub use parse_book::use_book_parsing;

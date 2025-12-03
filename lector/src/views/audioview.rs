@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, use_chunk_calculator, use_playback_tick};
-use crate::components::{use_load_book,BookCover};
-use crate::models::{ChunkProgress,  GlobalState};
+use crate::components::{BookCover, use_book_parsing, use_load_book};
+use crate::models::{ChunkProgress};
 
 
 #[component]
@@ -19,21 +19,13 @@ pub fn AudioView( ) -> Element {
     let book=use_signal(||"".to_string());
     
 
-    use_effect({
-        let mut book=book.clone();
-        let global=use_context::<Signal<GlobalState>>();
-        move || {
-            match global().book {
-                None=>{},
-                Some(b)=>{book.set(b.name);}
-            }
-        }
-    });
 
 
     use_playback_tick(playing, total_played);
     use_load_book("mageling".to_string(), total_played);
     use_chunk_calculator(total_played, chunkmap);
+    use_book_parsing(book);
+
 
     rsx! {
         div {
