@@ -1,105 +1,104 @@
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{Blob, BlobPropertyBag, Url};
 use js_sys::{Array, Uint8Array};
 use serde_json;
-use std::collections::HashMap;
 use dioxus::prelude::*;
 
 
-use crate::models::{BookStatus, ChunkProgress, GlobalState};
+use crate::models::{BookStatus, GlobalState};
 
 
 const ADVANCE_AMOUNT: u32 = 10;
 
+pub fn use_audio_chunk_loader(audio_url: Signal<Option<String>>){
+    let audio_url=audio_url.clone();
+    let resource=use_signal(||None);
+    let end=use_signal(||false);
+    let stop_fetch=use_signal(||false);
 
-pub fn use_audio_chunk_loader(
-    time: Signal<f64>,
+    audio_url_hook(audio_url, resource);
+    fetch_for_resource(resource, end, stop_fetch);
+    advance_book_hook(resource, end, stop_fetch);
+}
+
+
+
+fn audio_url_hook(
     audio_url: Signal<Option<String>>,
-    chunkmap:Signal<Option<HashMap<String, ChunkProgress>>>
+    resource: Signal<Option<Vec<u8>>>,
 ) {
-    let global=use_context::<Signal<GlobalState>>();
-    let mut time=time.clone();
-    let fetch_trigger = use_signal(||0);
-    let ended = use_signal(|| false);
+    let mut audio_url = audio_url.clone();
+    let mut resource = resource.clone();
 
-    let mut resource = use_resource({
-        let global = global.clone();
-        let fetch_trigger = fetch_trigger.clone();
-        move || {
-            let mut global = global.clone();
-            let _trigger = fetch_trigger();
-            async move { if !ended(){get_audio(&mut global).await} else{None} }
-        }
+    use_effect(move || {
+        if audio_url().is_some() {return; }
+        let Some(bytes) = resource() else {
+            return;
+        };
+
+        let url = create_blob(bytes);
+        audio_url.set(Some(url));
+        resource.set(None);
     });
-    use_effect({
-        let mut audio_url = audio_url.clone();
-        let mut chunk=use_signal(||"".to_string());
-        let mut signal=use_signal(|| false);
-        let mut ready_to_advance = use_signal(|| false);
+}
 
+fn fetch_for_resource(resource: Signal<Option<Vec<u8>>>, end: Signal<bool>, stop_fetch:Signal<bool>){
+    let resource=resource.clone();
+    let mut fetching=use_signal(||false);
+    let end = end.clone();
+    let stop_fetch=stop_fetch.clone();
+    let global=use_context::<Signal<GlobalState>>();
 
+    use_effect(move ||{
+        if fetching() {return;}
+        if resource().is_some() {return;}
+        if stop_fetch() {return;}
 
-        move || {
-            if audio_url().is_none()  && let Some(Some(bytes)) = resource() {
-                audio_url.set(Some(create_blob(bytes.1)));
-                signal.set(bytes.0);
-                ready_to_advance.set(true);
-                match chunkmap() {
-                    None=>{},
-                    Some(hash)=>{
-                        if hash.contains_key(&chunk()){
-                            let chunk=hash.get(&chunk()).unwrap();
-                            time.set(chunk.start_time);
-                        }
-                    }
-                }
+        let Some(book)=global().book.clone() else {return;};
 
-                resource.clear();
-            }
+        fetching.set(true);
+        let mut resource = resource.clone();
+        let mut end = end.clone();
+        let mut fetching = fetching.clone();
 
-
-            if resource().is_none() && ready_to_advance(){
-                let mut fetch_trigger = fetch_trigger.clone();
-                let mut global = global.clone();
-                let mut ended=false;
-
-                ready_to_advance.set(false);
-
-                global.with_mut(|state| {
-                    if let Some(book) = &mut state.book {
-                        chunk.set(format!("{},{}", book.chapter as i32, book.chunk as i32));
-
-                        if signal() {
-                            if book.chapter < book.max_chapter{
-                                book.chunk = 1;
-                                book.chapter += 1;
-                            }else{
-                                ended=true;
-                            }
-                        } else {
-                            book.chunk += ADVANCE_AMOUNT + 1;
-                        }
-                    }
-                });
-    
-                if !ended {
-                    fetch_trigger.set(fetch_trigger() + 1);
+        spawn_local(async move {
+            match fetch_audio(book).await{
+                Err(_)=>{fetching.set(false);},
+                Ok((reached_end,bytes))=>{
+                    end.set(reached_end);
+                    resource.set(Some(bytes));
+                    fetching.set(false);
                 }
             }
-        }
+        });
     });
 }
 
 
-async fn get_audio(global:&mut Signal<GlobalState>)->Option<(bool,Vec<u8>)>{
-    let state=global();
-    if state.book.is_none(){return None;}
-    
-    let book=state.book.clone().unwrap();
-    match fetch_audio(book).await {
-        Err(_)=>None,
-        Ok(vec)=>{Some(vec)
-        }
-    }
+fn advance_book_hook(resource: Signal<Option<Vec<u8>>>, end: Signal<bool>, stop_fetch:Signal<bool>){
+    let mut global = use_context::<Signal<GlobalState>>();
+    let end=end.clone();
+    let resource=resource.clone();
+    let mut stop_fetch=stop_fetch.clone();
+
+    use_effect(move || {
+        if resource().is_none() {return;}
+
+        global.with_mut(|state|{
+            if let Some(book)=&mut state.book {
+                if !end(){
+                    book.chunk+= ADVANCE_AMOUNT+1;
+                }else{
+                    if book.chapter < book.max_chapter{
+                        book.chapter +=1;
+                        book.chunk=1;
+                    }else{
+                        stop_fetch.set(true);
+                    }
+                }
+            }
+        })
+    });
 }
 
 async fn fetch_audio(book: BookStatus) -> Result<(bool,Vec<u8>), Box<dyn std::error::Error>> {
@@ -113,7 +112,6 @@ async fn fetch_audio(book: BookStatus) -> Result<(bool,Vec<u8>), Box<dyn std::er
         Some(value)=> Ok((value == "true", bytes.binary().await?)),
         None=>return Err("incorrect headers".into())
     }
-
 }
 
 fn create_blob(bytes:Vec<u8>)->String{

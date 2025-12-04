@@ -25,7 +25,7 @@ pub fn AudioView( ) -> Element {
     use_book_parsing(book);
     use_chunk_calculator(total_played, chunkmap);
     use_playback_tick(playing, total_played);
-    use_audio_chunk_loader(total_played, audio_url, chunkmap);
+    use_audio_chunk_loader(audio_url);
 
     rsx! {
         div {

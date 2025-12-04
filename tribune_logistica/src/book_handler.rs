@@ -140,7 +140,7 @@ pub fn get_audio_chunk_config(book_option:Option<&BookStatus>, advance:u32, keep
     let start=audiomap.get((status.chapter as usize,status.chunk as usize)).ok_or("no such starting point")?;
     let end=audiomap.get((status.chapter as  usize,chunk as usize)).ok_or("no such ending point")?;
     println!("sending: {}-{}", start.start_time, end.start_time+end.duration);
-    println!("chunks: {}-{}",status.chapter, status.chunk);
+    println!("chunks: {}-{} , advance {}",status.chunk, chunk, advance);
     slice_mp3(&mp3_path, &file_name, start.start_time, end.start_time + end.duration)?;
     
     let mut buf = Vec::new();
