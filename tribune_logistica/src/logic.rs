@@ -73,7 +73,6 @@ pub async fn audio_handler(
     println!("got audio request");
     match get_audio_chunk(
         Some(&book),
-        book.chapter,
         query.chunk
     ) {
         Ok(chunk) => {

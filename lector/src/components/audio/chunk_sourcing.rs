@@ -103,7 +103,7 @@ async fn get_audio(global:&mut Signal<GlobalState>)->Option<(bool,Vec<u8>)>{
 }
 
 async fn fetch_audio(book: BookStatus) -> Result<(bool,Vec<u8>), Box<dyn std::error::Error>> {
-    let url = format!("http://127.0.0.1:8000/audio?chunk={}", book.chunk+ADVANCE_AMOUNT);
+    let url = format!("http://127.0.0.1:8000/audio?chunk={}", ADVANCE_AMOUNT);
     let bytes = reqwasm::http::Request::post(&url)
         .header("Content-Type", "application/json")
         .body(serde_json::to_string(&book)?)

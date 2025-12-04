@@ -210,9 +210,6 @@
   .h-12 {
     height: calc(var(--spacing) * 12);
   }
-  .h-auto {
-    height: auto;
-  }
   .h-full {
     height: 100%;
   }
@@ -227,9 +224,6 @@
   }
   .w-full {
     width: 100%;
-  }
-  .max-w-\[400px\] {
-    max-width: 400px;
   }
   .transform {
     transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);

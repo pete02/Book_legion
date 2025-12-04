@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_create_temp_mp3(){
-        assert!(book_handler::get_audio_chunk(None, 10,20).is_err());
+        assert!(book_handler::get_audio_chunk(None, 20).is_err());
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
             time: 0.0, 
@@ -284,7 +284,7 @@ mod tests {
             json: "books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,20).is_err());
+        }), 20).is_err());
 
         assert!(!book_handler::get_audio_chunk(Some(&BookStatus{
             time: 0.0, 
@@ -295,7 +295,7 @@ mod tests {
             json: "../data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,20).unwrap().reached_end);
+        }), 20).unwrap().reached_end);
 
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
@@ -307,7 +307,7 @@ mod tests {
             json: "books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,100000001).is_err());
+        }), 100000001).is_err());
 
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
@@ -319,7 +319,7 @@ mod tests {
             json: "../data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,20).is_ok());
+        }), 20).is_ok());
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
             time: 0.0, 
@@ -330,7 +330,7 @@ mod tests {
             json: "../data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,100000).unwrap().reached_end);
+        }), 100000).unwrap().reached_end);
 
 
         assert!(book_handler::get_audio_chunk_config(Some(&BookStatus{
@@ -342,6 +342,6 @@ mod tests {
             json: "../data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
-        }), 4,20,true,"test.mp3".to_owned()).is_ok());
+        }), 20,true,"test.mp3".to_owned()).is_ok());
     }
 }

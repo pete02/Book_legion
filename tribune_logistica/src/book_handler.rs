@@ -105,25 +105,26 @@ pub fn get_chapter(book_option:Option<BookStatus>)->Result<String,String>{
 }
 
 
-pub fn get_audio_chunk(book_option:Option<&BookStatus>, chapter:u32, chunk:u32)->Result<AudioChunkResult,Box<dyn std::error::Error>>{
-    get_audio_chunk_config(book_option, chapter, chunk,false, "chunk.mp3".to_owned())
+pub fn get_audio_chunk(book_option:Option<&BookStatus>, chunk:u32)->Result<AudioChunkResult,Box<dyn std::error::Error>>{
+    get_audio_chunk_config(book_option, chunk,false, "chunk.mp3".to_owned())
 }
 
-pub fn get_audio_chunk_config(book_option:Option<&BookStatus>, chapter:u32, mut chunk:u32, keep:bool, chunk_name:String)->Result<AudioChunkResult,Box<dyn std::error::Error>>{
+pub fn get_audio_chunk_config(book_option:Option<&BookStatus>, advance:u32, keep:bool, chunk_name:String)->Result<AudioChunkResult,Box<dyn std::error::Error>>{
     let mut file_name=chunk_name;
     let mut reached_end=false;
 
     let status=book_option.ok_or("no initialized book")?;
     let books=load_books(&status.json).map_err(|_|format!("missing manifest:{}",&status.json))?;
     let book=books.get(&status.name).ok_or("not in library")?;
-    let max_chunk=book.chapter_to_chunk.get(&chapter).ok_or("no such chapter")?;
+    let max_chunk=book.chapter_to_chunk.get(&status.chapter).ok_or("no such chapter")?;
+    let mut chunk=status.chunk+advance;
 
     if &chunk>max_chunk{
         chunk=max_chunk.clone();
         reached_end=true;
     }
 
-    if status.chapter>chapter || (status.chapter==chapter && status.chunk>chunk){
+    if status.chunk>chunk{
         return Err("current progress higher than requested".into())
     }
 
@@ -133,12 +134,13 @@ pub fn get_audio_chunk_config(book_option:Option<&BookStatus>, chapter:u32, mut 
     let audiomap=get_audiomap(&json_path)?;
     
     if !keep{
-        file_name=format!("chunk_{}_{}_{}.mp3", status.name, chapter, chunk)
+        file_name=format!("chunk_{}_{}_{}.mp3", status.name, status.chapter, chunk)
     }
 
     let start=audiomap.get((status.chapter as usize,status.chunk as usize)).ok_or("no such starting point")?;
-    let end=audiomap.get((chapter as  usize,chunk as usize)).ok_or("no such ending point")?;
-    
+    let end=audiomap.get((status.chapter as  usize,chunk as usize)).ok_or("no such ending point")?;
+    println!("sending: {}-{}", start.start_time, end.start_time+end.duration);
+    println!("chunks: {}-{}",status.chapter, status.chunk);
     slice_mp3(&mp3_path, &file_name, start.start_time, end.start_time + end.duration)?;
     
     let mut buf = Vec::new();
