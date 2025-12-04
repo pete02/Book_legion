@@ -13,9 +13,9 @@ pub fn AudioView( ) -> Element {
 
     let total_played = use_signal(|| 0.0);
     let chunkmap=use_signal(||None::<HashMap<String,ChunkProgress>>);
+
     let audio_url=use_signal(|| None::<String>);
     let idle=use_signal(||true);
-
     let book=use_signal(||"".to_string());
     
 
@@ -23,7 +23,7 @@ pub fn AudioView( ) -> Element {
     use_book_parsing(book);
     use_chunk_calculator(total_played, chunkmap);
     use_playback_tick(playing, total_played);
-    use_audio_chunk_loader(audio_url, idle);
+    use_audio_chunk_loader(audio_url, idle, total_played, chunkmap, forward, backward);
 
     rsx! {
         div {

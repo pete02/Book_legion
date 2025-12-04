@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
 use gloo_timers::future::TimeoutFuture;
 
 use dioxus::{logger::tracing, prelude::*};
@@ -28,7 +28,7 @@ pub fn use_chunk_calculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<S
             }
         });
     });
-    check_chunk(&time, &chunks,);
+    check_chunk(&time, &chunks);
 
 }
 
@@ -36,7 +36,7 @@ fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
     let time = time.clone();
     let chunks = chunks.clone();
     let global=use_context::<Signal<GlobalState>>();
-
+    
     let mut cur_chunk=use_signal(||ChunkProgress {
         chapter_number: 0,
         chunk_number: 0,
@@ -62,7 +62,6 @@ fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
                 let active = if idx == 0 { 0} else { idx - 1 };
 
                 let chunk = &list[active];
-
                 if *chunk != cur_chunk(){
                     cur_chunk.set(chunk.clone());
                     match global().book {

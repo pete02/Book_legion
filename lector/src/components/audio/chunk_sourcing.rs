@@ -1,16 +1,18 @@
+use std::collections::HashMap;
+
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Blob, BlobPropertyBag, Url};
 use js_sys::{Array, Uint8Array};
 use serde_json;
-use dioxus::prelude::*;
+use dioxus::{logger::tracing, prelude::*};
 
 
-use crate::models::{BookStatus, GlobalState};
+use crate::models::{BookStatus, ChunkProgress, GlobalState};
 
 
 const ADVANCE_AMOUNT: u32 = 10;
 
-pub fn use_audio_chunk_loader(audio_url: Signal<Option<String>>, idle:Signal<bool>){
+pub fn use_audio_chunk_loader(audio_url: Signal<Option<String>>, idle:Signal<bool>, time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>, forwad:Signal<bool>, backwards:Signal<bool>){
     let audio_url=audio_url.clone();
     let resource=use_signal(||None);
     let end=use_signal(||false);
@@ -19,9 +21,48 @@ pub fn use_audio_chunk_loader(audio_url: Signal<Option<String>>, idle:Signal<boo
     audio_url_hook(audio_url, resource, idle);
     fetch_for_resource(resource, end, stop_fetch,idle);
     advance_book_hook(resource, end, stop_fetch, idle);
+    jump_hook(forwad, 30.0, time, chunkmap, resource, audio_url);
+    jump_hook(backwards, -30.0, time, chunkmap, resource, audio_url);
+
 }
 
+fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>, resource: Signal<Option<Vec<u8>>>, audio_url: Signal<Option<String>>){
+    let mut global: Signal<GlobalState> = use_context::<Signal<GlobalState>>();
+    let mut resource=resource.clone();
+    let mut audio_url=audio_url.clone();
+    let mut signal=signal.clone();
+    let mut time=time.clone();
 
+    use_effect(move ||{
+        if signal(){
+            match chunkmap() {
+                None=>{},
+                Some(hash)=>{
+                    let mut jumptime=time()+jump;
+                    tracing::debug!("jump: {}, jump to {}",jump,jumptime);
+                    if jumptime < 0.0 {jumptime=0.0}
+                    time.set(jumptime);
+                    let mut vec=hash.values().cloned().collect::<Vec<_>>();
+                    vec.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap_or(std::cmp::Ordering::Equal));
+                    let idx=vec.partition_point(|c| c.start_time <= time());
+                    let active = if idx == 0 { 0} else { idx - 1 };
+                    let chunk=vec[active].clone();
+
+                    global.with_mut(|state|{
+                        if let Some(book)=&mut state.book {
+                            book.chunk=chunk.chunk_number;
+                            book.chapter=chunk.chapter_number;
+                        }
+                    });
+
+                    resource.set(None);
+                    audio_url.set(None);
+                }
+            }
+            signal.set(false);
+        }
+    });
+}
 
 fn audio_url_hook(
     audio_url: Signal<Option<String>>,

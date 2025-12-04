@@ -65,12 +65,13 @@ pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Sig
                     src: if *playing.read() { PAUSE } else { PLAY }
                     }
                 }
-
+            br {  }
             button {  
                 onclick: move |_| {forward.set(true);},
                 "forward"
                 }
-
+            br {  }
+            br {  }
             button {  
                 onclick: move |_| {backward.set(true);},
                 "backwards"
