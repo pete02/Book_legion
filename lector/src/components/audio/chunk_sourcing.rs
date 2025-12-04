@@ -49,7 +49,7 @@ fn fetch_for_resource(resource: Signal<Option<Vec<u8>>>, end: Signal<bool>, stop
     let resource=resource.clone();
     let mut fetching=use_signal(||false);
     let end = end.clone();
-    let stop_fetch=stop_fetch.clone();
+    let mut stop_fetch=stop_fetch.clone();
     let global=use_context::<Signal<GlobalState>>();
 
     use_effect(move ||{
@@ -73,6 +73,7 @@ fn fetch_for_resource(resource: Signal<Option<Vec<u8>>>, end: Signal<bool>, stop
                     end.set(reached_end);
                     resource.set(Some(bytes));
                     fetching.set(false);
+                    stop_fetch.set(true);
                 }
             }
         });
@@ -94,12 +95,12 @@ fn advance_book_hook(resource: Signal<Option<Vec<u8>>>, end: Signal<bool>, stop_
             if let Some(book)=&mut state.book {
                 if !end(){
                     book.chunk+= ADVANCE_AMOUNT+1;
+                    stop_fetch.set(false);
                 }else{
                     if book.chapter < book.max_chapter{
                         book.chapter +=1;
                         book.chunk=1;
-                    }else{
-                        stop_fetch.set(true);
+                        stop_fetch.set(false);
                     }
                 }
             }

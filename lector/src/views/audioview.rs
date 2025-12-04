@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, use_audio_chunk_loader, use_chunk_calculator, use_playback_tick};
 use crate::components::{BookCover, use_book_parsing, use_load_book};
@@ -15,16 +13,11 @@ pub fn AudioView( ) -> Element {
 
     let total_played = use_signal(|| 0.0);
     let chunkmap=use_signal(||None::<HashMap<String,ChunkProgress>>);
-    let mut audio_url=use_signal(|| None::<String>);
+    let audio_url=use_signal(|| None::<String>);
     let idle=use_signal(||true);
 
     let book=use_signal(||"".to_string());
     
-    use_effect(move || {
-        audio_url.set(None);
-        tracing::debug!("run");
-    });
-
 
     use_load_book("mageling".to_string(), total_played, idle);
     use_book_parsing(book);
