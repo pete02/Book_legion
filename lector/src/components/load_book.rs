@@ -12,25 +12,20 @@ enum LoadStatus {
 }
 
 
-pub fn use_load_book(book_name:String, time: Signal<f64>) {
+pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
     let global = use_context::<Signal<GlobalState>>();
     let status = use_signal(|| LoadStatus::Loading);
+    let mut idle=idle.clone();
     let mut time=time.clone();
-
+    
     use_effect(move || {
         let mut global = global.clone();
+        
         let mut status = status.clone();
         let value = book_name.clone();
-        spawn(async move {            
+        spawn(async move {
+            global.with_mut(|state| state.book = None);
             tracing::info!("loading book: {}",&value);
-            async fn get_book(book_name:String) -> Result<BookStatus, Box<dyn std::error::Error>> {
-                let json: BookStatus = Request::get(&format!("http://127.0.0.1:8000/init?name={}&type=text",book_name))
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
-                Ok(json)
-            }
 
             match get_book(value).await {
                 Ok(book) => {
@@ -38,6 +33,7 @@ pub fn use_load_book(book_name:String, time: Signal<f64>) {
                     global.with_mut(|state| state.book = Some(book));
                     tracing::info!("Book loaded");
                     status.set(LoadStatus::Success);
+                    idle.set(false);
                 }
                 Err(e) => {
                     tracing::error!("Error in book loading: {}",e);
@@ -46,4 +42,15 @@ pub fn use_load_book(book_name:String, time: Signal<f64>) {
             }
         });
     });
+}
+
+
+
+async fn get_book(book_name:String) -> Result<BookStatus, Box<dyn std::error::Error>> {
+    let json: BookStatus = Request::get(&format!("http://127.0.0.1:8000/init?name={}&type=text",book_name))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(json)
 }

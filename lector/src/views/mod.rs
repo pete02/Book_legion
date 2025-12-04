@@ -33,6 +33,8 @@ pub fn Navbar() -> Element {
             }
         }
 
-        Outlet::<Route> {}
+        Outlet::<Route> {
+            key: current_route.clone()
+        }
     }
 }
