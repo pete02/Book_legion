@@ -41,9 +41,18 @@ pub async fn init_handler(
 
 
 pub async fn book_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
+    let mut headers: HeaderMap = HeaderMap::new();
     match get_chapter(Some(book)) {
-        Ok(text) => Json(json!({ "status": "ok", "text": text })).into_response(),
-        Err(e) => Json(json!({ "status": "error", "message": e })).into_response(),
+        Ok(text) => {
+            headers.insert("Content-Type", HeaderValue::from_static("text/html; charset=utf-8"));
+            headers.insert("status", HeaderValue::from_static("ok"));
+            (headers,text).into_response()
+        },
+        Err(e) => {
+            headers.insert("Content-Type", HeaderValue::from_static("text/html; charset=utf-8"));
+            headers.insert("status", HeaderValue::from_static("error"));
+            (headers,e).into_response()
+        },
     }
 }
 

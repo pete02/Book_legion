@@ -6,6 +6,9 @@ pub use home::Home;
 mod audioview;
 pub use audioview::AudioView;
 
+mod bookview;
+pub use bookview::BookView;
+
 
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -16,6 +19,8 @@ pub enum Route {
     Home {},
     #[route("/AudioView")]
     AudioView { },
+    #[route("/BookView")]
+    BookView { },
 }
 
 #[component]
@@ -30,6 +35,11 @@ pub fn Navbar() -> Element {
             Link {
                 to: Route::AudioView {  },
                 "AudioView"
+            }
+
+            Link {
+                to: Route::BookView {  },
+                "BookView"
             }
         }
 

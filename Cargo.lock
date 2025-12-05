@@ -2950,6 +2950,7 @@ dependencies = [
  "futures-timer",
  "gloo-timers",
  "js-sys",
+ "regex",
  "reqwasm",
  "serde",
  "serde_json",
