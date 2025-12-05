@@ -44,11 +44,13 @@ fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signa
                     if jumptime < 0.0 {jumptime=0.0}
                     let mut vec=hash.values().cloned().collect::<Vec<_>>();
                     if vec.len() == 0 {return;}
+
                     vec.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap_or(std::cmp::Ordering::Equal));
                     let idx=vec.partition_point(|c| c.start_time <= jumptime);
                     let active = if idx == 0 { 0} else { idx - 1 };
                     let chunk=vec[active].clone();
                     let mut end=false;
+                    
                     global.with_mut(|state|{
                         if let Some(book)=&mut state.book {
                             if !(book.chunk==chunk.chunk_number && book.chapter == chunk.chapter_number && active == vec.len()-1){
