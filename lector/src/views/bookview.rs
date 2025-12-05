@@ -10,7 +10,11 @@ pub fn BookView()->Element{
 
     use_load_book(book(), time, idle);
     rsx!{
-        h1 {"{book}"}
-        BookRenderer { idle }
+        div {
+            style: "height: calc(100vh - 100px); display: flex; flex-direction: column;",
+            h1 {"{book}"}
+            BookRenderer { idle }
+          }
+        
     }
 }

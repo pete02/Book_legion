@@ -28,6 +28,7 @@ pub fn Navbar() -> Element {
     rsx! {
         div {
             id: "navbar",
+            class: "h-16 flex items-center bg-gray-200 dark:bg-gray-800 px-4", 
             Link {
                 to: Route::Home {},
                 "Home"
