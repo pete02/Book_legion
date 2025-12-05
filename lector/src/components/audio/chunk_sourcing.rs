@@ -21,17 +21,18 @@ pub fn use_audio_chunk_loader(audio_url: Signal<Option<String>>, idle:Signal<boo
     audio_url_hook(audio_url, resource, idle);
     fetch_for_resource(resource, end, stop_fetch,idle);
     advance_book_hook(resource, end, stop_fetch, idle);
-    jump_hook(forwad, 30.0, time, chunkmap, resource, audio_url);
-    jump_hook(backwards, -30.0, time, chunkmap, resource, audio_url);
+    jump_hook(forwad, 30.0, time, chunkmap, resource, audio_url,stop_fetch);
+    jump_hook(backwards, -30.0, time, chunkmap, resource, audio_url,stop_fetch);
 
 }
 
-fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>, resource: Signal<Option<Vec<u8>>>, audio_url: Signal<Option<String>>){
+fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signal<Option<HashMap<String,ChunkProgress>>>, resource: Signal<Option<Vec<u8>>>, audio_url: Signal<Option<String>>, stop_fetch:Signal<bool>){
     let mut global: Signal<GlobalState> = use_context::<Signal<GlobalState>>();
     let mut resource=resource.clone();
     let mut audio_url=audio_url.clone();
     let mut signal=signal.clone();
     let mut time=time.clone();
+    let mut stop_fetch=stop_fetch.clone();
 
     use_effect(move ||{
         if signal(){
@@ -41,22 +42,30 @@ fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signa
                     let mut jumptime=time()+jump;
                     tracing::debug!("jump: {}, jump to {}",jump,jumptime);
                     if jumptime < 0.0 {jumptime=0.0}
-                    time.set(jumptime);
                     let mut vec=hash.values().cloned().collect::<Vec<_>>();
+                    if vec.len() == 0 {return;}
                     vec.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap_or(std::cmp::Ordering::Equal));
-                    let idx=vec.partition_point(|c| c.start_time <= time());
+                    let idx=vec.partition_point(|c| c.start_time <= jumptime);
                     let active = if idx == 0 { 0} else { idx - 1 };
                     let chunk=vec[active].clone();
-
+                    let mut end=false;
                     global.with_mut(|state|{
                         if let Some(book)=&mut state.book {
-                            book.chunk=chunk.chunk_number;
-                            book.chapter=chunk.chapter_number;
+                            if !(book.chunk==chunk.chunk_number && book.chapter == chunk.chapter_number && active == vec.len()-1){
+                                book.chunk=chunk.chunk_number;
+                                book.chapter=chunk.chapter_number;
+                            }else{
+                                end=true;
+                            }
+
                         }
                     });
-
-                    resource.set(None);
-                    audio_url.set(None);
+                    if !end{
+                        resource.set(None);
+                        audio_url.set(None);
+                        time.set(jumptime);
+                        stop_fetch.set(false);
+                    }
                 }
             }
             signal.set(false);
