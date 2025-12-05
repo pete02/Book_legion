@@ -28,7 +28,7 @@ pub fn AudioView( ) -> Element {
     rsx! {
         div {
             class: "min-h-screen flex flex-col items-center justify-start",
-            h1 { "Audio View" }
+
             AudioPlayer { playing, audio_url }           
             BookCover {name: book}
         

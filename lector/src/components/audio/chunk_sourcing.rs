@@ -4,7 +4,7 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::{Blob, BlobPropertyBag, Url};
 use js_sys::{Array, Uint8Array};
 use serde_json;
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::prelude::*;
 
 
 use crate::models::{BookStatus, ChunkProgress, GlobalState};
@@ -40,8 +40,14 @@ fn jump_hook( signal: Signal<bool>, jump:f64, time: Signal<f64>, chunkmap: Signa
                 None=>{},
                 Some(hash)=>{
                     let mut jumptime=time()+jump;
-                    tracing::debug!("jump: {}, jump to {}",jump,jumptime);
+                    
                     if jumptime < 0.0 {jumptime=0.0}
+                    if let Some(book) = global().book{
+                        if book.duration< jumptime{
+                            jumptime= book.duration;
+                        }
+                    }
+
                     let mut vec=hash.values().cloned().collect::<Vec<_>>();
                     if vec.len() == 0 {return;}
 

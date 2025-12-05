@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use web_sys::{HtmlAudioElement};
 use wasm_bindgen::JsCast;
 
-use crate::assets::{PAUSE, PLAY};
+use crate::assets::{FORWARD, PAUSE, PLAY};
 
 
 use crate::models::GlobalState;
@@ -54,28 +54,44 @@ pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Sig
 
     rsx! {
         div {
-            class: "my-2",
+            class: "my-2 flex items-center gap-4",
             button {
-                class: "w-12 h-12 flex items-center justify-center",
-                onclick: move |_| {
-                    playpause(playing);
-                    },
+                class: "
+                    w-12 h-12 flex items-center justify-center
+                    rounded-xl
+                    bg-gray-200 dark:bg-gray-700
+                    shadow 
+                    transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
+                ",
+                onclick: move |_| { backward.set(true); },
+                img {
+                    class: "w-6 h-6 object-contain transform -scale-x-100",
+                    src: FORWARD
+                }
+            }
+
+            button {
+                class: "w-14 h-14 flex items-center justify-center",
+                onclick: move |_| { playpause(playing); },
                 img {
                     class: "w-full h-full object-contain",
                     src: if *playing.read() { PAUSE } else { PLAY }
-                    }
                 }
-            br {  }
-            button {  
-                onclick: move |_| {forward.set(true);},
-                "forward"
+            }
+            button {
+                class: "
+                    w-12 h-12 flex items-center justify-center
+                    rounded-xl
+                    bg-gray-200 dark:bg-gray-700
+                    shadow 
+                    transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
+                ",
+                onclick: move |_| { forward.set(true); },
+                img {
+                    class: "w-6 h-6 object-contain",
+                    src: FORWARD
                 }
-            br {  }
-            br {  }
-            button {  
-                onclick: move |_| {backward.set(true);},
-                "backwards"
-                }
+            }
         }
     }
     
