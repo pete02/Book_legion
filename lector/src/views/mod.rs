@@ -27,25 +27,29 @@ pub enum Route {
 pub fn Navbar() -> Element {
     rsx! {
         div {
-            id: "navbar",
-            class: "h-16 flex items-center bg-gray-200 dark:bg-gray-800 px-4", 
-            Link {
-                to: Route::Home {},
-                "Home"
-            }
-            Link {
-                to: Route::AudioView {  },
-                "AudioView"
+            style: "display: flex; flex-direction: column; height: 100vh;",
+            div {
+                id: "navbar",
+                class: "h-16 flex items-center bg-gray-200 dark:bg-gray-800 px-4", 
+                Link {
+                    to: Route::Home {},
+                    "Home"
+                }
+                Link {
+                    to: Route::AudioView {  },
+                    "AudioView"
+                }
+
+                Link {
+                    to: Route::BookView {  },
+                    "BookView"
+                }
             }
 
-            Link {
-                to: Route::BookView {  },
-                "BookView"
+            div {
+                style: "flex: 1; overflow: hidden;", // Outlet takes the remaining space exactly
+                Outlet::<Route> { key: current_route.clone() }
             }
-        }
-
-        Outlet::<Route> {
-            key: current_route.clone()
-        }
+         }
     }
 }

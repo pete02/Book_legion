@@ -70,8 +70,7 @@ pub fn BookRenderer(idle: Signal<bool>) -> Element {
 
     rsx!(
         div {
-            class: "readview-container p-4 text-gray-900 dark:text-gray-100 overflow-hidden",
-            style: "height: 100%; overflow-y: hidden;",
+            style: "height: 100%",
             onmounted: move |mounted| {
                 let el = mounted.as_web_event().unchecked_into::<web_sys::HtmlElement>();
                 container_ref.set(Some(el));

@@ -9,12 +9,10 @@ pub fn BookView()->Element{
     let book=use_signal(||"mageling".to_owned());
 
     use_load_book(book(), time, idle);
-    rsx!{
-        div {
-            style: "height: calc(100vh - 100px); display: flex; flex-direction: column;",
-            h1 {"{book}"}
+     rsx! {
+            h1 {
+                "{book}",
+            }
             BookRenderer { idle }
-          }
-        
     }
-}
+ }
