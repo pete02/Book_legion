@@ -28,7 +28,7 @@ pub fn Navbar() -> Element {
     rsx! {
         div {
             id: "nav-bar",
-            style: "display: flex; flex-direction: column; height: 90vh;",
+            style: "display: flex; flex-direction: column; height: 100vh;",
             div {
                 id: "navbar",
                 class: "h-16 flex items-center bg-gray-200 dark:bg-gray-800 px-4", 
