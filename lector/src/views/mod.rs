@@ -27,7 +27,8 @@ pub enum Route {
 pub fn Navbar() -> Element {
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; height: 100vh;",
+            id: "nav-bar",
+            style: "display: flex; flex-direction: column; height: 90vh;",
             div {
                 id: "navbar",
                 class: "h-16 flex items-center bg-gray-200 dark:bg-gray-800 px-4", 
@@ -47,6 +48,7 @@ pub fn Navbar() -> Element {
             }
 
             div {
+                id: "book-container",
                 style: "flex: 1; overflow: hidden;", // Outlet takes the remaining space exactly
                 Outlet::<Route> { key: current_route.clone() }
             }
