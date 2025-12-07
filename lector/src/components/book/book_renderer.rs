@@ -1,3 +1,5 @@
+use std::vec;
+
 use dioxus::{  logger::tracing, prelude::*, web::WebEventExt};
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlElement, window};
@@ -7,7 +9,7 @@ use regex::Regex;
 
 #[component]
 pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
-    let html_vec: Signal<Vec<String>> = use_signal(Vec::new);
+    let mut html_vec: Signal<Vec<String>> = use_signal(Vec::new);
     let mut visible_chunks: Signal<Vec<String>> = use_signal(Vec::new);
     let mut container_ref: Signal<Option<web_sys::HtmlElement>> = use_signal(|| None);
     let mut start_index=use_signal(||0);
@@ -15,10 +17,7 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
 
     let mut flip=use_signal(||false);
     let mut change=use_signal(||false);
-    let mut wait=use_signal(||false);
-
-    let html_vec = html_vec.clone();
-    let idle = idle.clone();
+    
 
     chapter_fetch_hook(idle, html_vec);
     calculate_chunks(html_vec, visible_chunks, start_index, css_idle, flip, change);
@@ -79,6 +78,13 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
                             flip.set(true);
                             visible_chunks.set(vec![]);
                             change.set(false);
+                        }else{
+                            change.set(true);
+                            flip.set(true);
+                            start_index.set(jump_chunk(true));
+                            html_vec.set(vec![]);
+                            visible_chunks.set(vec![]);
+                            change.set(false);
                         }
                     }
                 }
@@ -95,6 +101,12 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
                         if !(start_index()==html_vec().len()){
                             tracing::debug!("clicl");
                             visible_chunks.set(vec![]);
+                        }else{
+                            change.set(true);
+                            start_index.set(jump_chunk(false));
+                            html_vec.set(vec![]);
+                            visible_chunks.set(vec![]);
+                            change.set(false);
                         }
                     }
                 }
@@ -104,7 +116,31 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
 }
 
 
-
+fn jump_chunk(flip:bool)->usize{
+    tracing::debug!("change chapter");
+    let mut global=use_context::<Signal<GlobalState>>();
+    let mut chunk=0;
+    global.with_mut(|state|{
+        let Some(book)= &mut state.book else {return;};
+        if flip{
+            if book.chapter>book.initial_chapter{
+                book.chapter-=1;
+                tracing::debug!("map: {:?}",book.chapter_to_chunk);
+                tracing::debug!("chapter: {}", book.chapter);
+                let Some(c)=book.chapter_to_chunk.get(&book.chapter) else {return;};
+                chunk=c.clone() as usize;
+            }
+        }else{
+            if book.chapter< book.max_chapter{
+                book.chapter+=1;
+                chunk=0;
+            }
+        }
+        tracing::debug!("current chapter: {}", book.chapter);
+    });
+    tracing::debug!("send chunk: {}", chunk);
+    chunk
+}
 
 fn chapter_fetch_hook(idle: Signal<bool>, html_vec: Signal<Vec<String>>){
     use_effect(move || {
@@ -144,7 +180,7 @@ fn calculate_chunks(
     use_effect(move || {
         if change() {return;}
 
-        let a=visible_chunks().len();
+        let _=visible_chunks().len();
         tracing::debug!("triggered, start: {}", start_index());
         if css_idle() {return;}
 
@@ -176,11 +212,7 @@ fn calculate_chunks(
 
 
         tracing::debug!("index: {} of {}", start_index(),html_vec().len());
-        if start_index() == html_vec().len() {
-            if flip(){
-                start_index.set(start_index+visible_chunks().len());
-                flip.set(false);
-            }
+        if start_index() == html_vec().len() && !flip() {
             tracing::debug!("end index: {}", start_index());
             return;
         }

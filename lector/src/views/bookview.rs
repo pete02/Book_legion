@@ -7,7 +7,7 @@ pub fn BookView()->Element{
     let time=use_signal(||0.0);
     let idle=use_signal(||false);
     let css_idle=use_signal(||true);
-    let book=use_signal(||"mageling".to_owned());
+    let book=use_signal(||"fusing".to_owned());
 
     use_load_book(book(), time, idle);
     use_css_injector(idle, css_idle);

@@ -19,7 +19,7 @@ pub fn AudioView( ) -> Element {
     let book=use_signal(||"".to_string());
     
 
-    use_load_book("mageling".to_string(), total_played, idle);
+    use_load_book("fusing".to_string(), total_played, idle);
     use_book_parsing(book);
     use_chunk_calculator(total_played, chunkmap);
     use_playback_tick(playing, total_played);

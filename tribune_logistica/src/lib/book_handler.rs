@@ -12,7 +12,7 @@ fn error(msg: &str) -> serde_json::Value {
 }
 
 fn prefix(raw_path:&str)->String{
-    format!("../data/{}",raw_path)
+    format!("./data/{}",raw_path)
 }
 
 pub fn load_books(path: &str) -> Result<HashMap<String, BookData>,Box<dyn std::error::Error>> {
@@ -22,7 +22,9 @@ pub fn load_books(path: &str) -> Result<HashMap<String, BookData>,Box<dyn std::e
 }
 
 pub fn get_audiomap(path: &str) -> Result<AudioMap,Box<dyn std::error::Error>> {
-    let content = fs::read_to_string(&prefix(path))?;
+    let p =prefix(path);
+    println!("{}", p);
+    let content = fs::read_to_string(&p)?;
     let book: AudioMap = serde_json::from_str(&content)?;
     Ok(book)
 }
@@ -55,7 +57,9 @@ pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookSt
         path: book.path.to_owned(),
         chapter: book.current_chapter,
         chunk: book.current_chunk,
+        chapter_to_chunk: book.chapter_to_chunk.clone(),
         time: book.current_time,
+        initial_chapter: book.initial_chapter,
         json: books_path.to_owned(),
         max_chapter: book.max_chapter,
         duration: book.duration

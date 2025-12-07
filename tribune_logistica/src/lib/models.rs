@@ -16,8 +16,6 @@ pub struct AudioMap {
     pub map: HashMap<String, AudioMapEntry>,
 }
 impl AudioMap {
-
-
     pub fn get(&self, key: (usize, usize)) -> Option<&AudioMapEntry> {
         let key_str = format!("{},{}", key.0, key.1);
         self.map.get(&key_str)
@@ -41,10 +39,12 @@ pub struct BookStatus {
     pub name:String,
     pub path:String,
     pub chapter: u32,
+    pub initial_chapter: u32,
     pub time: f64,
     pub chunk: u32,
     pub json: String,
     pub max_chapter: u32,
+    pub chapter_to_chunk: HashMap<u32,u32>,
     pub duration: f32
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]

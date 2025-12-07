@@ -79,13 +79,14 @@ mod tests {
                 "current_time": 0.0,
                 "max_chapter": 10,
                 "chapter_to_chunk":{
-                    "4":142
                     }
             }
         }));
         let path = tmpfile.path().to_str().unwrap();
         println!("{}",path);
         assert_eq!(book_handler::init_book("mageling","text",path).unwrap(),BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name: "mageling".to_string(),
             path: "mageling".to_string(),
@@ -98,6 +99,8 @@ mod tests {
 
 
         assert_eq!(book_handler::init_book("mageling","audio",path).unwrap(),BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name: "mageling".to_string(),
             path: "mageling".to_string(),
@@ -127,6 +130,8 @@ mod tests {
         }));
         let path=tmpfile.path().to_str().unwrap();
         assert_eq!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -139,6 +144,8 @@ mod tests {
 
         assert_eq!(book_handler::update_progress(None).unwrap_err(),"no initialized book");
         assert_eq!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"missing".to_string(),
             path: "nonsense".to_string(),
@@ -150,6 +157,8 @@ mod tests {
         })).unwrap_err(),"not in library");
 
         assert_eq!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -161,6 +170,8 @@ mod tests {
         })).unwrap_err(),"chapter overflow");
 
         assert_eq!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -172,6 +183,8 @@ mod tests {
         })).unwrap_err(),"invalid chapter number");
 
         assert_eq!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -202,6 +215,8 @@ mod tests {
         }));
         let path=tmpfile.path().to_str().unwrap();
         assert!(book_handler::update_progress(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0,
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -240,6 +255,8 @@ mod tests {
     fn test_get_chapter(){
         assert_eq!(book_handler::get_chapter(None).unwrap_err(),"no initialized book");
         assert_eq!(book_handler::get_chapter(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "nonsense".to_string(),
@@ -251,6 +268,8 @@ mod tests {
         })).unwrap_err(), "Failed to open EPUB in the path");
         
         assert_eq!(book_handler::get_chapter(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -263,6 +282,8 @@ mod tests {
 
 
         assert!(book_handler::get_chapter(Some(BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -281,6 +302,8 @@ mod tests {
         assert!(book_handler::get_audio_chunk(None, 20).is_err());
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -292,6 +315,8 @@ mod tests {
         }), 20).is_err());
 
         assert!(!book_handler::get_audio_chunk(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -304,6 +329,8 @@ mod tests {
 
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -316,6 +343,8 @@ mod tests {
 
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -327,6 +356,8 @@ mod tests {
         }), 20).is_ok());
 
         assert!(book_handler::get_audio_chunk(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),
@@ -339,6 +370,8 @@ mod tests {
 
 
         assert!(book_handler::get_audio_chunk_config(Some(&BookStatus{
+            chapter_to_chunk: HashMap::new(),
+            initial_chapter: 4,
             time: 0.0, 
             name:"mageling".to_string(),
             path: "mageling".to_string(),

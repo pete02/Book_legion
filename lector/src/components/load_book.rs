@@ -22,7 +22,6 @@ pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
     use_effect(move || {
         if loaded() {return;}
         let mut global = global.clone();
-        
         let mut status = status.clone();
         let value = book_name.clone();
 

@@ -56,7 +56,8 @@ pub async fn book_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
 
 pub async fn audiomap(Json(book): Json<BookStatus>) -> impl IntoResponse {
     println!("audiomap");
-    match get_audiomap(&format!("{}/{}.json",book.name,book.name)){
+    let path=format!("{}/{}.json",book.name,book.name);
+    match get_audiomap(&path){
         Ok(map)=>    Json(json!({"status":"ok","data":map})).into_response(),
         Err(e)=>{
             println!("{}",e);

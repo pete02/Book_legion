@@ -9,9 +9,11 @@ pub struct BookStatus {
     pub chapter: u32,
     pub chunk: u32,
     pub time: f64,
+    pub initial_chapter: u32,
     pub json: String,
     pub max_chapter: u32,
-    pub duration: f64
+    pub duration: f64,
+    pub chapter_to_chunk: HashMap<u32,u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
