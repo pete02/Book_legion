@@ -1,4 +1,5 @@
 use serde_json::json;
+use zip::ZipArchive;
 use std::{collections::HashMap, path::Path};
 use std::fs::{self,File};
 use std::io::Read;
@@ -187,3 +188,35 @@ fn slice_mp3(input: &str, output: &str, start: f32, end: f32) -> std::io::Result
     Ok(())
 }
 
+
+
+pub fn extract_css(path:&str)-> Result<String, Box<dyn std::error::Error>>{
+    let mut css="".to_owned();
+    let files=extract_files(path, vec![".css"])?;
+    for file in files{
+        let txt=String::from_utf8(file.1)?;
+        css+=&txt;
+    }
+    Ok(css)
+}
+
+
+
+
+pub fn extract_files(path: &str, file_types:Vec<&str>)->Result<HashMap<String,Vec<u8>>,Box<dyn std::error::Error>>{
+    let book=File::open(path)?;
+    let mut archive=ZipArchive::new(book)?;
+
+    let mut map=HashMap::new();
+
+    for i in 0 ..archive.len(){
+        let mut file=archive.by_index(i)?;
+        let name=file.name().to_owned();
+        if file_types.iter().any(|ft|name.contains(ft)){
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)?;
+            map.insert(name, data);
+        }
+    }
+    Ok(map)
+}

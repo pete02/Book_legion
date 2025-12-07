@@ -3,3 +3,4 @@ target
 .direnv
 *.wav
 .cargo
+test.mp3

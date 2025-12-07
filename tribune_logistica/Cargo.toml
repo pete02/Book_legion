@@ -3,6 +3,9 @@ name = "tribune_logistica"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+path = "src/lib/mod.rs"
+
 [dependencies]
 epub = "2.1.5"
 futures = "0.3.31"
@@ -15,3 +18,4 @@ tower = "0.5"
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 serde_json = "1.0.145"
 tempfile = "3.23.0"
+zip = "6.0.0"

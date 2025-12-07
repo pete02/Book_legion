@@ -5557,6 +5557,7 @@ dependencies = [
  "tokio",
  "tower",
  "tower-http",
+ "zip 6.0.0",
 ]
 
 [[package]]

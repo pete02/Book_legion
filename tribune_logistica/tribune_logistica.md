@@ -61,7 +61,9 @@
 - /cover/{book}
     returns a jpg of the cover of the given book, if it is found
     tested, ok
-
+- /css/{book}
+    returns css of a given book, if found
+    tested, ok
 
 ### Security:
 - All API usage will require a separate webtoken. This API cannot generate, nor allow new web tokens.

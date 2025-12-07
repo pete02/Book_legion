@@ -2,8 +2,8 @@
 mod tests {
 
     use std::collections::HashMap;
-    use crate::models::*;
-    use crate::book_handler;
+    use tribune_logistica::models::*;
+    use tribune_logistica::book_handler;
     use serde_json::json;
     use tempfile::NamedTempFile;
     use std::io::Write;
@@ -24,6 +24,7 @@ mod tests {
                 "path": "doo",
                 "initial_chapter": 4,
                 "current_chunk": 0,
+                "current_time":0.0,
                 "current_chapter": 4,
                 "duration": 1560.1995,
                 "max_chapter": 100,
@@ -75,6 +76,7 @@ mod tests {
                 "current_chunk": 0,
                 "duration": 1560.1995,
                 "current_chapter": 4,
+                "current_time": 0.0,
                 "max_chapter": 10,
                 "chapter_to_chunk":{
                     "4":142
@@ -90,8 +92,8 @@ mod tests {
             chapter:4,
             chunk:0,
             json: path.to_owned(),
-            max_chapter: 25,
-            duration: 100.0
+            max_chapter: 10,
+            duration: 1560.1995
         });
 
 
@@ -102,8 +104,8 @@ mod tests {
             chapter:4,
             chunk:0,
             json: path.to_owned(),
-            max_chapter: 25,
-            duration: 100.0
+            max_chapter: 10,
+            duration: 1560.1995
         });
     }
 
@@ -116,6 +118,7 @@ mod tests {
                 "current_chunk": 0,
                 "duration": 1560.1995,
                 "current_chapter": 4,
+                "current_time":0.0,
                 "max_chapter": 10,
                 "chapter_to_chunk":{
                     "4":142
@@ -189,6 +192,7 @@ mod tests {
                 "initial_chapter":4,
                 "current_chunk": 0,
                 "current_chapter": 4,
+                "current_time":0.0,
                 "duration": 1560.1995,
                 "max_chapter": 10,
                 "chapter_to_chunk":{
@@ -200,7 +204,7 @@ mod tests {
         assert!(book_handler::update_progress(Some(BookStatus{
             time: 0.0,
             name:"mageling".to_string(),
-            path: "nonsense".to_string(),
+            path: "mageling".to_string(),
             chapter: 4,
             chunk: 5,
             json: path.to_owned(),
@@ -215,6 +219,7 @@ mod tests {
                 "current_chunk": 5,
                 "current_chapter": 4,
                 "duration": 1560.1995,
+                "current_time":0.0,
                 "max_chapter": 10,
                 "chapter_to_chunk":{
                     "4":142
@@ -292,7 +297,7 @@ mod tests {
             path: "mageling".to_string(),
             chapter: 4,
             chunk: 10,
-            json: "../data/books.json".to_owned(),
+            json: "data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
         }), 20).unwrap().reached_end);
@@ -316,7 +321,7 @@ mod tests {
             path: "mageling".to_string(),
             chapter: 4,
             chunk: 10,
-            json: "../data/books.json".to_owned(),
+            json: "data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
         }), 20).is_ok());
@@ -327,7 +332,7 @@ mod tests {
             path: "mageling".to_string(),
             chapter: 4,
             chunk: 10,
-            json: "../data/books.json".to_owned(),
+            json: "data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
         }), 100000).unwrap().reached_end);
@@ -339,7 +344,7 @@ mod tests {
             path: "mageling".to_string(),
             chapter: 4,
             chunk: 10,
-            json: "../data/books.json".to_owned(),
+            json: "data/books.json".to_owned(),
             max_chapter: 25,
             duration: 100.0
         }), 20,true,"test.mp3".to_owned()).is_ok());
