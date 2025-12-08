@@ -17,6 +17,7 @@ fn prefix(raw_path:&str)->String{
 
 pub fn load_books(path: &str) -> Result<HashMap<String, BookData>,Box<dyn std::error::Error>> {
     let content = fs::read_to_string(path)?;
+    println!("this og");
     let books: HashMap<String, BookData> = serde_json::from_str(&content)?;
     Ok(books)
 }
@@ -40,6 +41,7 @@ pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookSt
     if book_type != "audio" && book_type != "text" {
         return Err(error("incorrect format"));
     }
+    println!("{}",books_path);
     let books = load_books(&books_path).map_err(|_|error(&format!("missing library manifest: {}",&books_path)))?;
     let book=books.get(name).ok_or(error("not in library"))?;
 

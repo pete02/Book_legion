@@ -16,10 +16,12 @@ pub fn get_start_index(epub: &mut EpubDoc<BufReader<File>>)->Result<usize,Box<dy
         if check_first(epub,&first.label){
             Ok(index)
         }else{
+            println!("Sourced the wrong index");
             Err("Sourced the wrong index".into())
         }
         
     }else{
+        println!("could not extract index");
         Err("Could not extract index".into())
     }
 
@@ -49,35 +51,43 @@ fn check_first(epub:&mut EpubDoc<BufReader<File>>,title:&str)->bool{
     return a.iter().all(|f| txt.contains(*f));
 }
 
-use scraper::{Html, Selector};
-fn extract_heading(xhtml: &str) -> Option<String> {
+use scraper::{Html, Selector, ElementRef};
+pub fn extract_heading(xhtml: &str) -> Option<String> {
     let doc = Html::parse_document(xhtml);
 
-    let selectors = [
-        Selector::parse("div[class]").unwrap(),
-        Selector::parse("h1[class]").unwrap(),
-        Selector::parse("h2[class]").unwrap(),
-        Selector::parse("h3[class]").unwrap(),
-    ];
+    let sel = Selector::parse("[class]").unwrap();
 
-    for sel in selectors.iter() {
-        for el in doc.select(sel) {
-            if let Some(class_attr) = el.value().attr("class") {
-                let lower = class_attr.to_lowercase();
-                if lower.contains("chapter")
-                    || lower.contains("heading")
-                    || lower.contains("title")
-                    || lower.contains("sect")
-                {
-                    return Some(el.inner_html());
-                }
-            }
+    for el in doc.select(&sel) {
+        let tag = el.value().name();
+        if tag == "body" || tag == "html" || tag == "head" {
+            continue;
+        }
+
+        let text = extract_clean_text(el);
+
+        if text.is_empty() { continue; }
+
+        let lw = text.to_lowercase();
+
+        if (lw.contains("chapter")
+            || lw.starts_with("prologue")
+            || lw.starts_with("epilogue"))
+            && text.split_whitespace().count() <= 12
+        {
+            return Some(text);
         }
     }
 
     None
 }
 
+fn extract_clean_text(el: ElementRef) -> String {
+    el.text()
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 
 fn is_non_chapter(label: &str) -> bool {
     let l = label.to_lowercase();

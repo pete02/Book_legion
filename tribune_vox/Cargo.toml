@@ -17,3 +17,4 @@ tokio = { version = "1.47.1", features = ["full"] }
 serde = "1.0.228"
 clap = { version = "4.5.50", features = ["derive"] }
 scraper = "0.24.0"
+zip = "6.0.0"

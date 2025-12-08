@@ -7,7 +7,7 @@ use crate::create::{patch_epub, scan_spine_for_headings};
 
 pub fn check_epub(path:&str, book_id:&str)->Result<(),Box<dyn std::error::Error>>{
     match verify_epub(path) {
-     Ok(_)=>{},
+     Ok(_)=>{println!("no patch needed")},
      Err(_)=>{
         generate_toc(path, book_id)?;
         verify_epub(path)?;
@@ -20,8 +20,10 @@ pub fn check_epub(path:&str, book_id:&str)->Result<(),Box<dyn std::error::Error>
 }
 
 fn generate_toc(path:&str, book_id:&str)->Result<(),Box<dyn std::error::Error>>{
+    println!("toch generation");
     let mut epub=EpubDoc::new(path)?;
     let toc=scan_spine_for_headings(&mut epub);
+    println!("found tc: {:?}",toc);
     patch_epub( path.to_owned(),toc,book_id)?;
 
     Ok(())

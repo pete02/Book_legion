@@ -1,0 +1,9 @@
+- webiste:
+    - chunk saving
+    - recheck the logic of syncing between the book and audio
+    - ability to change font size
+    - library
+    - book view
+
+- tribune_vox
+    - change json saving to add to the file instead of overwriting

@@ -19,9 +19,9 @@ pub struct Book{
     pub duration: f32,
     pub current_chunk: usize,
     pub current_chapter: usize,
-    pub max_chapter: usize,
-    pub chapter_to_chunk: HashMap<usize,usize>
-
+    pub current_time: f64,
+    pub chapter_to_chunk: HashMap<usize,usize>,
+    pub max_chapter: usize
 }
 
 

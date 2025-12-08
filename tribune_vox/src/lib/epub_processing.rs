@@ -1,6 +1,6 @@
 
 use epub::doc::EpubDoc;
-use std::io::{BufReader};
+use std::io::{BufReader, Write};
 use std::fs::File;
 use regex::Regex;
 
@@ -47,3 +47,34 @@ fn normalize_whitespace(text: &str) -> String {
     re_spaces.replace_all(&text.replace('\n', " "), " ").trim().to_string()
 }
 
+pub fn extract_cover(book:&str, jpg:&str)->Result<(),Box<dyn std::error::Error>>{
+    let files=extract_files(book, vec!["cover.jpg", "cover.jpeg"])?;
+    if files.len() == 1{
+        let mut file=File::create(jpg)?;
+        if let Some(vec)=files.values().next(){
+            file.write_all(vec)?
+        }
+    }
+    Ok(())   
+}
+use zip::ZipArchive;
+use std::collections::HashMap;
+use std::io::Read;
+
+fn extract_files(path: &str, file_types:Vec<&str>)->Result<HashMap<String,Vec<u8>>,Box<dyn std::error::Error>>{
+    let book=File::open(path)?;
+    let mut archive=ZipArchive::new(book)?;
+
+    let mut map=HashMap::new();
+
+    for i in 0 ..archive.len(){
+        let mut file=archive.by_index(i)?;
+        let name=file.name().to_owned();
+        if file_types.iter().any(|ft|name.contains(ft)){
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)?;
+            map.insert(name, data);
+        }
+    }
+    Ok(map)
+}

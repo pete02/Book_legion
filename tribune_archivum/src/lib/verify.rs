@@ -7,6 +7,8 @@ use std::fs::File;
 pub fn verify_toc(epub: &mut EpubDoc<BufReader<File>>)->Result<(),Box<dyn std::error::Error>>{
     let toc=epub.toc.clone();
     let spine=epub.spine.clone();
+    if toc.len() ==0 {return Err("no toc found".into());}
+
     for ch in toc{
         let f=ch.content.to_str();
         match f {
@@ -54,31 +56,40 @@ fn check_title(epub:&mut EpubDoc<BufReader<File>>,title:&str)->bool{
     return a.iter().all(|f| txt.contains(&(f.to_lowercase())));
 }
 
-use scraper::{Html, Selector};
+use scraper::{Html, Selector, ElementRef};
 pub fn extract_heading(xhtml: &str) -> Option<String> {
     let doc = Html::parse_document(xhtml);
 
-    let selectors = [
-        Selector::parse("div[class]").unwrap(),
-        Selector::parse("h1[class]").unwrap(),
-        Selector::parse("h2[class]").unwrap(),
-        Selector::parse("h3[class]").unwrap(),
-    ];
+    let sel = Selector::parse("[class]").unwrap();
 
-    for sel in selectors.iter() {
-        for el in doc.select(sel) {
-            if let Some(class_attr) = el.value().attr("class") {
-                let lower = class_attr.to_lowercase();
-                if lower.contains("chapter")
-                    || lower.contains("heading")
-                    || lower.contains("title")
-                    || lower.contains("sect")
-                {
-                    return Some(el.inner_html());
-                }
-            }
+    for el in doc.select(&sel) {
+        let tag = el.value().name();
+        if tag == "body" || tag == "html" || tag == "head" {
+            continue;
+        }
+
+        let text = extract_clean_text(el);
+
+        if text.is_empty() { continue; }
+
+        let lw = text.to_lowercase();
+
+        if (lw.contains("chapter")
+            || lw.starts_with("prologue")
+            || lw.starts_with("epilogue"))
+            && text.split_whitespace().count() <= 12
+        {
+            return Some(text);
         }
     }
 
     None
+}
+
+fn extract_clean_text(el: ElementRef) -> String {
+    el.text()
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }

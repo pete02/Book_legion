@@ -108,7 +108,7 @@ fn process_chunk(
 }
 
 fn save_data(ctx:AudioContext, options: &AudiobookOptions)->Result<(),Box<dyn std::error::Error>>{
-    let (_,jpg,mp3,json)=create_paths(options);
+    let (epub,jpg,mp3,json)=create_paths(options);
     save_book_to_books_json(create_book_struct(&options.name, &ctx),&options.name,"data/books.json")?;
     ctx.writer.finalize()?;
     save_audio_map_json(&json, &ctx.map)?;
@@ -116,8 +116,13 @@ fn save_data(ctx:AudioContext, options: &AudiobookOptions)->Result<(),Box<dyn st
     if options.overwrite{
         fs::remove_dir(&mp3)?;
     }
-
-    format_audiobook("final.wav", &jpg, &mp3, &options.name,&options.author)?; 
+    extract_cover(&epub, &jpg)?;
+    format_audiobook("final.wav", &jpg, &mp3, &options.name,&options.author)?;
+    if !options.overwrite{
+        fs::remove_file(jpg)?;
+        fs::remove_file("final.wav")?;
+    }
+    
     Ok(())
 }
 

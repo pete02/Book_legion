@@ -60,6 +60,7 @@ pub fn create_book_struct(path:&str,ctx:&AudioContext,)->Book{
         path: path.to_owned(),
         initial_chapter: ctx.initial_chapter,
         current_chunk: 0,
+        current_time: 0.0,
         current_chapter: ctx.initial_chapter,
         duration: ctx.current_time,
         max_chapter: ctx.max_chapters,
@@ -83,12 +84,11 @@ pub fn print_progress(ctx: &mut AudioContext,length:usize){
 }
 
 pub fn check_safety(options: &AudiobookOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let (epub, jpg, mp3, json) = create_paths(options);
+    let (epub, _, mp3, json) = create_paths(options);
     let exists = |p: &str| std::path::Path::new(p).exists();
 
     match () {
         _ if !exists(&epub) => Err(format!("missing epub: {epub}"))?,
-        _ if !exists(&jpg) => Err(format!("missing jpg: {jpg}"))?,
         _ if exists(&mp3) && !options.overwrite => Err("mp3 would be overwritten")?,
         _ if exists(&json) && !options.overwrite => Err("json would be overwritten")?,
         _ => Ok(()),

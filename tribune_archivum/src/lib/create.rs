@@ -1,6 +1,5 @@
 
 use epub::doc::{EpubDoc};
-use scraper::{Html,Selector};
 use std::{io::BufReader};
 use std::fs::File;
 
@@ -25,8 +24,7 @@ pub fn scan_spine_for_headings(epub: &mut EpubDoc<BufReader<File>>) -> Vec<TocEn
             None => continue,
         };
 
-        if let Some(h) = extract_heading(&text) {
-            let title=create_title(&h);
+        if let Some(title) = extract_heading(&text) {
             if title.len() > 0{
                 out.push(TocEntry {title, file: "OEBPS/".to_owned()+&idref.clone().idref, anchor:None});
             }
@@ -59,22 +57,8 @@ fn xml_escape(input: &str) -> String {
 }
 
 
-fn create_title(html_fragment: &str) ->String {
-    let doc = Html::parse_fragment(html_fragment);
-    let p_sel = Selector::parse("p").unwrap();
 
-    let mut parts = Vec::new();
-    for p in doc.select(&p_sel) {
-        let text = p.text().collect::<String>().trim().to_string();
-        if !text.is_empty() {
-            parts.push(text);
-        }
-    }
-
-    parts.join(" — ")
-}
-
- fn make_ncx(toc: &[TocEntry], book_id: &str) -> String {
+fn make_ncx(toc: &[TocEntry], book_id: &str) -> String {
     let mut nav_points = String::new();
 
     for (i, entry) in toc.iter().enumerate() {

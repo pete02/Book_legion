@@ -28,7 +28,7 @@ struct Args {
     #[arg(long, default_value_t = false)]
     overwrite: bool,
 
-    /// Enable debug logging
+    /// Enable debug logging and extracts only the first chapter
     #[arg(long, default_value_t = false)]
     debug: bool,
 
@@ -49,7 +49,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn audiobook(args:Args)->Result<(),Box<dyn std::error::Error>>{
     let http=format!("http://{}:8000/tts",args.ip);
-    make_audiobook(&AudiobookOptions { name:args.name,
+    make_audiobook(&AudiobookOptions { 
+        name:args.name,
         author: args.author,
         ip: http,
         overwrite: args.overwrite,
