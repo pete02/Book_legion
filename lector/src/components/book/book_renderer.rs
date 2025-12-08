@@ -12,13 +12,14 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
     let mut html_vec: Signal<Vec<String>> = use_signal(Vec::new);
     let mut visible_chunks: Signal<Vec<String>> = use_signal(Vec::new);
     let mut container_ref: Signal<Option<web_sys::HtmlElement>> = use_signal(|| None);
+    let started=use_signal(||false);
     let mut start_index=use_signal(||0);
 
 
     let mut flip=use_signal(||false);
     let mut change=use_signal(||false);
-    
 
+    initial_chunk_sync(start_index, started);
     chapter_fetch_hook(idle, html_vec);
     calculate_chunks(html_vec, visible_chunks, start_index, css_idle, flip, change);
 
@@ -115,6 +116,19 @@ pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
     )
 }
 
+
+fn initial_chunk_sync(mut start_index: Signal<usize>, mut started:Signal<bool>) {
+    use_effect(move || {
+        if started() {return;};
+        started.set(true);
+        let global = use_context::<Signal<GlobalState>>();
+        let Some(book) = global().book else { return };
+
+        if start_index() == 0 && book.chunk > 0 {
+            start_index.set(book.chunk as usize);
+        }
+    });
+}
 
 fn jump_chunk(flip:bool)->usize{
     tracing::debug!("change chapter");

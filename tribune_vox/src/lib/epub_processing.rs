@@ -6,16 +6,16 @@ use regex::Regex;
 
 
 
-pub fn get_clean_page(epub: &mut EpubDoc<BufReader<File>>) ->  Result<String, Box<dyn std::error::Error>> {
-    let page: String = get_page(epub)?;
-    Ok(strip_epub_boilerplate(&page))
+pub fn get_clean_chapter(epub: &mut EpubDoc<BufReader<File>>) ->  Result<String, Box<dyn std::error::Error>> {
+    let chapter: String = get_chapter(epub)?;
+    Ok(strip_epub_boilerplate(&chapter))
 }
 
-fn get_page(epub: &mut EpubDoc<BufReader<File>>) -> Result<String, String> {
-    if let Some((page_text, _)) = epub.get_current_str() {
-        Ok(page_text)
+fn get_chapter(epub: &mut EpubDoc<BufReader<File>>) -> Result<String, String> {
+    if let Some((chapter_text, _)) = epub.get_current_str() {
+        Ok(chapter_text)
     } else {
-        Err("No page found".to_string())
+        Err("No chapter found".to_string())
     }
 }
 

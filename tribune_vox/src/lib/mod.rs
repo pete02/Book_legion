@@ -35,13 +35,13 @@ pub fn make_audiobook(options: &AudiobookOptions)->Result<(),Box<dyn std::error:
     let (path,_,_,_)=create_paths(options);
     println!("load epub from {}",path);
     let mut epub=EpubDoc::new(path)?;
-    let page=generate_initial_page(options.initial, &mut epub)?;
+    let chapter=generate_initial_chapter(options.initial, &mut epub)?;
 
     let mut ctx = create_ctx_struct(
         create_writer("final.wav",&options.ip)?, 
         AudioMap::new(options.name.clone()),
         &options.ip,
-        page);
+        chapter);
 
     println!("start creating audiobook");
     create_audiobook(&mut ctx, options,epub)?;
@@ -53,27 +53,27 @@ pub fn make_audiobook(options: &AudiobookOptions)->Result<(),Box<dyn std::error:
 
 fn create_audiobook( ctx: &mut AudioContext,options: &AudiobookOptions, mut epub:EpubDoc<BufReader<File>>) -> Result<(), Box<dyn std::error::Error>> {
 
-    epub.set_current_chapter(ctx.initial_page-1);
+    epub.set_current_chapter(ctx.initial_chapter-1);
 
-    ctx.max_pages=epub.get_num_chapters();
+    ctx.max_chapters=epub.get_num_chapters();
 
     if options.debug {
         epub.go_next();
-        handle_page(&mut epub, ctx)?;
+        handle_chapter(&mut epub, ctx)?;
     } else {
         while epub.go_next() {
-            handle_page(&mut epub,  ctx)?;
+            handle_chapter(&mut epub,  ctx)?;
         }
     }
     Ok(())
 }
 
 
-fn handle_page(epub: &mut EpubDoc<BufReader<File>>, 
+fn handle_chapter(epub: &mut EpubDoc<BufReader<File>>, 
     ctx:&mut AudioContext
     )-> Result<(), Box<dyn std::error::Error>> {
-    let text = get_clean_page(epub)?;
-    ctx.current_page = epub.get_current_chapter();
+    let text = get_clean_chapter(epub)?;
+    ctx.current_chapter = epub.get_current_chapter();
     ctx.current_chunk=0;
 
     let chunks:Vec<&str>=text.split('\n').collect();
@@ -85,7 +85,7 @@ fn handle_page(epub: &mut EpubDoc<BufReader<File>>,
         process_chunk(&chunk, ctx)?;
     }
 
-    ctx.page_to_chunk.insert(ctx.current_page, ctx.current_chunk);
+    ctx.chapter_to_chunk.insert(ctx.current_chapter, ctx.current_chunk);
     Ok(())
 }
 

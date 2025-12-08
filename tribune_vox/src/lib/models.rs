@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct AudioMapEntry {
-    pub page_number: usize,
+    pub chapter_number: usize,
     pub chunk_number:usize,
     pub start_time: f32, // seconds
     pub duration: f32,
@@ -15,12 +15,12 @@ pub struct AudioMapEntry {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Book{
     pub path: String,
-    pub initial_page: usize,
+    pub initial_chapter: usize,
     pub duration: f32,
     pub current_chunk: usize,
-    pub current_page: usize,
-    pub max_page: usize,
-    pub page_to_chunk: HashMap<usize,usize>
+    pub current_chapter: usize,
+    pub max_chapter: usize,
+    pub chapter_to_chunk: HashMap<usize,usize>
 
 }
 
@@ -67,13 +67,13 @@ impl AudioMap {
 
 pub struct AudioContext{
     pub writer: hound::WavWriter<std::fs::File>,
-    pub max_pages: usize,
+    pub max_chapters: usize,
     pub timer: std::time::Instant,
     pub map: AudioMap,
     pub current_time: f32, // running total of audio length
-    pub initial_page:usize,
-    pub current_page: usize,
+    pub initial_chapter:usize,
+    pub current_chapter: usize,
     pub server_ip:String,
     pub current_chunk: usize,
-    pub page_to_chunk: HashMap<usize,usize>
+    pub chapter_to_chunk: HashMap<usize,usize>
 }

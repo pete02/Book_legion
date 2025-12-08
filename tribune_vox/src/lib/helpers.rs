@@ -26,30 +26,30 @@ pub fn create_ctx_struct(
     writer: hound::WavWriter<std::fs::File>,
     audiomap:AudioMap ,
     ip: &str,
-    page: usize,
+    chapter: usize,
 ) -> AudioContext {
     AudioContext {
         writer:writer,
         map: audiomap,
-        max_pages: 0,
+        max_chapters: 0,
         current_time: 0.0,
-        initial_page:page,
-        current_page: page,
+        initial_chapter:chapter,
+        current_chapter: chapter,
         timer: Instant::now(),
         server_ip: ip.to_owned(),
         current_chunk: 0,
-        page_to_chunk: HashMap::new(),
+        chapter_to_chunk: HashMap::new(),
     }
 }
 
-pub fn generate_initial_page(page: usize, epub: &mut EpubDoc<BufReader<File>> )->Result<usize, Box<dyn std::error::Error>>{
+pub fn generate_initial_chapter(chapter: usize, epub: &mut EpubDoc<BufReader<File>> )->Result<usize, Box<dyn std::error::Error>>{
      match get_start_index(epub) {
         Ok(i)=>Ok(i),
             Err(_)=>{
-                if page==0{
-                    Err("EPUB Toc corrupted, please set the initial page".into())
+                if chapter==0{
+                    Err("EPUB Toc corrupted, please set the initial chapter".into())
                 }else{
-                    Ok(page)
+                    Ok(chapter)
                 }
             }
         }
@@ -58,23 +58,23 @@ pub fn generate_initial_page(page: usize, epub: &mut EpubDoc<BufReader<File>> )-
 pub fn create_book_struct(path:&str,ctx:&AudioContext,)->Book{
     Book{
         path: path.to_owned(),
-        initial_page: ctx.initial_page,
+        initial_chapter: ctx.initial_chapter,
         current_chunk: 0,
-        current_page: ctx.initial_page,
+        current_chapter: ctx.initial_chapter,
         duration: ctx.current_time,
-        max_page: ctx.max_pages,
-        page_to_chunk: ctx.page_to_chunk.clone()
+        max_chapter: ctx.max_chapters,
+        chapter_to_chunk: ctx.chapter_to_chunk.clone()
     }
 }
 
 
 pub fn print_progress(ctx: &mut AudioContext,length:usize){
     let secs=(Instant::now()-ctx.timer).as_secs_f32();
-    let page = ctx.current_page.saturating_sub(ctx.initial_page) + 1;
-    let max_page=ctx.max_pages.saturating_sub(ctx.initial_page) + 1;
+    let chapter = ctx.current_chapter.saturating_sub(ctx.initial_chapter) + 1;
+    let max_chapter=ctx.max_chapters.saturating_sub(ctx.initial_chapter) + 1;
     print!("\rchapter: {}/{} | chunk: {}/{} | last chunk: {:.2}s             ",
-        page,
-        max_page,
+        chapter,
+        max_chapter,
         ctx.current_chunk,
         length,
         secs);
@@ -98,20 +98,20 @@ pub fn check_safety(options: &AudiobookOptions) -> Result<(), Box<dyn std::error
 
 pub fn update_context(ctx: &mut AudioContext, time: f32) {
     let audio=AudioMapEntry{
-        page_number:ctx.current_page,
+        chapter_number:ctx.current_chapter,
         chunk_number:ctx.current_chunk,
         start_time:ctx.current_time,
         duration:time
     };
 
-    let entry_option=ctx.map.get_mut((ctx.current_page,ctx.current_chunk));
+    let entry_option=ctx.map.get_mut((ctx.current_chapter,ctx.current_chunk));
     if let Some(entry)=entry_option{
-        entry.page_number=ctx.current_page;
+        entry.chapter_number=ctx.current_chapter;
         entry.chunk_number=ctx.current_chunk;
         entry.start_time=ctx.current_time;
         entry.duration=time;
     }else{
-        ctx.map.insert((ctx.current_page,ctx.current_chunk), audio);
+        ctx.map.insert((ctx.current_chapter,ctx.current_chunk), audio);
     }
 
     ctx.current_time += time;
