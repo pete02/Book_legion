@@ -1,7 +1,8 @@
 use dioxus::{logger::tracing, prelude::*};
 use dioxus_signals::Signal;
-use crate::models::{GlobalState, BookStatus};
-use reqwasm::http::Request;
+
+use crate::models::GlobalState;
+use crate::components::server_api;
 
 
 #[derive(Clone, PartialEq)]
@@ -29,7 +30,7 @@ pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
             global.with_mut(|state| state.book = None);
             tracing::info!("loading book: {}",&value);
 
-            match get_book(value).await {
+            match server_api::get_book(value).await {
                 Ok(book) => {
                     time.set(book.time.clone());
                     global.with_mut(|state| state.book = Some(book));
@@ -48,12 +49,3 @@ pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
 }
 
 
-
-async fn get_book(book_name:String) -> Result<BookStatus, Box<dyn std::error::Error>> {
-    let json: BookStatus = Request::get(&format!("http://127.0.0.1:8000/init?name={}&type=text",book_name))
-        .send()
-        .await?
-        .json()
-        .await?;
-    Ok(json)
-}

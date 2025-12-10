@@ -1,6 +1,8 @@
 - webiste:
-    - chunk saving
+    - retest the chapter edge both for audio and for text
     - recheck the logic of syncing between the book and audio
     - ability to change font size
     - library
     - book view
+        - reset, audio and book buttons
+    - login and security

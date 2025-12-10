@@ -1,30 +1,28 @@
-use std::collections::HashMap;
 use dioxus::prelude::*;
-use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, use_audio_chunk_loader, use_chunk_calculator, use_playback_tick};
-use crate::components::{BookCover, global_watcher, use_book_parsing, use_load_book};
-use crate::models::{ChunkProgress};
+use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_chunk_calculator, use_playback_tick};
+use crate::components::{BookCover, global_updater, use_book_parsing, use_load_book};
+
 
 
 #[component]
 pub fn AudioView( ) -> Element {
     let playing= use_signal(||false);
-    let forward=use_signal(|| false);
-    let backward=use_signal(|| false);
+    let reload=use_signal(||true); // to load the book first time
 
-    let total_played = use_signal(|| 0.0);
-    let chunkmap=use_signal(||None::<HashMap<String,ChunkProgress>>);
+    let time = use_signal(|| 0.0);
 
     let audio_url=use_signal(|| None::<String>);
     let idle=use_signal(||true);
     let book=use_signal(||"".to_string());
     
 
-    use_load_book("fusing".to_string(), total_played, idle);
+    use_load_book("fusing".to_string(), time, idle);
     use_book_parsing(book);
-    use_chunk_calculator(total_played, chunkmap);
-    use_playback_tick(playing, total_played);
-    use_audio_chunk_loader(audio_url, idle, total_played, chunkmap, forward, backward);
-    global_watcher();
+    use_chunk_calculator(time, reload);
+    use_playback_tick(playing, time);
+
+    audio_sourcing(audio_url, reload);
+    global_updater();
 
     rsx! {
         div {
@@ -35,8 +33,8 @@ pub fn AudioView( ) -> Element {
         
             div {
                 class: "w-full flex flex-col items-center justify-start",
-                TimeBar { total_played, audio_url }
-                ControlButtons {playing, forward, backward}
+                TimeBar { time, audio_url }
+                ControlButtons {playing, time}
             }   
          }
     }

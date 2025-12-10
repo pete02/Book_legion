@@ -1,27 +1,37 @@
-use dioxus::{hooks::{use_context, use_effect}, signals::Signal};
+use dioxus::{hooks::{use_context, use_effect, use_signal},  signals::{Signal, WritableExt}};
 use wasm_bindgen_futures::spawn_local;
 
 use crate::models::{BookStatus, GlobalState};
+use crate::components::server_api;
 
-
-pub fn global_watcher(){
+pub fn global_updater(){
     let global=use_context::<Signal<GlobalState>>();
+    let mut old: Signal<Option<BookStatus>>=use_signal(||None);
+    let mut updating=use_signal(||false);
     use_effect(move ||{
         
         let Some(book)=global().book else {return;};
-
-        spawn_local(async move{
-            let _ =update_progress(book).await;
-        });
+        match old() {
+            None=>{
+                updating.set(true);
+                send_update(book.clone(), updating);
+                old.set(Some(book));
+            },
+            Some(ob)=>{
+                if ob != book && !updating(){
+                    updating.set(true);
+                    send_update(book.clone(),updating);
+                    old.set(Some(book));
+                }
+            }
+        }
     });
 }
 
-async fn update_progress(book:BookStatus)->Result<(),Box<dyn std::error::Error>>{
-    let _=reqwasm::http::Request::post("http://127.0.0.1:8000/update")
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&book)?)
-        .send()
-        .await?.text().await?;
-
-    Ok(())
+fn send_update(book:BookStatus, mut updating: Signal<bool>){
+    spawn_local(async move{
+        let _ =server_api::update_progress(book).await;
+        updating.set(false);
+    });
 }
+

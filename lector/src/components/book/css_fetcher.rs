@@ -2,6 +2,7 @@ use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{window};
 use crate::models::GlobalState;
+use crate::components::server_api;
 
 pub fn use_css_injector(idle: Signal<bool>, css_idle: Signal<bool>) {
     let mut css_idle=css_idle.clone();
@@ -13,7 +14,7 @@ pub fn use_css_injector(idle: Signal<bool>, css_idle: Signal<bool>) {
         let Some(book) = global().book else { return; };
 
         spawn_local(async move {
-            match fetch_css(&book.name).await {
+            match server_api::fetch_css(&book.name).await {
                 Ok(css_text) => {
                     inject_or_append_css("book-css", &css_text);
                     css_idle.set(false);
@@ -27,17 +28,7 @@ pub fn use_css_injector(idle: Signal<bool>, css_idle: Signal<bool>) {
     });
 }
 
-async fn fetch_css(book: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let url = format!("http://127.0.0.1:8000/css/{}", book);
-    let resp = reqwasm::http::Request::get(&url).send().await?;
-    
-    if resp.status() >= 500 {
-        tracing::error!("Backend error: {:?}", resp.text().await);
-    }
-    
-    let text = resp.text().await?;
-    Ok(text)
-}
+
 
 fn inject_or_append_css(id: &str, css_text: &str) {
     let document = window().unwrap().document().unwrap();

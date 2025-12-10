@@ -4,8 +4,10 @@ use dioxus::{  logger::tracing, prelude::*, web::WebEventExt};
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlElement, window};
 use wasm_bindgen_futures::spawn_local;
-use crate::models::{BookStatus, GlobalState};
 use regex::Regex;
+
+use crate::models::{GlobalState};
+use crate::components::server_api;
 
 #[component]
 pub fn BookRenderer(idle: Signal<bool>, css_idle: Signal<bool>) -> Element {
@@ -164,9 +166,9 @@ fn chapter_fetch_hook(idle: Signal<bool>, html_vec: Signal<Vec<String>>){
         let mut html_vec = html_vec.clone();
 
         spawn_local(async move {
-            match fetch_chapter(book).await {
+            match server_api::fetch_chapter(book).await {
                 Ok(chapter) => {
-                    let vec = chapter
+                    let vec = strip_headers(&chapter)
                         .split("\n")
                         .map(|s| s.to_string())
                         .filter(|s| !s.trim().is_empty())
@@ -250,16 +252,15 @@ fn calculate_chunks(
     
 }
 
-async fn fetch_chapter(book: BookStatus) -> Result<String, Box<dyn std::error::Error>> {
-    let url = "http://127.0.0.1:8000/book";
-    let bytes = reqwasm::http::Request::post(url)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&book)?)
-        .send()
-        .await?;
-    let text = bytes.text().await?;
-    Ok(strip_headers(&text))
+
+
+fn get_element_height(id: &str) -> Option<f64> {
+    let document = window()?.document()?;
+    let element = document.get_element_by_id(id)?;
+    let html_element: HtmlElement = element.dyn_into().ok()?;
+    Some(html_element.offset_height() as f64)
 }
+
 
 fn strip_headers(xhtml: &str) -> String {
     let re = Regex::new(
@@ -267,11 +268,4 @@ fn strip_headers(xhtml: &str) -> String {
     )
     .unwrap();
     re.replace_all(xhtml, "").to_string()
-}
-
-fn get_element_height(id: &str) -> Option<f64> {
-    let document = window()?.document()?;
-    let element = document.get_element_by_id(id)?;
-    let html_element: HtmlElement = element.dyn_into().ok()?;
-    Some(html_element.offset_height() as f64)
 }

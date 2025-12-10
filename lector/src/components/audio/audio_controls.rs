@@ -1,5 +1,3 @@
-use dioxus::html::geometry::euclid::num::Floor;
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
 
 use web_sys::{HtmlAudioElement};
@@ -11,15 +9,14 @@ use crate::assets::{FORWARD, PAUSE, PLAY};
 use crate::models::GlobalState;
 
 #[component]
-pub fn TimeBar(total_played: Signal<f64>, audio_url: Signal<Option<String>>) -> Element {
+pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element {
     let total=use_signal(||0.0);
     let total_str=use_signal(||"".to_owned());
     let cur_str=use_signal(||"".to_owned());
     let precent= use_signal(||0.0);
 
     create_total_time(total, total_str);
-
-    create_current_time(total_played, cur_str, precent, total);
+    create_current_time(time, cur_str, precent, total);
 
 
     rsx! {
@@ -48,10 +45,7 @@ pub fn TimeBar(total_played: Signal<f64>, audio_url: Signal<Option<String>>) -> 
 
 
 #[component]
-pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Signal<bool>)->Element{
-    let mut forward=forward.clone();
-    let mut backward = backward.clone();
-
+pub fn ControlButtons(playing: Signal<bool>, time: Signal<f64>)->Element{
     rsx! {
         div {
             class: "my-2 flex items-center gap-4",
@@ -63,7 +57,7 @@ pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Sig
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| { backward.set(true); },
+                onclick: move |_| { time_jump(time, -30.0); },
                 img {
                     class: "w-6 h-6 object-contain transform -scale-x-100",
                     src: FORWARD
@@ -86,7 +80,7 @@ pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Sig
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| { forward.set(true); },
+                onclick: move |_| { time_jump(time, 30.0);  },
                 img {
                     class: "w-6 h-6 object-contain",
                     src: FORWARD
@@ -98,7 +92,14 @@ pub fn ControlButtons(playing: Signal<bool>, forward:Signal<bool>, backward: Sig
 }
 
 
+fn time_jump(mut time: Signal<f64>, jump:f64){
+    let global=use_context::<Signal<GlobalState>>();
+    let Some(book)=global().book else {return;};
+    time.with_mut(|t|{
+        *t=(*t+jump).clamp(0.0, book.duration);
+    });
 
+}
 
 fn create_current_time(current: Signal<f64>, cur_str: Signal<String>, precent:Signal<f64>, total:Signal<f64>){
 
@@ -106,9 +107,9 @@ fn create_current_time(current: Signal<f64>, cur_str: Signal<String>, precent:Si
         let mut cur_str=cur_str.clone();
         let mut precent=precent.clone();
         move || {
-            precent.set((current()/total())*100.0);
+            precent.set(if total() > 0.0 { current()/total()*100.0 } else { 0.0 });
             let t=current() as i32;
-            cur_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60)%60, t%60));
+            cur_str.set(format_time(t));
         }
     });
 
@@ -125,13 +126,17 @@ fn create_total_time(total:Signal<f64>, total_str:Signal<String>){
                 None => total.with_mut(|f| *f=0.0),
                 Some(book)=> {
                     let t= book.duration as i32;
-                    tracing::debug!(t);
                     total.set(book.duration);
-                    total_str.set(format!("{:02}:{:02}:{:02}", t/3600, (t/60).floor(), t%60));
+                    total_str.set(format_time(t));
                 }
             }
         }
     });
+}
+
+
+fn format_time(seconds: i32) -> String {
+    format!("{:02}:{:02}:{:02}", seconds/3600, (seconds/60)%60, seconds%60)
 }
 
 fn playpause(playing: Signal<bool>){
