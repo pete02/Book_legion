@@ -269,8 +269,6 @@ fn strip_headers(xhtml: &str) -> String {
     re.replace_all(xhtml, "").to_string()
 }
 
-
-
 fn get_element_height(id: &str) -> Option<f64> {
     let document = window()?.document()?;
     let element = document.get_element_by_id(id)?;

@@ -35,7 +35,7 @@ pub fn use_chunk_calculator(time: Signal<f64>, chunkmap: Signal<Option<HashMap<S
 fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
     let time = time.clone();
     let chunks = chunks.clone();
-    let global=use_context::<Signal<GlobalState>>();
+    let mut global=use_context::<Signal<GlobalState>>();
     
     let mut cur_chunk=use_signal(||ChunkProgress {
         chapter_number: 0,
@@ -58,16 +58,20 @@ fn check_chunk(time: &Signal<f64>, chunks: &Signal<Vec<ChunkProgress>>) {
                     continue;
                 }
                 let idx = list.partition_point(|c| c.start_time <= time());
-
                 let active = if idx == 0 { 0} else { idx - 1 };
+
 
                 let chunk = &list[active];
                 if *chunk != cur_chunk(){
                     cur_chunk.set(chunk.clone());
-                    match global().book {
-                        None=>{},
-                        Some(b)=>{let _=update_progress(chunk.clone(), b).await;}
-                    }
+                    
+                    global.with_mut(|state|{
+                        let Some(book)=&mut state.book else {return;};
+                        book.chapter=chunk.chapter_number;
+                        book.chunk=chunk.chunk_number;
+                        book.time=chunk.start_time;
+                    })
+
                 }
             }
         });
@@ -110,16 +114,3 @@ async fn fetch_audiomap(book: BookStatus) -> Result<HashMap<String,ChunkProgress
     return Ok(map)
 }
 
-async fn update_progress(chunk:ChunkProgress,mut book:BookStatus)->Result<(),Box<dyn std::error::Error>>{
-    book.chapter=chunk.chapter_number;
-    book.chunk=chunk.chunk_number;
-    book.time=chunk.start_time;
-
-    let _=reqwasm::http::Request::post("http://127.0.0.1:8000/update")
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&book)?)
-        .send()
-        .await?.text().await?;
-
-    Ok(())
-}

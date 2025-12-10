@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::{book::{BookRenderer, use_css_injector}, use_load_book};
+use crate::components::{book::{BookRenderer, use_css_injector}, global_watcher, use_load_book};
 
 #[component]
 pub fn BookView()->Element{
@@ -11,7 +11,7 @@ pub fn BookView()->Element{
 
     use_load_book(book(), time, idle);
     use_css_injector(idle, css_idle);
-
+    global_watcher();
     rsx! {
         h1 {
             "{book}",

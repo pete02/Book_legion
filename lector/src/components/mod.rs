@@ -11,3 +11,6 @@ pub use parse_book::use_book_parsing;
 
 pub mod audio;
 pub mod book;
+
+mod global_state_updater;
+pub use global_state_updater::global_watcher;
