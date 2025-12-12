@@ -5,39 +5,31 @@ use crate::models::GlobalState;
 use crate::components::server_api;
 
 
-#[derive(Clone, PartialEq)]
-enum LoadStatus {
-    Loading,
-    Success,
-    Error(String),
-}
 
 
-pub fn use_load_book(book_name:String, mut loaded: Signal<bool>) {
-    let global = use_context::<Signal<GlobalState>>();
-    let status = use_signal(|| LoadStatus::Loading);
-    
-    
+pub fn use_load_book(mut loaded: Signal<bool>) {
+    let mut global = use_context::<Signal<GlobalState>>();
+    let mut triggered=use_signal(||false);
     use_effect(move || {
+        if triggered() {return;};
         if loaded() {return;}
-        let mut global = global.clone();
-        let mut status = status.clone();
-        let value = book_name.clone();
+        let Some(name) = global().name.clone() else {return;};
+        triggered.set(true);
 
         spawn(async move {
             global.with_mut(|state| state.book = None);
-            tracing::info!("loading book: {}",&value);
+            tracing::info!("loading book: {}",&name);
 
-            match server_api::get_book(value).await {
+            match server_api::get_book(name).await {
                 Ok(book) => {
                     global.with_mut(|state| state.book = Some(book));
                     tracing::info!("Book loaded");
-                    status.set(LoadStatus::Success);
                     loaded.set(true);
+                    triggered.set(false);
                 }
                 Err(e) => {
                     tracing::error!("Error in book loading: {}",e);
-                    status.set(LoadStatus::Error(format!("{}", e)));
+                    triggered.set(false);
                 }
             }
         });

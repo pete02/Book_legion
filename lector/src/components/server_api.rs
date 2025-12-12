@@ -78,3 +78,11 @@ pub async fn fetch_css(book: &str) -> Result<String, Box<dyn std::error::Error>>
     let text = resp.text().await?;
     Ok(text)
 }
+
+
+pub async fn fetch_manifest()-> Result<String, Box<dyn std::error::Error>>{
+    let url = format!("http://127.0.0.1:8000/manifest");
+    let resp = reqwasm::http::Request::get(&url).send().await?;
+    let text = resp.text().await?;
+    Ok(text)
+}

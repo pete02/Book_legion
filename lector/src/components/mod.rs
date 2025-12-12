@@ -1,6 +1,4 @@
 
-mod hero;
-pub use hero::Hero;
 mod load_book;
 pub use load_book::use_load_book;
 mod book_cover;
@@ -16,3 +14,9 @@ mod global_state_updater;
 pub use global_state_updater::global_updater;
 
 pub mod server_api;
+
+mod load_manifest;
+pub use load_manifest::use_load_manifest;
+
+mod name_hook;
+pub use name_hook::load_name;

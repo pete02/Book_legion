@@ -1,16 +1,17 @@
-use dioxus::{prelude::*};
+use dioxus::{ prelude::*};
 use wasm_bindgen_futures::spawn_local;
 
 
-use crate::{components::{BookCover, server_api, use_load_book}, models::GlobalState, views::Route};
+use crate::{components::{BookCover, load_name, server_api, use_load_book}, models::GlobalState, views::Route};
 
 #[component]
 pub fn BookView()->Element{
-    let book=use_signal(||"fused".to_owned());
+    let book=use_signal(||"".to_owned());
     let mut pressed=use_signal(||false);
     let loaded=use_signal(||false);
-
-    use_load_book(book(), loaded);
+    
+    load_name(book);
+    use_load_book(loaded);
     reset_book(pressed, loaded);
 
     rsx! {
@@ -21,6 +22,14 @@ pub fn BookView()->Element{
             div {
                 style: "display: flex; justify-content: flex-start; gap: 12px; align-items: center; padding: 8px 16px;",
                 class: "bg-gray-200 dark:bg-gray-800 px-4", 
+
+                Link {
+                    to: Route::LibraryView {  },
+                    button {
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        "Library"
+                    }
+                }
 
                 Link {
                     to: Route::ReadView {  },
@@ -44,6 +53,8 @@ pub fn BookView()->Element{
                     "Reset"
                 }
             }
+
+            
             BookCover {
                 name: book.clone(),
                 width: "200px".to_string(),

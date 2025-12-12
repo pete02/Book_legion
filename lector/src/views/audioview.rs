@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_chunk_calculator, use_playback_tick};
-use crate::components::{BookCover, global_updater, use_book_parsing};
+use crate::components::{BookCover, global_updater, load_name, use_book_parsing};
+use crate::views::Route;
 
 
 
@@ -16,6 +17,7 @@ pub fn AudioView( ) -> Element {
     
     use_book_parsing(book);
     use_chunk_calculator(time, reload);
+    load_name(book);
     use_playback_tick(playing, time);
 
     audio_sourcing(audio_url, reload, time);
@@ -24,6 +26,35 @@ pub fn AudioView( ) -> Element {
     rsx! {
         div {
             class: "min-h-screen flex flex-col items-center justify-start",
+
+            div {
+                style: "display: flex; justify-content: flex-start; gap: 12px; align-items: center; padding: 8px 16px;",
+                class: "bg-gray-200 dark:bg-gray-800 px-4 rounded-xl", 
+
+                Link {
+                    to: Route::LibraryView {  },
+                    button {
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        "Library"
+                    }
+                }
+                Link{
+                    to: Route::BookView {},
+                    button {
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        "Book"
+                    }
+                }
+
+                Link{
+                    to: Route::ReadView {},
+                    button {
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        "Read"
+                    }
+                }
+            },
+
 
             AudioPlayer { playing, audio_url }           
             BookCover {name: book}
