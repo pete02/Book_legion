@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_chunk_calculator, use_playback_tick};
-use crate::components::{BookCover, global_updater, use_book_parsing, use_load_book};
+use crate::components::{BookCover, global_updater, use_book_parsing};
 
 
 
@@ -14,8 +14,6 @@ pub fn AudioView( ) -> Element {
     let audio_url=use_signal(|| None::<String>);
     let book=use_signal(||"".to_string());
     
-
-    use_load_book("fused".to_string());
     use_book_parsing(book);
     use_chunk_calculator(time, reload);
     use_playback_tick(playing, time);

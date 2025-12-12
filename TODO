@@ -1,8 +1,28 @@
 - webiste:
-    - retest the chapter edge both for audio and for text
-    - recheck the logic of syncing between the book and audio
-    - ability to change font size
-    - library
     - book view
-        - reset, audio and book buttons
+    - library
     - login and security
+
+- if time:
+    - ability to change font size
+    - how far along the book we are
+    - estimation for time to completition
+
+
+
+
+
+
+
+
+
+
+- bookview:
+    - reset, audio and book buttons
+    - cover
+    - load book status
+
+    - optional:
+        - chapter list with buttons to jump there?
+            - could also have an indication of current chapter
+        - description?

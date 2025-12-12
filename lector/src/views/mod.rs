@@ -6,8 +6,13 @@ pub use home::Home;
 mod audioview;
 pub use audioview::AudioView;
 
+mod readview;
+pub use readview::ReadView;
+
 mod bookview;
 pub use bookview::BookView;
+
+use crate::models::GlobalState;
 
 
 
@@ -17,8 +22,29 @@ pub enum Route {
     #[layout(Navbar)]
     #[route("/")]
     Home {},
+
     #[route("/AudioView")]
+    #[redirect("/AudioView", || {
+        let global = use_context::<Signal<GlobalState>>();
+        if global().book.is_none() {
+            Route::BookView {}
+        } else {
+            Route::AudioView {}
+        }
+    })]
     AudioView { },
+
+    #[route("/ReadView")]
+    #[redirect("/ReadView", || {
+        let global = use_context::<Signal<GlobalState>>();
+        if global().book.is_none() {
+            Route::BookView {}
+        } else {
+            Route::ReadView {}
+        }
+    })]
+    ReadView { },
+
     #[route("/BookView")]
     BookView { },
 }
@@ -41,6 +67,10 @@ pub fn Navbar() -> Element {
                     "AudioView"
                 }
 
+                Link {
+                    to: Route::ReadView {  },
+                    "ReadView"
+                }
                 Link {
                     to: Route::BookView {  },
                     "BookView"

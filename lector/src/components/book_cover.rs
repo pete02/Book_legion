@@ -13,7 +13,7 @@ pub fn BookCover(
     rsx! {
         img {
             class: "rounded-xl shadow-md object-contain",
-            style: "width: {width}; max-width: {max_width}; height: auto;",
+            style: "width: {width}; max-width: {max_width}; height: auto; margin: 16px; display: block",
             src: "http://127.0.0.1:8000/cover/{name}"
         }
     }
