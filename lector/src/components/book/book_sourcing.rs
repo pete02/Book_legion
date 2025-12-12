@@ -6,7 +6,7 @@ use crate::{components::server_api, models::GlobalState};
 pub fn chapter_fetch_hook(mut html_vec: Signal<Vec<String>>){
     let global=use_context::<Signal<GlobalState>>();
     use_effect(move || {
-        let Some(book) = global().book else { return };
+        let Some(book) = global().book.clone() else { return };
         if html_vec().len() > 0 {return;};
         
         spawn_local(async move {

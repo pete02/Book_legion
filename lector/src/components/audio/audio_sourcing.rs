@@ -30,7 +30,7 @@ fn reload_audio_watcher(
     let global=use_context::<Signal<GlobalState>>();
     use_effect(move||{
         if !reload() {return;}
-        let Some(book)=global().book else {return;};
+        let Some(book)=global().book.clone() else {return;};
 
         private_state.set(Some(book.clone()));
         if reload(){

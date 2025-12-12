@@ -13,10 +13,10 @@ enum LoadStatus {
 }
 
 
-pub fn use_load_book(book_name:String) {
+pub fn use_load_book(book_name:String, mut loaded: Signal<bool>) {
     let global = use_context::<Signal<GlobalState>>();
     let status = use_signal(|| LoadStatus::Loading);
-    let mut loaded=use_signal(||false);
+    
     
     use_effect(move || {
         if loaded() {return;}

@@ -22,7 +22,7 @@ fn chunk_hook(mut chunks: Signal<Vec::<ChunkProgress>>){
     let global = use_context::<Signal<GlobalState>>();
     let map_fetching=use_signal(||false);
     use_effect(move || {
-        let Some(book)=global().book else {return;};
+        let Some(book)=global().book.clone() else {return;};
         if map_fetching() { return;}
 
 

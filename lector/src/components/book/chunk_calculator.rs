@@ -19,7 +19,7 @@ pub fn page_navigator(move_page:Signal<i32>, html_vec: Signal<Vec<String>>, visi
 
 pub fn initial_chunk_sync(mut visible_start: Signal<i32>) {
     let mut started=use_signal(||false);
-    let global = use_context::<Signal<GlobalState>>();
+    let global = use_context::<Signal<GlobalState>>().clone();
     use_effect(move || {
         let Some(book) = global().book else { return };
         if started() {return;};
@@ -97,7 +97,7 @@ pub fn update_global_chunk(
     visible_chunks: Signal<Vec<String>>,
     move_book:Signal<i32>,
 ){
-    let mut global=use_context::<Signal<GlobalState>>();
+    let mut global=use_context::<Signal<GlobalState>>().clone();
     use_effect(move || {
         let _=visible_chunks();
         let cur_index=visible_start() as u32;
@@ -122,7 +122,7 @@ pub fn page_turner(
     mut visible_chunks: Signal<Vec<String>>,
     mut private_move: Signal<i32>,
 ){
-    let global=use_context::<Signal<GlobalState>>();
+    let global=use_context::<Signal<GlobalState>>().clone();
     use_effect(move ||{
         let num=move_page();
         if num == 0 {return;};

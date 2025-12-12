@@ -9,7 +9,7 @@ pub fn use_css_injector() {
     let global = use_context::<Signal<GlobalState>>();
     use_effect(move || {
         if !css_idle() {return;}
-        let Some(book) = global().book else { return; };
+        let Some(book) = global().book.clone() else { return; };
 
         spawn_local(async move {
             match server_api::fetch_css(&book.name).await {
