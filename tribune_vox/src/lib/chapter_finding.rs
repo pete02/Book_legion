@@ -14,6 +14,7 @@ pub fn get_start_index(epub: &mut EpubDoc<BufReader<File>>)->Result<usize,Box<dy
         epub.set_current_chapter(index);
         
         if check_first(epub,&first.label){
+            println!("will start from {}", first.label);
             Ok(index)
         }else{
             println!("Sourced the wrong index");
