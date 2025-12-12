@@ -123,7 +123,7 @@ pub fn page_turner(
         if private_move() != 0{return;};
         let Some(book)=global().book else {return;};
         if check_end(&book, move_page(), visible_start(), visible_chunks().len()) {return;}
-
+        tracing::debug!("move");
         if move_page() ==1{
             let end_of_page = visible_start() + visible_chunks().len() as i32;
             let max_chunk=book.chapter_to_chunk[&book.chapter];
@@ -184,11 +184,13 @@ fn move_chapter(direction: i32)->i32{
     let mut global=use_context::<Signal<GlobalState>>();
     let mut cor_chunk=1;
 
+    tracing::debug!(" move chapter, direction: {}", direction);
+
     global.with_mut(|s|{
         let Some(book)=&mut s.book else {return;};
         book.chunk=1;
-        book.chapter -=direction as u32;
-
+        book.chapter +=direction as u32;
+        tracing::debug!("new ");
         if direction==-1{
             cor_chunk=book.chapter_to_chunk[&book.chapter]-1;
         }

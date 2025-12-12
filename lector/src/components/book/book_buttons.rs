@@ -3,37 +3,37 @@ use dioxus::prelude::*;
 #[component]
 pub fn BookButtons(mut move_page:Signal<i32>)->Element{
     rsx!(
-        div {
-            style: "
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                display: flex;
-            ",
+       div {
+        style: "
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+        ",
 
-            // Left button
-            div {
+            // Left half
+            button {
+                id: "backward",
                 style: "
-                    width: 50%;
-                    height: 100%;
+                    flex: 1 1 0;
                     cursor: pointer;
                     background: transparent;
                 ",
-                onclick: move |_| {move_page.set(-1);}
-            }
+                onclick: move |_| { move_page.set(-1); }
+            },
 
-            // Right button
-            div {
+            // Right half
+            button {
+                id: "forward",
                 style: "
-                    width: 50%;
-                    height: 100%;
+                    flex: 1 1 0;
                     cursor: pointer;
                     background: transparent;
                 ",
-                onclick: move |_| {move_page.set(1);}
+                onclick: move |_| { move_page.set(1); }
             }
-            }
+        }
     )
 }

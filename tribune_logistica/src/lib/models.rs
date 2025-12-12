@@ -29,7 +29,7 @@ pub struct BookData {
     pub duration: f32,
     pub current_chunk: u32,
     pub current_chapter: u32,
-    pub current_time: f64,
+    pub current_time: f32,
     pub chapter_to_chunk: HashMap<u32,u32>,
     pub max_chapter: u32
 }
@@ -40,7 +40,7 @@ pub struct BookStatus {
     pub path:String,
     pub chapter: u32,
     pub initial_chapter: u32,
-    pub time: f64,
+    pub time: f32,
     pub chunk: u32,
     pub json: String,
     pub max_chapter: u32,

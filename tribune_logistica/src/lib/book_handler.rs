@@ -69,10 +69,13 @@ pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookSt
 }
 
 pub fn update_progress(book_option:Option<BookStatus>)->Result<(),String>{
-
+    
     let status=book_option.ok_or("no initialized book")?;
     let mut books= load_books(&status.json).map_err(|_|"missing manifest")?;
     let book=books.get_mut(&status.name).ok_or("not in library")?;
+
+    let path= format!("{}/{}.json", book.path, book.path);
+    let map=get_audiomap(&path).map_err(|_| "no book audiomap found")?;
     if status.chapter>book.max_chapter{
         return Err("chapter overflow".into());
     }
@@ -83,9 +86,19 @@ pub fn update_progress(book_option:Option<BookStatus>)->Result<(),String>{
         return Err("chunk overflow".into());
     }
 
-    book.current_chunk=status.chunk;
-    book.current_chapter=status.chapter;
-    book.current_time=status.time;
+    let true_time=map.get((status.chapter as usize, status.chunk as usize));
+    match true_time {
+        None=>{
+            book.current_chunk=status.chunk;
+            book.current_chapter=status.chapter;
+            book.current_time=status.time;
+        },
+        Some(time)=>{
+            book.current_chunk=status.chunk;
+            book.current_chapter=status.chapter;
+            book.current_time=time.start_time;
+        }
+    }
 
     
     let data = serde_json::to_string_pretty(&books).map_err(|_| "cannot turn books into json")?;

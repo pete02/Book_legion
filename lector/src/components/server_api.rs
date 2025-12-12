@@ -20,6 +20,10 @@ pub async fn fetch_audiomap(book: &BookStatus) -> Result<HashMap<String,ChunkPro
 }
 
 pub async fn fetch_audio(book: &BookStatus) -> Result<(bool,Vec<u8>), Box<dyn std::error::Error>> {
+    let mut book=book.clone();
+    book.chapter=book.chapter.clamp(book.initial_chapter, book.max_chapter);
+    book.chunk=book.chunk.clamp(1, book.chapter_to_chunk[&book.chapter]);
+
     let url = format!("http://127.0.0.1:8000/audio?chunk={}", ADVANCE_AMOUNT);
     let bytes = reqwasm::http::Request::post(&url)
         .header("Content-Type", "application/json")

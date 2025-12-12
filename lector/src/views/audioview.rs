@@ -15,7 +15,7 @@ pub fn AudioView( ) -> Element {
     let book=use_signal(||"".to_string());
     
 
-    use_load_book("fusing".to_string());
+    use_load_book("fused".to_string());
     use_book_parsing(book);
     use_chunk_calculator(time, reload);
     use_playback_tick(playing, time);
