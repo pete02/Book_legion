@@ -8,25 +8,28 @@ use crate::models::{BookStatus, GlobalState};
 pub fn page_navigator(move_page:Signal<i32>, html_vec: Signal<Vec<String>>, visible_chunks: Signal<Vec<String>>){
     let private_fill=use_signal(||1);
     let visible_start=use_signal(||0);
- 
+    let index: Signal<i32>=use_signal(||0);
+
     initial_chunk_sync(visible_start);
-    chunk_filler(html_vec, visible_chunks, visible_start, private_fill);
-    visible_start_updater(html_vec, visible_chunks, visible_start, private_fill);
+    chunk_filler(html_vec, visible_chunks, visible_start, private_fill, index);
+    visible_start_updater(html_vec,index, visible_start, visible_chunks,private_fill);
     update_global_chunk(visible_start,visible_chunks,private_fill);
-    page_turner(move_page, visible_start,visible_chunks, private_fill);
+    page_turner(html_vec, move_page, visible_start,visible_chunks, private_fill);
 }
 
 pub fn initial_chunk_sync(mut visible_start: Signal<i32>) {
     let mut started=use_signal(||false);
+    let global = use_context::<Signal<GlobalState>>();
     use_effect(move || {
+        let Some(book) = global().book else { return };
         if started() {return;};
         started.set(true);
-        let global = use_context::<Signal<GlobalState>>();
-        let Some(book) = global().book else { return };
 
+        tracing::debug!("run start");
         if visible_start() == 0 && book.chunk > 0 {
             tracing::debug!("book.chunk: {}", book.chunk);
-            visible_start.set(book.chunk as i32 -1);
+            let val=book.chunk as i32 -4;
+            visible_start.set(val.max(0));
         }
     });
 }
@@ -37,22 +40,22 @@ pub fn chunk_filler(
     mut visible_chunks: Signal<Vec<String>>,
     visible_start:Signal<i32>,
     direction: Signal<i32>,
+    mut index: Signal<i32>
 ){
-    let mut index: Signal<i32>=use_signal(||0);
+
     use_effect(move || {
         if visible_chunks().len() == 0{
-            index.set(0);
+            index.set(0);            
         }
         let cur_location=visible_start()+index();
-
         if html_vec().len() ==0 {return;}
         if direction()==0 {return;}
         if is_full_height() {return;}
         if no_more_chunks(cur_location, direction(), html_vec) {return;}
 
-        tracing::debug!("cur index: {}", cur_location);
 
-        let chunk=html_vec()[cur_location as usize].clone();
+        let i= (cur_location as usize).clamp(0, html_vec().len());
+        let chunk=html_vec()[i].clone();
         let mut v=visible_chunks().clone();
 
         if direction() ==1{
@@ -68,13 +71,15 @@ pub fn chunk_filler(
 
 fn visible_start_updater(
     html_vec: Signal<Vec<String>>,
-    visible_chunks: Signal<Vec<String>>,
+    index:Signal<i32>,
     mut visible_start:Signal<i32>,
+    visible_chunks: Signal<Vec<String>>,
     mut direction: Signal<i32>,
 ){
     use_effect(move || {
-        let cur_location=visible_start()+visible_chunks().len() as i32;
+        let cur_location=visible_start()+index() as i32;
         if html_vec().len() ==0 {return;}
+        if visible_chunks.len() == 0 {return;}
         if direction()==0 {return;}
         if !(is_full_height() || no_more_chunks(cur_location, direction(), html_vec)){return;}
 
@@ -111,6 +116,7 @@ pub fn update_global_chunk(
 
 
 pub fn page_turner(
+    mut html_vec: Signal<Vec<String>>,
     mut move_page:Signal<i32>,
     mut visible_start:Signal<i32>,
     mut visible_chunks: Signal<Vec<String>>,
@@ -130,12 +136,16 @@ pub fn page_turner(
             if end_of_page >= max_chunk as i32{
                 move_chapter(move_page());
                 visible_start.set(0);
+                html_vec.set(Vec::new());
+                
             }else{
+                tracing::debug!("Da");
                 visible_start.set(visible_start()+visible_chunks().len() as i32);
             }
         }else{
             if visible_start()==0{
                 visible_start.set(move_chapter(move_page()));
+                html_vec.set(Vec::new());
             }else{
                 visible_start.set(visible_start() -1 );
             }
@@ -189,7 +199,8 @@ fn move_chapter(direction: i32)->i32{
     global.with_mut(|s|{
         let Some(book)=&mut s.book else {return;};
         book.chunk=1;
-        book.chapter +=direction as u32;
+        let chap=book.chapter as i32 + direction;
+        book.chapter=(chap as u32).clamp(book.initial_chapter, book.max_chapter);
         tracing::debug!("new ");
         if direction==-1{
             cor_chunk=book.chapter_to_chunk[&book.chapter]-1;
