@@ -12,16 +12,15 @@ pub fn AudioView( ) -> Element {
     let time = use_signal(|| 0.0);
 
     let audio_url=use_signal(|| None::<String>);
-    let idle=use_signal(||true);
     let book=use_signal(||"".to_string());
     
 
-    use_load_book("fusing".to_string(), time, idle);
+    use_load_book("fusing".to_string());
     use_book_parsing(book);
     use_chunk_calculator(time, reload);
     use_playback_tick(playing, time);
 
-    audio_sourcing(audio_url, reload);
+    audio_sourcing(audio_url, reload, time);
     global_updater();
 
     rsx! {

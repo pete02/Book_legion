@@ -13,11 +13,9 @@ enum LoadStatus {
 }
 
 
-pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
+pub fn use_load_book(book_name:String) {
     let global = use_context::<Signal<GlobalState>>();
     let status = use_signal(|| LoadStatus::Loading);
-    let mut idle=idle.clone();
-    let mut time=time.clone();
     let mut loaded=use_signal(||false);
     
     use_effect(move || {
@@ -32,11 +30,9 @@ pub fn use_load_book(book_name:String, time: Signal<f64>, idle:Signal<bool>) {
 
             match server_api::get_book(value).await {
                 Ok(book) => {
-                    time.set(book.time.clone());
                     global.with_mut(|state| state.book = Some(book));
                     tracing::info!("Book loaded");
                     status.set(LoadStatus::Success);
-                    idle.set(false);
                     loaded.set(true);
                 }
                 Err(e) => {

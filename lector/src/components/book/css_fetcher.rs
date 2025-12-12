@@ -4,13 +4,11 @@ use web_sys::{window};
 use crate::models::GlobalState;
 use crate::components::server_api;
 
-pub fn use_css_injector(idle: Signal<bool>, css_idle: Signal<bool>) {
-    let mut css_idle=css_idle.clone();
+pub fn use_css_injector() {
+    let mut css_idle=use_signal(||true);
+    let global = use_context::<Signal<GlobalState>>();
     use_effect(move || {
-        if idle() {return;}
         if !css_idle() {return;}
-
-        let global = use_context::<Signal<GlobalState>>();
         let Some(book) = global().book else { return; };
 
         spawn_local(async move {

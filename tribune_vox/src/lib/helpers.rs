@@ -59,7 +59,7 @@ pub fn create_book_struct(path:&str,ctx:&AudioContext,)->Book{
     Book{
         path: path.to_owned(),
         initial_chapter: ctx.initial_chapter,
-        current_chunk: 0,
+        current_chunk: 1,
         current_time: 0.0,
         current_chapter: ctx.initial_chapter,
         duration: ctx.current_time,

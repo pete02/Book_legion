@@ -28,8 +28,12 @@ pub fn global_updater(){
     });
 }
 
-fn send_update(book:BookStatus, mut updating: Signal<bool>){
+fn send_update(mut book:BookStatus, mut updating: Signal<bool>){
     spawn_local(async move{
+        book.chapter=book.chapter.clamp(book.initial_chapter,book.max_chapter);
+        if let Some(max) = book.chapter_to_chunk.get(&book.chapter) {
+            book.chunk = book.chunk.clamp(1, *max);
+        }
         let _ =server_api::update_progress(book).await;
         updating.set(false);
     });

@@ -10,12 +10,12 @@ use crate::components::audio::ADVANCE_AMOUNT;
 
 
 
-pub fn audio_sourcing(audio_url: Signal<Option<String>>, reload:Signal<bool>){
+pub fn audio_sourcing(audio_url: Signal<Option<String>>, reload:Signal<bool>, time:Signal<f64>){
     let audio_url=audio_url.clone();
     let resource=use_signal(||None);
     let private_state=use_signal(||None);
     
-    reload_audio_watcher(private_state,reload, resource,audio_url);
+    reload_audio_watcher(private_state,reload, resource,audio_url, time);
     audio_url_hook(audio_url, resource);
     resource_fetch_hook(resource, private_state);
 }
@@ -24,16 +24,19 @@ fn reload_audio_watcher(
     mut private_state:Signal<Option<BookStatus>>,
     mut reload:Signal<bool>,
     mut resource: Signal<Option<Vec<u8>>>,
-    mut audio_url: Signal<Option<String>>){
+    mut audio_url: Signal<Option<String>>,
+    mut time:Signal<f64>
+    ){
     let global=use_context::<Signal<GlobalState>>();
     use_effect(move||{
         if !reload() {return;}
-        if global().book.is_none() {return;}
+        let Some(book)=global().book else {return;};
 
-        private_state.set(global().book.clone());
+        private_state.set(Some(book.clone()));
         if reload(){
             resource.set(None);
             audio_url.set(None);
+            time.set(book.time);
             reload.set(false);
         }
 
