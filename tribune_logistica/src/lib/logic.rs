@@ -16,23 +16,6 @@ use crate::AppState;
 
 use crate::book_handler::*; // your existing functions
 
-
-fn check_token(secret: &[u8], headers: &axum::http::HeaderMap)->Result<String,Response<Body> >{
-    let token = match headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "))
-    {
-        Some(t) => t,
-        None => return Err((StatusCode::FORBIDDEN, "Missing token").into_response()),
-    };
-    let username = match verify_jwt(token, secret) {
-        Ok(u) => u,
-        Err(_) => return Err((StatusCode::FORBIDDEN, "Invalid token").into_response()),
-    };
-    return Ok(username);
-}
-
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
     Json(login): Json<LoginRecord>
@@ -60,7 +43,10 @@ pub async fn init_handler(
 ) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &headers) {
             Ok(u) => u,
-            Err(resp) => return resp,
+            Err(resp) => {
+                println!("REQUEST DENIED: endpoint /init");
+                return resp
+            },
         };
     println!(" REQUEST: user: {} , endoint: /init", user);
 
@@ -75,7 +61,10 @@ pub async fn init_handler(
 pub async fn book_handler(State(state): State<Arc<AppState>>,h:HeaderMap, Json(book): Json<BookStatus>) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &h) {
             Ok(u) => u,
-            Err(resp) => return resp,
+            Err(resp) => {
+                println!("REQUEST DENIED: endpoint /book");
+                return resp
+            },
         };
     println!(" REQUEST: user: {} , endoint: /book book:{}, chapter: {}", user, book.name, book.chapter);
 
@@ -99,7 +88,10 @@ pub async fn book_handler(State(state): State<Arc<AppState>>,h:HeaderMap, Json(b
 pub async fn audiomap(State(state): State<Arc<AppState>>, h: HeaderMap, Json(book): Json<BookStatus>) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) => {
+            println!("REQUEST DENIED: endpoint /audiomap");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /audiomap, book: {}", user, book.name);
 
@@ -128,7 +120,10 @@ pub async fn audio_handler(
     
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) =>{
+            println!("REQUEST DENIED: endpoint: /audio");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
 
@@ -159,7 +154,10 @@ pub async fn update_handler(
 ) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) => {
+            println!("REQUEST DENIED: endpoint / update");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
 
@@ -176,7 +174,10 @@ h: HeaderMap
 ) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) => {
+            println!("REQUEST DENIED: endpoint /manifest");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /manifest", user);
 
@@ -193,7 +194,10 @@ pub async fn cover_handler(
 ) -> impl IntoResponse {
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) => {
+            println!("REQUEST DENIED: endpoint /cover");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /cover book: {}", user,  book);
 
@@ -220,7 +224,10 @@ pub async fn css_handler( Path(book): Path<String>,
 )->impl IntoResponse{
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
-        Err(resp) => return resp,
+        Err(resp) => {
+            println!("REQUEST DENIED: endpoint /css");
+            return resp
+        },
     };
     println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
 
@@ -234,4 +241,21 @@ pub async fn css_handler( Path(book): Path<String>,
 
 fn const_err_response(err:String)->Response<Body>{
     (StatusCode::INTERNAL_SERVER_ERROR,err ).into_response()
+}
+
+
+fn check_token(secret: &[u8], headers: &axum::http::HeaderMap)->Result<String,Response<Body> >{
+    let token = match headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+    {
+        Some(t) => t,
+        None => return Err((StatusCode::FORBIDDEN, "Missing token").into_response()),
+    };
+    let username = match verify_jwt(token, secret) {
+        Ok(u) => u,
+        Err(_) => return Err((StatusCode::FORBIDDEN, "Invalid token").into_response()),
+    };
+    return Ok(username);
 }
