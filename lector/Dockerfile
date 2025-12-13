@@ -15,7 +15,7 @@ COPY . .
 
 # Build the frontend in release mode
 # Assumes your frontend is in the default "src" folder
-RUN dx build --release --target web --output-path dist
+RUN dx build --release --web --output-path dist
 
 # Stage 2: Serve the frontend with nginx
 FROM nginx:alpine
