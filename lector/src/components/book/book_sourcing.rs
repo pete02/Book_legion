@@ -8,9 +8,9 @@ pub fn chapter_fetch_hook(mut html_vec: Signal<Vec<String>>){
     use_effect(move || {
         let Some(book) = global().book.clone() else { return };
         if html_vec().len() > 0 {return;};
-        
+        let Some(access_token)= global().access_token.clone() else {return;};
         spawn_local(async move {
-            match server_api::fetch_chapter(book).await {
+            match server_api::fetch_chapter(book,access_token).await {
                 Ok(chapter) => {
                     let vec = strip_headers(&chapter)
                         .split("\n")

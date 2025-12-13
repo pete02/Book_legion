@@ -207,17 +207,9 @@ h: HeaderMap
 
 pub async fn cover_handler(
     Path(book): Path<String>,
-    State(state): State<Arc<AppState>>,
-    h: HeaderMap
+    State(state): State<Arc<AppState>>
 ) -> impl IntoResponse {
-    let user = match check_token(state.secret.as_ref(), &h) {
-        Ok(u) => u,
-        Err(resp) => {
-            println!("REQUEST DENIED: endpoint /cover");
-            return resp
-        },
-    };
-    println!(" REQUEST: user: {} , endoint: /cover book: {}", user,  book);
+    println!(" REQUEST: endoint: /cover book: {}",  book);
 
     let book = format!("./{}/{}/{}.epub",&state.prefix, book,book);
 

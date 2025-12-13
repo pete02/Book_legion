@@ -13,7 +13,13 @@ pub use bookview::BookView;
 mod library_view;
 pub use library_view::LibraryView;
 
-use crate::models::GlobalState;
+mod loginview;
+pub use loginview::LoginView;
+
+use crate::components::AccessTokenHook;
+
+
+
 
 
 
@@ -24,30 +30,18 @@ pub enum Route {
     #[route("/")]
     LibraryView {},
 
+    #[route("/LoginView")]
+    LoginView { },
+
     #[route("/AudioView")]
-    #[redirect("/AudioView", || {
-        let global = use_context::<Signal<GlobalState>>();
-        if global().book.is_none() {
-            Route::BookView {}
-        } else {
-            Route::AudioView {}
-        }
-    })]
     AudioView { },
 
     #[route("/ReadView")]
-    #[redirect("/ReadView", || {
-        let global = use_context::<Signal<GlobalState>>();
-        if global().book.is_none() {
-            Route::BookView {}
-        } else {
-            Route::ReadView {}
-        }
-    })]
     ReadView { },
 
     #[route("/BookView")]
     BookView { },
+
 }
 
 #[component]
@@ -60,6 +54,7 @@ pub fn Navbar() -> Element {
                 id: "book-container",
                 style: "flex: 1; overflow: hidden;", // Outlet takes the remaining space exactly
                 Outlet::<Route> { key: current_route.clone() }
+                AccessTokenHook{}
             }
          }
     }

@@ -60,15 +60,17 @@ fn audio_url_hook(
 
 fn resource_fetch_hook(mut resource: Signal<Option<Vec<u8>>>, mut private_state:Signal<Option<BookStatus>>){
     let mut fetching=use_signal(||false);
+    let global=use_context::<Signal<GlobalState>>();
     use_effect(move ||{
         if fetching() {return;}
         if resource().is_some() {return;}
         let Some(mut book)=private_state() else {return;};
+        let Some(access_token)= global().access_token.clone() else {return;};
         if book.chapter > book.max_chapter {return;}
 
         fetching.set(true);
         spawn_local(async move{
-            match server_api::fetch_audio(&book).await{
+            match server_api::fetch_audio(&book, access_token).await{
                 Err(e)=>{
                     tracing::error!("error in audio_fetch: {e}");
                     fetching.set(false);

@@ -14,13 +14,14 @@ pub fn use_load_book(mut loaded: Signal<bool>) {
         if triggered() {return;};
         if loaded() {return;}
         let Some(name) = global().name.clone() else {return;};
+        let Some(access_token)= global().access_token.clone() else {return;};
         triggered.set(true);
 
         spawn(async move {
             global.with_mut(|state| state.book = None);
             tracing::info!("loading book: {}",&name);
 
-            match server_api::get_book(name).await {
+            match server_api::get_book(name, access_token).await {
                 Ok(book) => {
                     global.with_mut(|state| state.book = Some(book));
                     tracing::info!("Book loaded");

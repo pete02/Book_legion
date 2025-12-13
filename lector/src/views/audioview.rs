@@ -1,12 +1,31 @@
 use dioxus::prelude::*;
 use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_chunk_calculator, use_playback_tick};
 use crate::components::{BookCover, global_updater, load_name, use_book_parsing};
+use crate::models::GlobalState;
 use crate::views::Route;
 
+#[component]
+pub fn AudioView()->Element{
+    let global = use_context::<Signal<GlobalState>>();
+    let navigator = use_navigator();
 
+    let ok=global().book.is_some() && 
+        global().access_token.is_some() &&
+        global().refresh_token.is_some();
+
+
+    if !ok{
+        use_effect(move ||{
+            navigator.replace(Route::BookView {  });
+        });
+        return rsx!(div {});
+    }
+
+    AudioInner()
+}
 
 #[component]
-pub fn AudioView( ) -> Element {
+fn AudioInner( ) -> Element {
     let playing= use_signal(||false);
     let reload=use_signal(||true); // to load the book first time
 

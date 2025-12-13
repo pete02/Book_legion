@@ -23,18 +23,19 @@ fn chunk_hook(mut chunks: Signal<Vec::<ChunkProgress>>){
     let map_fetching=use_signal(||false);
     use_effect(move || {
         let Some(book)=global().book.clone() else {return;};
+        let Some(access_token)= global().access_token.clone() else {return;};
         if map_fetching() { return;}
 
 
         let Some((name, _))= chunkmap() else{
             chunks.set(Vec::new());
-            load_chunkmap(book, chunkmap, map_fetching);
+            load_chunkmap(book, chunkmap, map_fetching,access_token);
             return;
         };
 
         if name !=book.name{
             chunks.set(Vec::new());
-            load_chunkmap(book, chunkmap,map_fetching);
+            load_chunkmap(book, chunkmap,map_fetching,access_token);
             return;
         }
 
@@ -54,10 +55,10 @@ fn load_audiomap(chunks: Signal<Vec::<ChunkProgress>>, chunkmap: Signal<Option<(
     chunks.set(res);
 }
 
-fn load_chunkmap(book:BookStatus, mut chunkmap: Signal<Option<(String, HashMap<String,ChunkProgress>)>>, mut map_fetching: Signal<bool>){
+fn load_chunkmap(book:BookStatus, mut chunkmap: Signal<Option<(String, HashMap<String,ChunkProgress>)>>, mut map_fetching: Signal<bool>, access_token:String){
     map_fetching.set(true);
     spawn_local(async move {
-        let Ok(map)=server_api::fetch_audiomap(&book).await else {map_fetching.set(false); return;};
+        let Ok(map)=server_api::fetch_audiomap(&book, access_token).await else {map_fetching.set(false); return;};
         chunkmap.set(Some((book.name, map)));
         map_fetching.set(false);
     });

@@ -1,14 +1,36 @@
-use dioxus::prelude::*;
+use dioxus::{logger::tracing, prelude::*};
+
 
 use crate::{components::{BookCover, use_load_manifest}, models::{BookStatus, GlobalState}, views::Route};
 
+#[component]
+pub fn LibraryView()->Element{
+    let global = use_context::<Signal<GlobalState>>();
+    let navigator = use_navigator();
+
+    let logged_in =
+        global().access_token.is_some() &&
+        global().refresh_token.is_some();
+
+    if !logged_in {
+        use_effect(move || {
+            navigator.replace(Route::LoginView {});
+        });
+        return rsx!( div{})
+    }
+
+    LibraryInner()
+}
+
 // Main Library View Component
 #[component]
-pub fn LibraryView() -> Element {
+fn LibraryInner() -> Element {
     let manifest: Signal<Vec<BookStatus>> = use_signal(||Vec::new());
     let mut global=use_context::<Signal<GlobalState>>();
-    // Load the manifest on first render
+    tracing::debug!("lib");
     use_load_manifest(manifest.clone());
+    
+
     rsx! {
         div {
             style: "

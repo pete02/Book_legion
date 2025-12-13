@@ -1,10 +1,31 @@
 use dioxus::{prelude::*};
 
 
-use crate::{components::{book::*, global_updater, load_name}, views::Route};
+use crate::{components::{book::*, global_updater, load_name}, models::GlobalState, views::Route};
 
 #[component]
 pub fn ReadView()->Element{
+    let global = use_context::<Signal<GlobalState>>();
+    let navigator = use_navigator();
+
+    let ok=global().book.is_some() && 
+        global().access_token.is_some() &&
+        global().refresh_token.is_some();
+
+
+    if !ok{
+        use_effect(move ||{
+            navigator.replace(Route::BookView {  });
+        });
+        return rsx!(div {});
+    }
+
+    ReadInner()
+}
+
+
+#[component]
+pub fn ReadInner()->Element{
     
     let book=use_signal(||"".to_owned());
     let html_vec: Signal<Vec<String>> = use_signal(Vec::new);
@@ -49,11 +70,6 @@ pub fn ReadView()->Element{
                     }
                 }
             }
-
-            h1 {
-                style: "flex: 0 0 auto;",
-                "{book}",
-            },
 
             div {
                 style: "

@@ -6,6 +6,26 @@ use crate::{components::{BookCover, load_name, server_api, use_load_book}, model
 
 #[component]
 pub fn BookView()->Element{
+    let global = use_context::<Signal<GlobalState>>();
+    let navigator = use_navigator();
+
+    let ok=global().name.is_some() && 
+        global().access_token.is_some() &&
+        global().refresh_token.is_some();
+
+
+    if !ok{
+        use_effect(move ||{
+            navigator.replace(Route::LibraryView {  });
+        });
+        return rsx!(div {});
+    }
+
+    BookInner()
+}
+
+#[component]
+pub fn BookInner()->Element{
     let book=use_signal(||"".to_owned());
     let mut pressed=use_signal(||false);
     let loaded=use_signal(||false);
@@ -132,7 +152,7 @@ pub fn BookView()->Element{
 
     use_effect(move || {
         if !pressed() {return;}
-
+        let Some(access_token)=global().access_token.clone() else {return;};
         match global().book.clone() {
             None=>{pressed.set(false);},
             Some(mut book)=>{
@@ -140,7 +160,7 @@ pub fn BookView()->Element{
                 book.chapter=book.initial_chapter;
 
                 spawn_local(async move{
-                    let _ = server_api::update_progress(book).await;
+                    let _ = server_api::update_progress(book, access_token).await;
                     pressed.set(false);
                     loaded.set(false);
                 });

@@ -11,16 +11,17 @@ pub fn global_updater(){
     use_effect(move ||{
         
         let Some(book)=global().book else {return;};
+        let Some(access_token)=global().access_token.clone() else {return;};
         match old() {
             None=>{
                 updating.set(true);
-                send_update(book.clone(), updating);
+                send_update(book.clone(), updating,access_token);
                 old.set(Some(book));
             },
             Some(ob)=>{
                 if ob != book && !updating(){
                     updating.set(true);
-                    send_update(book.clone(),updating);
+                    send_update(book.clone(),updating, access_token);
                     old.set(Some(book));
                 }
             }
@@ -28,13 +29,13 @@ pub fn global_updater(){
     });
 }
 
-fn send_update(mut book:BookStatus, mut updating: Signal<bool>){
+fn send_update(mut book:BookStatus, mut updating: Signal<bool>, access_token:String){
     spawn_local(async move{
         book.chapter=book.chapter.clamp(book.initial_chapter,book.max_chapter);
         if let Some(max) = book.chapter_to_chunk.get(&book.chapter) {
             book.chunk = book.chunk.clamp(1, *max);
         }
-        let _ =server_api::update_progress(book).await;
+        let _ =server_api::update_progress(book,access_token).await;
         updating.set(false);
     });
 }

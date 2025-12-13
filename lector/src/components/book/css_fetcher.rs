@@ -10,9 +10,9 @@ pub fn use_css_injector() {
     use_effect(move || {
         if !css_idle() {return;}
         let Some(book) = global().book.clone() else { return; };
-
+        let Some(access_token)=global().access_token.clone() else {return;};
         spawn_local(async move {
-            match server_api::fetch_css(&book.name).await {
+            match server_api::fetch_css(&book.name, access_token).await {
                 Ok(css_text) => {
                     inject_or_append_css("book-css", &css_text);
                     css_idle.set(false);

@@ -50,12 +50,34 @@ pub type Manifest = HashMap<String, ManifestEntry>;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GlobalState {
     pub book: Option<BookStatus>,
-    pub name: Option<String>
+    pub name: Option<String>,
+    pub user: Option<String>,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub token_expiry: Option<chrono::DateTime<chrono::Utc>>, // track expiry
 }
 impl GlobalState{
     pub fn new()->GlobalState{
-        return GlobalState { book: None, name: None };
+        return GlobalState { book: None, name: None, user: None, access_token:None, refresh_token:None, token_expiry: None };
     }
+}
+
+
+#[derive(Serialize, Deserialize)]
+pub struct RefreshRecord{
+    pub username: String,
+    pub refresh_token: String
+}
+impl RefreshRecord{
+    pub fn new(user:String, refresh:String)->RefreshRecord{
+        return RefreshRecord { username: user, refresh_token: refresh };
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Tokens{
+    pub access_token: String,
+    pub refresh_token:String
 }
 
 
