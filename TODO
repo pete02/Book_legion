@@ -1,28 +1,9 @@
-- webiste:
-    - book view
-    - library
-    - login and security
-
-- if time:
+- optional:
+    - chapter list with buttons to jump there?
+        - could also have an indication of current chapter
+    - description?
     - ability to change font size
     - how far along the book we are
     - estimation for time to completition
 
-
-
-
-
-
-
-
-
-
-- bookview:
-    - reset, audio and book buttons
-    - cover
-    - load book status
-
-    - optional:
-        - chapter list with buttons to jump there?
-            - could also have an indication of current chapter
-        - description?
+    - support for more than one user
