@@ -207,11 +207,10 @@ h: HeaderMap
 
 pub async fn cover_handler(
     Path(book): Path<String>,
-    State(state): State<Arc<AppState>>
 ) -> impl IntoResponse {
     println!(" REQUEST: endoint: /cover book: {}",  book);
 
-    let book = format!("./{}/{}/{}.epub",&state.prefix, book,book);
+    let book = format!("/data/{}/{}.epub",book,book);
 
     match extract_files(&book, vec![".jpg", ".jpeg"]) {
         Ok(css)=>{
@@ -241,7 +240,7 @@ pub async fn css_handler( Path(book): Path<String>,
     };
     println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
 
-    let book = format!("./{}/{}/{}.epub",&state.prefix, book,book);
+    let book = format!("/data/{}/{}.epub", book,book);
     match extract_css(&book){
         Ok(css)=>([(header::CONTENT_TYPE, "text/css; charset=utf8")],css).into_response(),
         Err(e)=> const_err_response(format!("could not extract css: {}", e))

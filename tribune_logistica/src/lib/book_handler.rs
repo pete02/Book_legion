@@ -12,7 +12,7 @@ fn error(msg: &str) -> serde_json::Value {
 }
 
 fn prefix(raw_path:&str)->String{
-    format!("./data/{}",raw_path)
+    format!("/data/{}",raw_path)
 }
 
 pub fn load_books(path: &str) -> Result<HashMap<String, BookData>,Box<dyn std::error::Error>> {

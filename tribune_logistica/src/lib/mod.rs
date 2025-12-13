@@ -31,7 +31,7 @@ impl AppState {
 pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
-        prefix: "./data".to_string(),
+        prefix: "/data".to_string(),
         secret: generate_secret()
     });
 
@@ -49,9 +49,38 @@ pub async fn server()->() {
         .with_state(state)
         .layer(CorsLayer::permissive());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
-    println!("🚀 Server running on http://{}", addr);
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
+    println!("Server running on http://{}", addr);
     return axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap()
+}
+
+use tokio::signal;
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    println!("Shutdown signal received");
 }

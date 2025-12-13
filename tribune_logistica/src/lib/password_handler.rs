@@ -12,7 +12,7 @@ use crate::models::{Claims, LoginRecord, UserRecord};
 
 
 pub fn verify_login(login:&LoginRecord) -> io::Result<bool> {
-    let data = fs::read_to_string("config/user.json")?;
+    let data = fs::read_to_string("/config/user.json")?;
     let user: UserRecord = serde_json::from_str(&data)?;
 
     if user.username != login.username {
@@ -56,7 +56,7 @@ pub fn generate_and_store_refresh_token(
     OsRng.fill_bytes(&mut bytes);
     let token = general_purpose::URL_SAFE_NO_PAD.encode(&bytes);
 
-    let data = fs::read_to_string("config/user.json")?;
+    let data = fs::read_to_string("/config/user.json")?;
     let mut user: UserRecord = serde_json::from_str(&data)?;
 
     if user.username != username {
@@ -64,13 +64,13 @@ pub fn generate_and_store_refresh_token(
     }
     user.refresh_token=token.clone();
     let json = serde_json::to_string_pretty(&user)?;
-    fs::write("config/user.json", json)?;
+    fs::write("/config/user.json", json)?;
 
     Ok(token)
 }
 
 pub fn check_refesh_token(username: &str, token: &str, delta:TimeDelta, secret: &[u8])-> io::Result<(String, String)>{
-    let data = fs::read_to_string("config/user.json")?;
+    let data = fs::read_to_string("/config/user.json")?;
     let user: UserRecord = serde_json::from_str(&data)?;
 
     if user.username!=username{
