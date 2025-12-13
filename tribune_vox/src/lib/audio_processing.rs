@@ -6,6 +6,8 @@ use std::process::Command;
 use std::fs;
 use hound::{SampleFormat, WavReader,  WavWriter};
 use std::io::Cursor;
+use std::thread::sleep;
+
 
 
 
@@ -18,25 +20,51 @@ pub fn text_to_wav(
         .timeout(Duration::from_secs(60))
         .build()?;
 
-    let response = client
-        .post(ip)
-        .json(&json!({
-            "text": text,
-            "voice": voice,
-            "cfg_weight": "0.4",
-            "temperature": "0.9"
-            
-        }))
-        .send()?;
+    const MAX_RETRIES: usize = 3;
 
-    if !response.status().is_success() {
-        return Err(format!("Request failed with status: {}", response.status()).into());
+    for attempt in 1..=MAX_RETRIES {
+        let result = client
+            .post(ip)
+            .json(&json!({
+                "text": text,
+                "voice": voice,
+                "cfg_weight": "0.4",
+                "temperature": "0.9"
+            }))
+            .send();
+
+        match result {
+            Ok(response) => {
+                if response.status().is_success() {
+                    let wav_bytes = response.bytes()?.to_vec();
+                    return Ok(wav_bytes);
+                } else {
+                    if attempt == MAX_RETRIES {
+                        return Err(format!(
+                            "Request failed after {} attempts, last status: {}",
+                            attempt,
+                            response.status()
+                        ).into());
+                    }
+                }
+            }
+            Err(err) => {
+                if attempt == MAX_RETRIES {
+                    return Err(format!(
+                        "Request failed after {} attempts: {}",
+                        attempt, err
+                    ).into());
+                }
+            }
+        }
+
+        // Exponential backoff: 500ms, 1s, 2s
+        let backoff = Duration::from_millis(500 * (1 << (attempt - 1)));
+        sleep(backoff);
     }
 
-    let wav_bytes = response.bytes()?.to_vec();
-    Ok(wav_bytes)
+    unreachable!()
 }
-
 pub fn format_audiobook(audio_path: &str, cover_path: &str, output_path: &str, name: &str, writer:&str)-> Result<(),Box<dyn std::error::Error>>{
      let status = Command::new("ffmpeg")
         .args(&[
