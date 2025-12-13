@@ -5,11 +5,12 @@ use axum::{
     response::{IntoResponse}
 };
 
+use chrono::Duration;
 use serde_json::json;
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{models::{BookStatus, InitQuery, LoginRecord}, password_handler::{generate_jwt, verify_jwt, verify_login}};
+use crate::{models::{BookStatus, InitQuery, LoginRecord, RefreshRecord}, password_handler::{check_refesh_token, generate_and_store_refresh_token, generate_jwt, verify_jwt, verify_login}};
 
 use crate::AppState;
 
@@ -25,14 +26,31 @@ pub async fn login_handler(
         Ok(res)=>{
             if res{
                 println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
-                let token=generate_jwt(&login.username, &state.secret);
-                return (StatusCode::OK, Json(json!({ "access_token": token }))).into_response()
+                let token=generate_jwt(&login.username, &state.secret, Duration::minutes(5));
+                match generate_and_store_refresh_token(&login.username){
+                    Ok(refresh)=>return (StatusCode::OK, Json(json!({ "access_token": token, "refresh_token": refresh }))).into_response(),
+                    Err(_)=>return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
             }else{
                 println!("REQUEST: user: {} endpoint: /login, Denied", &login.username);
                 return StatusCode::FORBIDDEN.into_response()
             }
         }
         
+    }
+}
+
+
+pub async fn refresh_handler(
+    State(state): State<Arc<AppState>>,
+    Json(refresh_record): Json<RefreshRecord>
+)-> impl IntoResponse{
+     match check_refesh_token(&refresh_record.username, &refresh_record.refresh_token, Duration::minutes(5), &state.secret) {
+        Err(_)=>return StatusCode::FORBIDDEN.into_response(),
+        Ok((access,refresh))=>{
+            println!("TOKEN REFRESHED: user: {}",refresh_record.username);
+            return (StatusCode::OK, Json(json!({ "access_token": access, "refresh_token": refresh }))).into_response()
+        },
     }
 }
 

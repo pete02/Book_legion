@@ -58,12 +58,20 @@ pub struct AudioChunkResult {
 pub struct UserRecord {
     pub username: String,
     pub password_hash: String,
+    pub refresh_token: String,  // store valid refresh tokens
 }
+
 
 #[derive(Serialize, Deserialize)]
 pub struct LoginRecord {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RefreshRecord{
+    pub username: String,
+    pub refresh_token: String
 }
 
 

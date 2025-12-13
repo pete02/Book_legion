@@ -37,6 +37,7 @@ pub async fn server()->() {
 
     let app = Router::new()
         .route("/login", post(login_handler))
+        .route("/refresh", post(refresh_handler))
         .route("/init", get(init_handler))
         .route("/book", post(book_handler))
         .route("/audiomap",post(audiomap))

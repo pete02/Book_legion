@@ -22,3 +22,4 @@ zip = "6.0.0"
 argon2 = { version = "0.5.3", features = ["std"] }
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 chrono = "0.4.42"
+base64 = "0.22.1"
