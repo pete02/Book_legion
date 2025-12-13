@@ -6,7 +6,7 @@ use serde_json::json;
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::models::BookStatus;
+use crate::{models::{BookStatus, LoginRecord}, password_handler::verify_login};
 
 use crate::AppState;
 
@@ -30,6 +30,24 @@ pub async fn init_handler(
     match init_book(&params.name, &params.book_type, &state.path()) {
         Ok(status) => Json(serde_json::to_value(status).unwrap()).into_response(),
         Err(err) => Json(err).into_response(),
+    }
+}
+
+pub async fn login_handler(
+    State(state): State<Arc<AppState>>,
+    Json(login): Json<LoginRecord>
+)-> impl IntoResponse{
+    println!("login");
+    match verify_login(login) {
+        Err(_)=>return StatusCode::FORBIDDEN.into_response(),
+        Ok(res)=>{
+            if res{
+                return StatusCode::ACCEPTED.into_response();
+            }else{
+                return StatusCode::FORBIDDEN.into_response()
+            }
+        }
+        
     }
 }
 

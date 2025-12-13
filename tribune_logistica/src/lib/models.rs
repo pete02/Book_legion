@@ -52,3 +52,16 @@ pub struct AudioChunkResult {
     pub data: Vec<u8>,
     pub reached_end: bool,
 }
+
+
+#[derive(Serialize, Deserialize)]
+pub struct UserRecord {
+    pub username: String,
+    pub password_hash: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LoginRecord {
+    pub username: String,
+    pub password: String,
+}

@@ -8,6 +8,8 @@ use tower_http::cors::CorsLayer;
 pub mod book_handler;
 pub mod models;
 
+pub mod password_handler;
+
 // Import your core logic here:
 mod logic;
 use logic::*;
@@ -16,6 +18,7 @@ use logic::*;
 struct AppState {
     manifest: String,
     prefix: String,
+    token: Option<String>
 }
 impl AppState {
     fn path(&self) -> String {
@@ -27,10 +30,12 @@ pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
         prefix: "./data".to_string(),
+        token:None
     });
 
     let app = Router::new()
         .route("/init", get(init_handler))
+        .route("/login", post(login_handler))
         .route("/book", post(book_handler))
         .route("/audio", post(audio_handler))
         .route("/audiomap",post(audiomap))
