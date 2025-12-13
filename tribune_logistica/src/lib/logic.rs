@@ -1,49 +1,51 @@
 use axum::{
-    Json, body::Body, extract::{Path, Query, State}, http::{HeaderMap, HeaderValue, Response, StatusCode, header}, response::IntoResponse
+    Json, body::Body, 
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, Response, StatusCode, header}, 
+    response::{IntoResponse}
 };
 
 use serde_json::json;
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{models::{BookStatus, LoginRecord}, password_handler::verify_login};
+use crate::{models::{BookStatus, InitQuery, LoginRecord}, password_handler::{generate_jwt, verify_jwt, verify_login}};
 
 use crate::AppState;
 
 
 use crate::book_handler::*; // your existing functions
 
-// ----------------------
-// /init?name=...&type=...
-// ----------------------
-#[derive(Deserialize)]
-pub struct InitQuery {
-    name: String,
-    #[serde(rename = "type")]
-    book_type: String,
-}
 
-pub async fn init_handler(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<InitQuery>,
-) -> impl IntoResponse {
-    match init_book(&params.name, &params.book_type, &state.path()) {
-        Ok(status) => Json(serde_json::to_value(status).unwrap()).into_response(),
-        Err(err) => Json(err).into_response(),
-    }
+fn check_token(secret: &[u8], headers: &axum::http::HeaderMap)->Result<String,Response<Body> >{
+    let token = match headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+    {
+        Some(t) => t,
+        None => return Err((StatusCode::FORBIDDEN, "Missing token").into_response()),
+    };
+    let username = match verify_jwt(token, secret) {
+        Ok(u) => u,
+        Err(_) => return Err((StatusCode::FORBIDDEN, "Invalid token").into_response()),
+    };
+    return Ok(username);
 }
 
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
     Json(login): Json<LoginRecord>
 )-> impl IntoResponse{
-    println!("login");
-    match verify_login(login) {
+    match verify_login(&login) {
         Err(_)=>return StatusCode::FORBIDDEN.into_response(),
         Ok(res)=>{
             if res{
-                return StatusCode::ACCEPTED.into_response();
+                println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
+                let token=generate_jwt(&login.username, &state.secret);
+                return (StatusCode::OK, Json(json!({ "access_token": token }))).into_response()
             }else{
+                println!("REQUEST: user: {} endpoint: /login, Denied", &login.username);
                 return StatusCode::FORBIDDEN.into_response()
             }
         }
@@ -51,10 +53,32 @@ pub async fn login_handler(
     }
 }
 
+pub async fn init_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<InitQuery>,
+    headers: axum::http::HeaderMap
+) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &headers) {
+            Ok(u) => u,
+            Err(resp) => return resp,
+        };
+    println!(" REQUEST: user: {} , endoint: /init", user);
 
 
+    match init_book(&params.name, &params.book_type, &state.path()) {
+        Ok(status) => Json(serde_json::to_value(status).unwrap()).into_response(),
+        Err(err) => Json(err).into_response(),
+    }
+}
 
-pub async fn book_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
+
+pub async fn book_handler(State(state): State<Arc<AppState>>,h:HeaderMap, Json(book): Json<BookStatus>) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &h) {
+            Ok(u) => u,
+            Err(resp) => return resp,
+        };
+    println!(" REQUEST: user: {} , endoint: /book book:{}, chapter: {}", user, book.name, book.chapter);
+
     let mut headers: HeaderMap = HeaderMap::new();
     match get_chapter(Some(book)) {
         Ok(text) => {
@@ -72,8 +96,13 @@ pub async fn book_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
 
 
 
-pub async fn audiomap(Json(book): Json<BookStatus>) -> impl IntoResponse {
-    println!("audiomap");
+pub async fn audiomap(State(state): State<Arc<AppState>>, h: HeaderMap, Json(book): Json<BookStatus>) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /audiomap, book: {}", user, book.name);
+
     let path=format!("{}/{}.json",book.name,book.name);
     match get_audiomap(&path){
         Ok(map)=>    Json(json!({"status":"ok","data":map})).into_response(),
@@ -91,10 +120,18 @@ pub struct AudioQuery {
 }
 
 pub async fn audio_handler(
+    State(state): State<Arc<AppState>>,
+    h: HeaderMap,
     Query(query): Query<AudioQuery>,
     Json(book): Json<BookStatus>,
 ) -> impl IntoResponse {
-    println!("got audio request");
+    
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
+
     match get_audio_chunk(
         Some(&book),
         query.chunk
@@ -115,8 +152,17 @@ pub async fn audio_handler(
         },
     }
 }
-pub async fn update_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
-    println!("updated");
+pub async fn update_handler(
+    State(state): State<Arc<AppState>>,
+    h: HeaderMap,
+    Json(book): Json<BookStatus>
+) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
+
     match update_progress(Some(book)) {
         Ok(_) => Json(json!({ "status": "ok" })).into_response(),
         Err(e) => Json(json!({ "status": "error", "message": e })).into_response(),
@@ -124,7 +170,16 @@ pub async fn update_handler(Json(book): Json<BookStatus>) -> impl IntoResponse {
 }
 
 
-pub async fn manifest_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn manifest_handler(
+State(state): State<Arc<AppState>>,
+h: HeaderMap
+) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /manifest", user);
+
     match get_library_manifest(&state.path()) {
         Ok(data) => Json(serde_json::from_str::<serde_json::Value>(&data).unwrap()).into_response(),
         Err(e) => Json(json!({ "status": "error", "message": e.to_string() })).into_response(),
@@ -134,7 +189,14 @@ pub async fn manifest_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
 pub async fn cover_handler(
     Path(book): Path<String>,
     State(state): State<Arc<AppState>>,
+    h: HeaderMap
 ) -> impl IntoResponse {
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /cover book: {}", user,  book);
+
     let book = format!("./{}/{}/{}.epub",&state.prefix, book,book);
 
     match extract_files(&book, vec![".jpg", ".jpeg"]) {
@@ -154,7 +216,14 @@ pub async fn cover_handler(
 
 pub async fn css_handler( Path(book): Path<String>,
     State(state): State<Arc<AppState>>,
+    h: HeaderMap
 )->impl IntoResponse{
+    let user = match check_token(state.secret.as_ref(), &h) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
+
     let book = format!("./{}/{}/{}.epub",&state.prefix, book,book);
     match extract_css(&book){
         Ok(css)=>([(header::CONTENT_TYPE, "text/css; charset=utf8")],css).into_response(),

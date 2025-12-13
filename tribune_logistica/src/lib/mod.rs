@@ -14,11 +14,13 @@ pub mod password_handler;
 mod logic;
 use logic::*;
 
+use crate::password_handler::generate_secret;
+
 #[derive(Clone)]
 struct AppState {
     manifest: String,
     prefix: String,
-    token: Option<String>
+    secret: [u8; 32]
 }
 impl AppState {
     fn path(&self) -> String {
@@ -30,15 +32,15 @@ pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
         prefix: "./data".to_string(),
-        token:None
+        secret: generate_secret()
     });
 
     let app = Router::new()
-        .route("/init", get(init_handler))
         .route("/login", post(login_handler))
+        .route("/init", get(init_handler))
         .route("/book", post(book_handler))
-        .route("/audio", post(audio_handler))
         .route("/audiomap",post(audiomap))
+        .route("/audio", post(audio_handler))
         .route("/update", post(update_handler))
         .route("/manifest", get(manifest_handler))
         .route("/cover/{book}", get(cover_handler))

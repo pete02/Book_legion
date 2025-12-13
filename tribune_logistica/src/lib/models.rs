@@ -65,3 +65,18 @@ pub struct LoginRecord {
     pub username: String,
     pub password: String,
 }
+
+
+#[derive(Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,      // username or user id
+    pub iat: usize,       // issued at (seconds since epoch)
+    pub exp: usize,       // expiration
+}
+
+#[derive(Deserialize)]
+pub struct InitQuery {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub book_type: String,
+}

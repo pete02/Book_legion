@@ -19,7 +19,7 @@ struct UserRecord {
 }
 
 fn main(){
-    
+    let _=make_user("username", "password");
 }
 
 
