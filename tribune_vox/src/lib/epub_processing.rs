@@ -57,10 +57,11 @@ pub fn extract_cover(book:&str, jpg:&str)->Result<(),Box<dyn std::error::Error>>
     }
     Ok(())   
 }
+
+
 use zip::ZipArchive;
 use std::collections::HashMap;
 use std::io::Read;
-
 fn extract_files(path: &str, file_types:Vec<&str>)->Result<HashMap<String,Vec<u8>>,Box<dyn std::error::Error>>{
     let book=File::open(path)?;
     let mut archive=ZipArchive::new(book)?;

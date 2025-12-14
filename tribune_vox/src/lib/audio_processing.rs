@@ -2,8 +2,6 @@
 use reqwest::blocking::Client;
 use std::{fs::File, time::Duration};
 use serde_json::json;
-use std::process::Command;
-use std::fs;
 use hound::{SampleFormat, WavReader,  WavWriter};
 use std::io::Cursor;
 use std::thread::sleep;
@@ -64,30 +62,6 @@ pub fn text_to_wav(
     }
 
     unreachable!()
-}
-pub fn format_audiobook(audio_path: &str, cover_path: &str, output_path: &str, name: &str, writer:&str)-> Result<(),Box<dyn std::error::Error>>{
-     let status = Command::new("ffmpeg")
-        .args(&[
-            "-i", audio_path,
-            "-i", cover_path,
-            "-map", "0:a",
-            "-map", "1:v",
-            "-c:a", "libmp3lame",
-            "-q:a", "2",
-            "-id3v2_version", "3",
-            "-metadata", format!("artist={}",writer).as_str(),
-            "-metadata", format!("album={}",name).as_str(),
-            "-metadata:s:v", "title=Album cover",
-            "-metadata:s:v", "comment=Cover",
-            output_path,
-        ])
-        .status()?;
-    
-    if !status.success() {
-        return Err(format!("ffmpeg exited with code: {:?}", status.code()).into());
-    }
-    fs::remove_file(audio_path)?;
-    Ok(())
 }
 
 fn get_dummy_reader(ip:&str)->Result<WavReader<Cursor<Vec<u8>>>, Box< dyn std::error::Error>>{

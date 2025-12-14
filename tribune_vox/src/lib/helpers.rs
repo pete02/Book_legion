@@ -23,13 +23,11 @@ pub fn create_paths(options: &AudiobookOptions)->(String,String,String,String){
 }
 
 pub fn create_ctx_struct(
-    writer: hound::WavWriter<std::fs::File>,
     audiomap:AudioMap ,
     ip: &str,
     chapter: usize,
 ) -> AudioContext {
     AudioContext {
-        writer:writer,
         map: audiomap,
         max_chapters: 0,
         current_time: 0.0,
@@ -96,7 +94,7 @@ pub fn check_safety(options: &AudiobookOptions) -> Result<(), Box<dyn std::error
 }
 
 
-pub fn update_context(ctx: &mut AudioContext, time: f32) {
+pub fn update_context(ctx: &mut AudioContext, time: f32, map:&mut ChapterAudioMap) {
     let audio=AudioMapEntry{
         chapter_number:ctx.current_chapter,
         chunk_number:ctx.current_chunk,
@@ -104,14 +102,14 @@ pub fn update_context(ctx: &mut AudioContext, time: f32) {
         duration:time
     };
 
-    let entry_option=ctx.map.get_mut((ctx.current_chapter,ctx.current_chunk));
+    let entry_option=map.map.get_mut(&ctx.current_chunk.to_string());
     if let Some(entry)=entry_option{
         entry.chapter_number=ctx.current_chapter;
         entry.chunk_number=ctx.current_chunk;
         entry.start_time=ctx.current_time;
         entry.duration=time;
     }else{
-        ctx.map.insert((ctx.current_chapter,ctx.current_chunk), audio);
+        map.map.insert(ctx.current_chunk.to_string(), audio);
     }
 
     ctx.current_time += time;
@@ -134,6 +132,13 @@ fn save_book_to_books_json(book:Book,name:&str, path:&str)->Result<(),Box<dyn st
 
 
 pub fn save_audio_map_json(json_path: &str, map: &AudioMap)->Result<(),Box<dyn std::error::Error>>{
+    serde_json::to_writer_pretty(File::create(json_path)?, map)?;
+    Ok(())
+}
+
+
+
+pub fn save_chapter_map_json(json_path: &str, map: &ChapterAudioMap)->Result<(),Box<dyn std::error::Error>>{
     serde_json::to_writer_pretty(File::create(json_path)?, map)?;
     Ok(())
 }

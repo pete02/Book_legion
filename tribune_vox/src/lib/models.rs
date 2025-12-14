@@ -23,6 +23,18 @@ pub struct Book{
     pub chapter_to_chunk: HashMap<usize,usize>,
     pub max_chapter: usize
 }
+#[derive(Serialize, Deserialize)]
+pub struct ChapterAudioMap {
+    pub chapter: usize,       // current chapter number
+    pub max_chunk: usize,     // total chunks in this chapter
+    pub map: HashMap<String, AudioMapEntry>,        // existing audio map data for this chapter
+}
+
+impl ChapterAudioMap {
+    pub fn new(chapter:usize)->ChapterAudioMap{
+        return ChapterAudioMap { chapter, max_chunk: 0, map: HashMap::new() };
+    }
+}
 
 
 #[derive(Serialize, Deserialize)]
@@ -66,7 +78,6 @@ impl AudioMap {
 
 
 pub struct AudioContext{
-    pub writer: hound::WavWriter<std::fs::File>,
     pub max_chapters: usize,
     pub timer: std::time::Instant,
     pub map: AudioMap,
