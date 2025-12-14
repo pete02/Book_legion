@@ -41,7 +41,7 @@ pub fn ReadInner()->Element{
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; height: 100%;",
+            style: "display: flex; flex-direction: column; height: 90%;",
 
             div {
                 style: "display: flex; justify-content: flex-start; gap: 12px; align-items: center; padding: 8px 16px;",

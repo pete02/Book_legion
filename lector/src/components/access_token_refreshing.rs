@@ -16,7 +16,6 @@ pub fn AccessTokenHook() ->Element{
         spawn(async move{
                 loop {
                     sleep(Duration::from_secs(10)).await;
-                    tracing::debug!("sitting");
                     let Some(expiry_time)=global().token_expiry.clone() else {continue;};
                     if chrono::Utc::now() >= expiry_time- chrono::Duration::seconds(30) {
                         let Some(user)=global().user.clone() else {continue;};

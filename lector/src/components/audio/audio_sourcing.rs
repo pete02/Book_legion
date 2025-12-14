@@ -51,7 +51,6 @@ fn audio_url_hook(
     use_effect(move || {
         if audio_url().is_some() {return; }
         let Some(bytes) = resource() else {return;};
-
         let url = create_blob(bytes);
         audio_url.set(Some(url));
         resource.set(None);
@@ -64,7 +63,7 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<u8>>>, mut private_state:
     use_effect(move ||{
         if fetching() {return;}
         if resource().is_some() {return;}
-        let Some(mut book)=private_state() else {return;};
+        let Some(mut book)=private_state().clone() else {return;};
         let Some(access_token)= global().access_token.clone() else {return;};
         if book.chapter > book.max_chapter {return;}
 
@@ -80,10 +79,12 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<u8>>>, mut private_state:
                         book.chapter+=1;
                         book.chunk=1
                     }else{
-                        book.chunk=ADVANCE_AMOUNT+1;
+                        book.chunk +=ADVANCE_AMOUNT+1;
                     }
-                    resource.set(Some(bytes));
+                    tracing::debug!("current book chunk: {}", book.chunk);
                     private_state.set(Some(book));
+                    tracing::debug!("private_stage: {:?}", private_state());
+                    resource.set(Some(bytes));
                     fetching.set(false);
                 }
             }
