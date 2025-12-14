@@ -13,7 +13,7 @@ pub fn page_navigator(move_page:Signal<i32>, html_vec: Signal<Vec<String>>, visi
 
     initial_chunk_sync(visible_start);
     chunk_filler(html_vec, visible_chunks, visible_start, private_fill, index, stopped);
-    visible_start_updater(html_vec,index, visible_start, visible_chunks,private_fill, stopped);
+    visible_start_updater(html_vec, visible_start, visible_chunks,private_fill, stopped);
     update_global_chunk(visible_start,visible_chunks,private_fill);
     page_turner(html_vec, move_page, visible_start,visible_chunks, private_fill, stopped);
 }
@@ -93,7 +93,6 @@ pub fn chunk_filler(
 
 fn visible_start_updater(
     html_vec: Signal<Vec<String>>,
-    index:Signal<i32>,
     mut visible_start:Signal<i32>,
     visible_chunks: Signal<Vec<String>>,
     mut direction: Signal<i32>,
