@@ -16,11 +16,11 @@ use crate::models::GlobalState;
 
 
 fn main() {
-    dioxus::launch(App);
+    dioxus::launch(app);
 }
 
 #[component]
-fn App() -> Element {
+fn app() -> Element {
     let global = use_signal(|| GlobalState::new());
 
     use_context_provider(||global);

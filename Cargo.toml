@@ -4,5 +4,5 @@ members = [
     "tribune_logistica",
     "tribune_porta",
     "tribune_vox",
-    "tribune_archivum", "tribune_secreto",
+    "tribune_archivum", "tribune_secreto", "tribune_kindle",
 ]

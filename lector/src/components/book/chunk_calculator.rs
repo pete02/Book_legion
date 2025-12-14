@@ -9,12 +9,13 @@ pub fn page_navigator(move_page:Signal<i32>, html_vec: Signal<Vec<String>>, visi
     let private_fill=use_signal(||1);
     let visible_start=use_signal(||0);
     let index: Signal<i32>=use_signal(||0);
+    let stopped=use_signal(||false);
 
     initial_chunk_sync(visible_start);
-    chunk_filler(html_vec, visible_chunks, visible_start, private_fill, index);
-    visible_start_updater(html_vec,index, visible_start, visible_chunks,private_fill);
+    chunk_filler(html_vec, visible_chunks, visible_start, private_fill, index, stopped);
+    visible_start_updater(html_vec,index, visible_start, visible_chunks,private_fill, stopped);
     update_global_chunk(visible_start,visible_chunks,private_fill);
-    page_turner(html_vec, move_page, visible_start,visible_chunks, private_fill);
+    page_turner(html_vec, move_page, visible_start,visible_chunks, private_fill, stopped);
 }
 
 pub fn initial_chunk_sync(mut visible_start: Signal<i32>) {
@@ -40,7 +41,8 @@ pub fn chunk_filler(
     mut visible_chunks: Signal<Vec<String>>,
     visible_start:Signal<i32>,
     direction: Signal<i32>,
-    mut index: Signal<i32>
+    mut index: Signal<i32>,
+    mut stopped: Signal<bool>
 ){
 
     use_effect(move || {
@@ -50,8 +52,12 @@ pub fn chunk_filler(
         let cur_location=visible_start()+index();
         if html_vec().len() ==0 {return;}
         if direction()==0 {return;}
-        if is_full_height() {return;}
-        if no_more_chunks(cur_location, direction(), html_vec) {return;}
+        if stopped() {return;};
+        if no_more_chunks(cur_location, direction(), html_vec) {
+            stopped.set(true);
+            return;
+        }
+
 
 
         let i= (cur_location as usize).clamp(0, html_vec().len());
@@ -64,6 +70,22 @@ pub fn chunk_filler(
             v.insert(0,chunk);
         }
         visible_chunks.set(v);
+
+
+        let mut v=visible_chunks().clone();
+        if is_full_height() {
+            stopped.set(true);
+            if direction()==1{
+                v.pop();
+                visible_chunks.set(v);
+            }else{
+                v.remove(0);
+                visible_chunks.set(v);
+            }
+            return;
+        }
+
+
         index.set(index() + direction());
     });
 }
@@ -75,13 +97,13 @@ fn visible_start_updater(
     mut visible_start:Signal<i32>,
     visible_chunks: Signal<Vec<String>>,
     mut direction: Signal<i32>,
+    stopped: Signal<bool>
 ){
     use_effect(move || {
-        let cur_location=visible_start()+index() as i32;
         if html_vec().len() ==0 {return;}
         if visible_chunks.len() == 0 {return;}
         if direction()==0 {return;}
-        if !(is_full_height() || no_more_chunks(cur_location, direction(), html_vec)){return;}
+        if !stopped() {return;}
 
         if direction()==-1{
             let val=visible_start()-visible_chunks().len() as i32 + 1; visible_start.set(val.max(0));
@@ -121,6 +143,7 @@ pub fn page_turner(
     mut visible_start:Signal<i32>,
     mut visible_chunks: Signal<Vec<String>>,
     mut private_move: Signal<i32>,
+    mut stopped: Signal<bool>
 ){
     let global=use_context::<Signal<GlobalState>>().clone();
     use_effect(move ||{
@@ -152,6 +175,7 @@ pub fn page_turner(
         }
 
         private_move.set(move_page());
+        stopped.set(false);
         move_page.set(0);
         visible_chunks.set(Vec::new());
     });
