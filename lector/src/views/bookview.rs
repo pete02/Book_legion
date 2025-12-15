@@ -92,7 +92,6 @@ pub fn BookInner()->Element{
                     flex-wrap: wrap; 
                     justify-content: center;
                 ",
-
                 // Book Cover
 
 

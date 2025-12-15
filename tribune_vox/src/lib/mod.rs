@@ -12,6 +12,7 @@ pub mod models;
 use crate::epub_processing::extract_cover;
 use crate::finalizer::format_audiobook_from_chapters;
 use crate::finalizer::load_global_audio_map_strict;
+use crate::finalizer::save_to_book_json;
 
 use self::models::*;
 
@@ -53,14 +54,14 @@ pub fn make_audiobook(options: &AudiobookOptions)->Result<(),Box<dyn std::error:
     println!("start creating audiobook");
     create_audiobook(&mut ctx, options,epub,missing_chapter, tempdir)?;
     println!("Saved audiobook"); 
-        finalizer(initial_chapter, max_chapter, options, tempdir)?;
+    finalizer(initial_chapter, max_chapter, options, tempdir, &mut ctx)?;
     Ok(())
 }
 
 fn create_audiobook( ctx: &mut AudioContext,options: &AudiobookOptions, mut epub:EpubDoc<BufReader<File>>, missing_chapters:Vec<usize>, tempdir:&str) -> Result<(), Box<dyn std::error::Error>> {
     ctx.max_chapters=epub.get_num_chapters();
     std::fs::create_dir_all(tempdir)?;
-
+    println!("missing chapters: {:?}",missing_chapters );
     if missing_chapters.len() ==0 {
         return Ok(());
     }
@@ -104,16 +105,17 @@ pub fn missing_chapters(initial_chapter:usize, max_chapters: usize, tempdir:&str
 }
 
 
-fn finalizer(initial_chapter:usize, max_chapters: usize, options: &AudiobookOptions, tempdir:&str) -> Result<(),Box<dyn std::error::Error>>{
+fn finalizer(initial_chapter:usize, max_chapters: usize, options: &AudiobookOptions, tempdir:&str, ctx: &mut AudioContext) -> Result<(),Box<dyn std::error::Error>>{
     let missing=missing_chapters(initial_chapter, max_chapters, tempdir, options);
     if missing.len() > 0 && !options.debug{
         return Err("book is not finalized".into());
     }
-
     let (epub,jpg,mp3,json)=create_paths(options);
     let map=load_global_audio_map_strict(&options.name, initial_chapter, max_chapters, options)?;
+    
     save_audio_map_json(&json, &map)?;
     extract_cover(&epub, &jpg)?;
+    save_to_book_json(options, ctx, "data/books.json")?;
 
     format_audiobook_from_chapters(tempdir,
     initial_chapter,
@@ -122,6 +124,8 @@ fn finalizer(initial_chapter:usize, max_chapters: usize, options: &AudiobookOpti
     &mp3,
         options
     )?;
+
+
     if !options.debug{
         fs::remove_file(jpg)?;
         for chapter in initial_chapter..=max_chapters{

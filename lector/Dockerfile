@@ -30,6 +30,8 @@ RUN rm -rf /usr/share/nginx/html/*
 # /app/target/dx/lector/release/web/public
 COPY --from=builder /app/target/dx/lector/release/web/public /usr/share/nginx/html
 
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Ensure correct MIME type for WASM
 RUN echo "types { application/wasm wasm; }" >> /etc/nginx/mime.types
 

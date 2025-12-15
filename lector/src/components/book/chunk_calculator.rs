@@ -74,14 +74,17 @@ pub fn chunk_filler(
 
         let mut v=visible_chunks().clone();
         if is_full_height() {
+            tracing::debug!("full height: {}",v.len());
+            
             stopped.set(true);
             if direction()==1{
                 v.pop();
-                visible_chunks.set(v);
+                visible_chunks.set(v.clone());
             }else{
                 v.remove(0);
-                visible_chunks.set(v);
+                visible_chunks.set(v.clone());
             }
+            tracing::debug!("removed: {}",v.len());
             return;
         }
 
@@ -184,10 +187,10 @@ pub fn page_turner(
 
 
 fn is_full_height()->bool{
-    let Some(nav_height)=get_element_height("book-container") else {return true;};
+    let Some(page_height)=get_element_height("book-buttons") else {return true;};
     let Some(book_height)=get_element_height("book-renderer") else {return true;};
     
-    book_height >= nav_height-100.0
+    book_height >= page_height-100.0
 }
 
 fn get_element_height(id: &str) -> Option<f64> {

@@ -23,6 +23,8 @@ pub struct Book{
     pub chapter_to_chunk: HashMap<usize,usize>,
     pub max_chapter: usize
 }
+
+
 #[derive(Serialize, Deserialize)]
 pub struct ChapterAudioMap {
     pub chapter: usize,       // current chapter number

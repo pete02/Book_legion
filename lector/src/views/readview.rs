@@ -41,8 +41,12 @@ pub fn ReadInner()->Element{
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; height: 90%;",
-
+            style: "
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 auto;
+                min-height: 0;
+            ",
             div {
                 style: "display: flex; justify-content: flex-start; gap: 12px; align-items: center; padding: 8px 16px;",
                 class: "bg-gray-200 dark:bg-gray-800 px-4", 
@@ -74,11 +78,15 @@ pub fn ReadInner()->Element{
             div {
                 style: "
                     position: relative;
-                    flex: 1 1 0;
                     display: flex;
                     flex-direction: column;
+
+                    flex: 1 1 auto;
+                    min-height: 90vh;
+
                     overflow: hidden;
                 ",
+                id: "text-container",
                 BookRenderer { visible_chunks }
                 BookButtons { move_page }
             }

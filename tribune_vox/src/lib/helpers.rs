@@ -116,16 +116,16 @@ pub fn update_context(ctx: &mut AudioContext, time: f32, map:&mut ChapterAudioMa
 }
 
 pub 
-fn save_book_to_books_json(book:Book,name:&str, path:&str)->Result<(),Box<dyn std::error::Error>>{
-    let content = fs::read_to_string(path).unwrap_or_else(|_| "{}".to_string());
+fn save_book_to_books_json(book:Book,name:&str, json_path:&str)->Result<(),Box<dyn std::error::Error>>{
+    let content = fs::read_to_string(json_path).unwrap_or_else(|_| "{}".to_string());
     let mut books: HashMap<String, Book> = serde_json::from_str(&content).unwrap_or_default();
     books.insert(name.to_string(), book);
 
     let data = serde_json::to_string(&books).map_err(|_| "cannot turn books into json")?;
     
-    let tmp_path = path.to_owned() + ".tmp";
+    let tmp_path = json_path.to_owned() + ".tmp";
     fs::write(&tmp_path, data)?;
-    fs::rename(&tmp_path, path)?;
+    fs::rename(&tmp_path, json_path)?;
 
     Ok(())   
 }
@@ -169,6 +169,8 @@ pub fn wait_for_allowed_time(debug:bool){
         let Some(time)=(now.date_naive()+chrono::Duration::days(1)).and_hms_opt(8, 0, 0) else {return;};
         time
     };
+
+    println!("outside work hours, will sleep until: {:?}",sleep_time);
     let sleep_secs = sleep_time.signed_duration_since(now.naive_local()).num_seconds().max(1);
     sleep(Duration::from_secs(sleep_secs as u64));
 }

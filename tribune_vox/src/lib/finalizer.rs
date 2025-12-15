@@ -5,7 +5,7 @@ use std::process::Command;
 use std::fs;
 
 
-use crate::{AudiobookOptions, models::{AudioMap, ChapterAudioMap}};
+use crate::{AudiobookOptions, helpers::{create_book_struct, save_book_to_books_json}, models::{AudioContext, AudioMap, ChapterAudioMap}};
 
 
 pub fn load_global_audio_map_strict(
@@ -105,6 +105,13 @@ pub fn format_audiobook_from_chapters(
         fs::remove_file(&temp_wav)?;
         fs::remove_file(&list_path)?;
     }
+
+    Ok(())
+}
+
+pub fn save_to_book_json(options:&AudiobookOptions,ctx:&mut AudioContext, books_json:&str)->Result<(),Box< dyn std::error::Error>>{
+    let book=create_book_struct(&options.name, &ctx);
+    save_book_to_books_json(book, &options.name, books_json)?;
 
     Ok(())
 }

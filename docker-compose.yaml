@@ -14,6 +14,9 @@ services:
 
   frontend:
     image: lector
+    build:
+      context: ./lector
+      dockerfile: Dockerfile
     depends_on:
       - backend
     labels:
@@ -26,6 +29,9 @@ services:
 
   backend:
     image: tribune_logistica
+    build:
+      context: ./tribune_logistica
+      dockerfile: Dockerfile
     volumes:
       # Persistent application data
       - ./tribune_logistica/data:/data

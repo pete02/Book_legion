@@ -49,7 +49,7 @@ pub fn Navbar() -> Element {
     rsx! {
         div {
             id: "nav-bar",
-            style: "display: flex; flex-direction: column; height: 100vh;",
+            style: "display: flex; flex-direction: column; height: auto; min-height: 100vh; ",
             div {
                 id: "book-container",
                 style: "flex: 1; overflow: hidden;", // Outlet takes the remaining space exactly
