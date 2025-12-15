@@ -49,10 +49,10 @@ pub fn Navbar() -> Element {
     rsx! {
         div {
             id: "nav-bar",
-            style: "display: flex; flex-direction: column; height: auto; min-height: 100vh; ",
+            style: "display: flex; flex-direction: column; height: auto; min-height: 100vh; overflow: visible;",
             div {
-                id: "book-container",
-                style: "flex: 1; overflow: hidden;", // Outlet takes the remaining space exactly
+                id: "book-container; overflow: visible;",
+                style: "flex: 1;", // Outlet takes the remaining space exactly
                 Outlet::<Route> { key: current_route.clone() }
                 AccessTokenHook{}
             }

@@ -46,6 +46,7 @@ pub fn ReadInner()->Element{
                 flex-direction: column;
                 flex: 1 1 auto;
                 min-height: 0;
+                overflow: visible;
             ",
             div {
                 style: "display: flex; justify-content: flex-start; gap: 12px; align-items: center; padding: 8px 16px;",
@@ -80,11 +81,9 @@ pub fn ReadInner()->Element{
                     position: relative;
                     display: flex;
                     flex-direction: column;
-
+                    overflow: visible;
                     flex: 1 1 auto;
                     min-height: 90vh;
-
-                    overflow: hidden;
                 ",
                 id: "text-container",
                 BookRenderer { visible_chunks }
