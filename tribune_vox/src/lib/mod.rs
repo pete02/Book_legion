@@ -66,10 +66,10 @@ fn create_audiobook( ctx: &mut AudioContext,options: &AudiobookOptions, mut epub
     }
 
     if options.debug{
-        handle_chapter(&mut epub, ctx, missing_chapters[0], tempdir)?;
+        handle_chapter(&mut epub, ctx, missing_chapters[0], tempdir, options.debug)?;
     } else {
         for chapter in missing_chapters{
-            handle_chapter(&mut epub, ctx, chapter, tempdir)?;
+            handle_chapter(&mut epub, ctx, chapter, tempdir, options.debug)?;
         }
     }
     Ok(())

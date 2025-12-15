@@ -1,4 +1,5 @@
 use epub::doc::EpubDoc;
+
 use std::fs::File;
 use std::io::BufReader;
 
@@ -27,7 +28,8 @@ pub fn handle_chapter(
     epub: &mut EpubDoc<BufReader<File>>, 
     ctx: &mut AudioContext,
     chapter:usize,
-    tempdir:&str
+    tempdir:&str,
+    debug:bool
 ) -> Result<(), Box<dyn std::error::Error>> {
     epub.set_current_chapter(chapter);
     let text = get_clean_chapter(epub)?;
@@ -45,10 +47,10 @@ pub fn handle_chapter(
     for chunk in chunks {
         ctx.current_chunk += 1;
         print_progress(ctx, length);
-        process_chunk(chunk, &mut chapter_map,&mut writer, ctx)?;
+        process_chunk(chunk, &mut chapter_map,&mut writer, ctx, debug)?;
     }
 
-    // Save per-chapter AudioMap JSON
+    
     let chapter_map_path = format!("{}/chapter_{:03}.json",tempdir, ctx.current_chapter);
     chapter_map.max_chunk=ctx.current_chunk;
     save_chapter_map_json(&chapter_map_path, &chapter_map)?;
@@ -63,7 +65,10 @@ fn process_chunk(
     map:&mut ChapterAudioMap,
     writer: &mut hound::WavWriter<std::fs::File>,
     ctx: &mut AudioContext,
+    debug:bool
 ) -> Result<(), Box<dyn std::error::Error>> {
+
+    wait_for_allowed_time(debug);
 
     if chunk.is_empty() {
         return Ok(());

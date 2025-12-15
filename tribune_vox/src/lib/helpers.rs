@@ -142,3 +142,33 @@ pub fn save_chapter_map_json(json_path: &str, map: &ChapterAudioMap)->Result<(),
     serde_json::to_writer_pretty(File::create(json_path)?, map)?;
     Ok(())
 }
+
+
+
+
+use chrono::{Local, Timelike};
+use std::thread::sleep;
+use std::time::Duration;
+
+pub fn wait_for_allowed_time(debug:bool){
+    if debug{
+        return;
+    }
+
+    let now=Local::now();
+    let h=now.hour();
+
+    if h>=8 && h< 22 {
+        return;
+    }
+
+    let sleep_time=if h<8{
+        let Some(time)=now.date_naive().and_hms_opt(8, 0, 0) else {return;};
+        time
+    }else{
+        let Some(time)=(now.date_naive()+chrono::Duration::days(1)).and_hms_opt(8, 0, 0) else {return;};
+        time
+    };
+    let sleep_secs = sleep_time.signed_duration_since(now.naive_local()).num_seconds().max(1);
+    sleep(Duration::from_secs(sleep_secs as u64));
+}
