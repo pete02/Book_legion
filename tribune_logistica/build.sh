@@ -1,0 +1,1 @@
+docker build --tag lumilukko/tribune_logistica:latest . && docker push lumilukko/tribune_logistica:latest

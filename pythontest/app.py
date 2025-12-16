@@ -41,7 +41,7 @@ async def init_browser():
     playwright = await async_playwright().start()
     browser_instance = await playwright.chromium.launch(headless=True)
     page_instance = await browser_instance.new_page(viewport=client_viewport)
-    await page_instance.goto("https://book.lumilukonservu.duckdns.org/")
+    await page_instance.goto("http://booklegion-lector")
 
 async def monitor_page_changes():
     """Background task that watches the page DOM for changes."""

@@ -14,7 +14,6 @@ use crate::models::{Claims, LoginRecord, UserRecord};
 pub fn verify_login(login:&LoginRecord) -> io::Result<bool> {
     let data = fs::read_to_string("/config/user.json")?;
     let user: UserRecord = serde_json::from_str(&data)?;
-
     if user.username != login.username {
         let dummy_hash = "$argon2id$v=19$m=19456,t=2,p=1$\
                           AAAAAAAAAAAAAAAAAAAAAA$\

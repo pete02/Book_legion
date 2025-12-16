@@ -12,6 +12,7 @@ WORKDIR /app
 # Copy source code
 COPY . .
 
+
 # Default command: start an interactive shell
 RUN cargo build --release
 
@@ -23,7 +24,7 @@ RUN apt-get update && apt-get install -y ca-certificates ffmpeg && rm -rf /var/l
 
 # Set working directory
 WORKDIR /app
-
+COPY ./public /public
 # Copy the release binary from builder
 COPY --from=builder /app/target/release/tribune_logistica .
 

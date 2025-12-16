@@ -25,8 +25,7 @@ html, body {
 .overlay-input {
     position: absolute;
     border: none;            /* Remove the visible border */
-    background: transparent; /* Fully transparent */
-    color: transparent;      /* Hide text inside the input */
+    background: white; /* Fully transparent */
     caret-color: auto;       /* Keep caret visible when typing */
     font-size: 14px;
     padding: 0;              /* Remove padding so size matches snapshot element exactly */
