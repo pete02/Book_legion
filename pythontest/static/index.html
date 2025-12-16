@@ -2,64 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remote Browser Viewer</title>
-    <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; }
-        #content { padding: 1rem; }
-        a, button { cursor: pointer; }
-    </style>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div id="content">Loading...</div>
 
-    <script>
-        async function fetchPage() {
-            const res = await fetch('/api');
-            const html = await res.text();
-            const container = document.getElementById('content');
-            container.innerHTML = html;
+    <h1>Remote Browser Viewer</h1>
 
-            // Replace all links to send clicks to the backend
-            container.querySelectorAll('a').forEach(a => {
-                const href = a.getAttribute('href');
-                a.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    await fetch('/click', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ target: href })
-                    });
-                    fetchPage(); // reload content after click
-                });
-            });
+    <div id="snapshot-container">
+        <img id="snapshot" src="/snapshot" />
+    </div>
 
-            // Replace buttons to send clicks to the backend
-            container.querySelectorAll('button').forEach(btn => {
-                const id = btn.id || btn.innerText;
-                btn.addEventListener('click', async () => {
-                    await fetch('/click', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ target: id })
-                    });
-                    fetchPage();
-                });
-            });
+    <script src="/static/app.js"></script>
 
-            // Optional: handle input fields
-            container.querySelectorAll('input, textarea').forEach(input => {
-                input.addEventListener('change', async () => {
-                    await fetch('/input', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: input.name, value: input.value })
-                    });
-                });
-            });
-        }
-
-        fetchPage();
-    </script>
 </body>
 </html>

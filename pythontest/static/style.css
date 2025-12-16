@@ -1,0 +1,28 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+#snapshot-container {
+    position: relative;
+    display: inline-block;
+}
+
+#snapshot {
+    border: 1px solid #ccc;
+    max-width: 100%;
+}
+
+.overlay-input {
+    position: absolute;
+    border: 1px solid #333;
+    background: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    padding: 2px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
