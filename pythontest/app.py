@@ -55,10 +55,22 @@ async def monitor_page_changes():
         await asyncio.sleep(0.2) 
 
 
-@app.on_event("startup")
-async def startup_event():
-    await init_browser()
-    asyncio.create_task(monitor_page_changes())
+init_lock = asyncio.Lock()
+browser_ready_event = asyncio.Event()  # signals that browser + page is ready
+
+async def ensure_browser_ready():
+    global browser_instance, page_instance
+
+    if browser_instance is None or page_instance is None:
+        async with init_lock:
+            # Double-check in case multiple requests hit simultaneously
+            if browser_instance is None or page_instance is None:
+                await init_browser()
+                asyncio.create_task(monitor_page_changes())
+                browser_ready_event.set()  # mark as ready
+    else:
+        # wait if another request is initializing
+        await browser_ready_event.wait()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -73,6 +85,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    await ensure_browser_ready()
+
     return FileResponse("static/index.html")
 
 # -------------------
@@ -80,11 +94,13 @@ async def root():
 # -------------------
 @app.get("/snapshot")
 async def get_snapshot():
+    await ensure_browser_ready()
     buf = await page_instance.screenshot()
     return StreamingResponse(io.BytesIO(buf), media_type="image/png")
 
 @app.get("/inputs")
 async def get_inputs():
+    await ensure_browser_ready()
     inputs = await page_instance.query_selector_all('input, textarea')
     result = []
 
@@ -118,11 +134,13 @@ async def get_inputs():
 # -------------------
 @app.post("/click")
 async def post_click(click: ClickData):
+    await ensure_browser_ready()
     await page_instance.mouse.click(click.x, click.y)
     return {"status": "ok"}
 
 @app.post("/input")
 async def post_input(data: dict):
+    await ensure_browser_ready()
     index = data.get("index")
     value = data.get("value")
     inputs = await page_instance.query_selector_all("input, textarea")
