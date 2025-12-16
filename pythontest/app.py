@@ -37,22 +37,33 @@ async def init_browser():
     page_instance = await browser_instance.new_page(viewport=client_viewport)
     await page_instance.goto("https://book.lumilukonservu.duckdns.org/")
 
-
 async def monitor_page_changes():
     """Background task that watches the page DOM for changes."""
     previous_hash = None
+
+    # Wait until the browser and page are ready
+    await browser_ready_event.wait()
+
     while True:
         try:
+            if page_instance is None:
+                # If the browser was shut down (heartbeat missed), wait for it to start again
+                await browser_ready_event.wait()
+                previous_hash = None  # reset hash after restart
+                await asyncio.sleep(2)
+                continue
+
             html = await page_instance.content()  # get full DOM
             current_hash = hashlib.md5(html.encode()).hexdigest()
 
             if previous_hash is None or current_hash != previous_hash:
                 previous_hash = current_hash
                 await update_queue.put(True)  # notify clients to refresh snapshot
+
         except Exception as e:
             print("Error monitoring page:", e)
 
-        await asyncio.sleep(0.2) 
+        await asyncio.sleep(0.2)
 
 
 init_lock = asyncio.Lock()
@@ -66,11 +77,14 @@ async def ensure_browser_ready():
             # Double-check in case multiple requests hit simultaneously
             if browser_instance is None or page_instance is None:
                 await init_browser()
-                asyncio.create_task(monitor_page_changes())
                 browser_ready_event.set()  # mark as ready
     else:
         # wait if another request is initializing
         await browser_ready_event.wait()
+
+@app.on_event("startup")
+async def startup_even():
+    asyncio.create_task(monitor_page_changes())
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -85,8 +99,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    await ensure_browser_ready()
-
     return FileResponse("static/index.html")
 
 # -------------------
@@ -170,7 +182,7 @@ async def post_resolution(req: Request):
     width = int(data.get("width", 1280))
     height = int(data.get("height", 720))
     client_viewport = {"width": width, "height": height}
-
+    await ensure_browser_ready()
     # Apply viewport size to Playwright page
     if page_instance:
         await page_instance.set_viewport_size(client_viewport)
