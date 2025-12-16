@@ -29,6 +29,9 @@ client_viewport = {"width": 1280, "height": 720}
 browser_instance = None
 page_instance = None
 update_queue = asyncio.Queue()  # SSE notification queue
+init_lock = asyncio.Lock()
+browser_ready_event = asyncio.Event()  # signals that browser + page is ready
+
 
 async def init_browser():
     global browser_instance, page_instance, client_viewport
@@ -47,7 +50,6 @@ async def monitor_page_changes():
     while True:
         try:
             if page_instance is None:
-                # If the browser was shut down (heartbeat missed), wait for it to start again
                 await browser_ready_event.wait()
                 previous_hash = None  # reset hash after restart
                 await asyncio.sleep(2)
@@ -66,8 +68,6 @@ async def monitor_page_changes():
         await asyncio.sleep(0.2)
 
 
-init_lock = asyncio.Lock()
-browser_ready_event = asyncio.Event()  # signals that browser + page is ready
 
 async def ensure_browser_ready():
     global browser_instance, page_instance
@@ -81,6 +81,10 @@ async def ensure_browser_ready():
     else:
         # wait if another request is initializing
         await browser_ready_event.wait()
+
+
+
+
 
 @app.on_event("startup")
 async def startup_even():
