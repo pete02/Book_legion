@@ -1,11 +1,12 @@
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi import Request
 from pydantic import BaseModel
 from playwright.async_api import async_playwright
 import asyncio
 import io
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+import hashlib
 
 
 app = FastAPI()
@@ -18,25 +19,46 @@ class ClickData(BaseModel):
     y: int
 
 class InputData(BaseModel):
-    selector: str
+    index: int
     value: str
-
+    
+client_viewport = {"width": 1280, "height": 720}
 # -------------------
 # Global Browser State
 # -------------------
 browser_instance = None
 page_instance = None
+update_queue = asyncio.Queue()  # SSE notification queue
 
 async def init_browser():
-    global browser_instance, page_instance
+    global browser_instance, page_instance, client_viewport
     playwright = await async_playwright().start()
     browser_instance = await playwright.chromium.launch(headless=True)
-    page_instance = await browser_instance.new_page()
+    page_instance = await browser_instance.new_page(viewport=client_viewport)
     await page_instance.goto("https://book.lumilukonservu.duckdns.org/")
+
+
+async def monitor_page_changes():
+    """Background task that watches the page DOM for changes."""
+    previous_hash = None
+    while True:
+        try:
+            html = await page_instance.content()  # get full DOM
+            current_hash = hashlib.md5(html.encode()).hexdigest()
+
+            if previous_hash is None or current_hash != previous_hash:
+                previous_hash = current_hash
+                await update_queue.put(True)  # notify clients to refresh snapshot
+        except Exception as e:
+            print("Error monitoring page:", e)
+
+        await asyncio.sleep(0.2) 
+
 
 @app.on_event("startup")
 async def startup_event():
     await init_browser()
+    asyncio.create_task(monitor_page_changes())
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -45,30 +67,24 @@ async def shutdown_event():
         await browser_instance.close()
 
 # -------------------
-# Routes
+# Static & Index
 # -------------------
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-app.mount("/static", StaticFiles(directory="/static"), name="static")
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return FileResponse("static/index.html")
 
+# -------------------
+# Snapshot
+# -------------------
 @app.get("/snapshot")
 async def get_snapshot():
     buf = await page_instance.screenshot()
     return StreamingResponse(io.BytesIO(buf), media_type="image/png")
 
-@app.post("/click")
-async def post_click(click: ClickData):
-    await page_instance.mouse.click(click.x, click.y)
-    return {"status": "ok"}
-
 @app.get("/inputs")
 async def get_inputs():
-    """
-    Return positions, sizes, and current values of all visible input fields.
-    Each input includes its index for backend identification.
-    """
     inputs = await page_instance.query_selector_all('input, textarea')
     result = []
 
@@ -84,8 +100,8 @@ async def get_inputs():
         selector = await inp.evaluate("el => el.getAttribute('id') || el.name || ''")
 
         result.append({
-            "index": idx,          # Unique index for identifying this input
-            "selector": selector,   # Optional: for debugging
+            "index": idx,
+            "selector": selector,
             "x": box['x'],
             "y": box['y'],
             "w": box['width'],
@@ -94,19 +110,52 @@ async def get_inputs():
             "height": page_height,
             "value": value
         })
-
     return result
 
+
+# -------------------
+# Click/Input endpoints
+# -------------------
+@app.post("/click")
+async def post_click(click: ClickData):
+    await page_instance.mouse.click(click.x, click.y)
+    return {"status": "ok"}
 
 @app.post("/input")
 async def post_input(data: dict):
     index = data.get("index")
     value = data.get("value")
-
     inputs = await page_instance.query_selector_all("input, textarea")
     if index is None or index < 0 or index >= len(inputs):
         return {"status": "invalid"}
+    await inputs[index].fill(value)
+    await update_queue.put(True)  # notify clients
+    return {"status": "ok"}
 
-    el = inputs[index]
-    await el.fill(value)  # Playwright fills the input
+# -------------------
+# SSE for snapshot updates
+# -------------------
+@app.get("/updates")
+async def updates():
+    async def event_generator():
+        while True:
+            await update_queue.get()
+            yield "data: update\n\n"
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+
+@app.post("/res")
+async def post_resolution(req: Request):
+    global client_viewport, page_instance
+    data = await req.json()
+    width = int(data.get("width", 1280))
+    height = int(data.get("height", 720))
+    client_viewport = {"width": width, "height": height}
+
+    # Apply viewport size to Playwright page
+    if page_instance:
+        await page_instance.set_viewport_size(client_viewport)
+
+    print(f"Client viewport set to: {width}x{height}")
     return {"status": "ok"}

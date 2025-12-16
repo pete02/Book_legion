@@ -17,12 +17,12 @@ body {
 
 .overlay-input {
     position: absolute;
-    border: 1px solid #333;
-    background: rgba(255, 255, 255, 0.8);
+    border: none;            /* Remove the visible border */
+    background: transparent; /* Fully transparent */
+    color: transparent;      /* Hide text inside the input */
+    caret-color: auto;       /* Keep caret visible when typing */
     font-size: 14px;
-    padding: 2px 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 0;              /* Remove padding so size matches snapshot element exactly */
     box-sizing: border-box;
+    z-index: 10;             /* Ensure input is above the snapshot */
 }
