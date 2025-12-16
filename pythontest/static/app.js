@@ -4,6 +4,17 @@ const snapshot = document.getElementById('snapshot');
 let busy = false;
 let inputRects = []; // cached input hitboxes
 let focusedInputIndex = null;
+let blocked=true;
+
+function generateRandomToken(length = 32) {
+    const array = new Uint8Array(length);
+    window.crypto.getRandomValues(array);
+    // Convert each byte to a hexadecimal string and join
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// Example usage:
+const client_token = generateRandomToken()
 
 // Fetch input positions and create overlay inputs
 async function fetchInputs() {
@@ -36,11 +47,13 @@ async function fetchInputs() {
 
             el.addEventListener('input', async (e) => {
                 const value = e.target.value;
-                await fetch('/input', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ index: input.index, value })
-                });
+                if(!blocked){
+                    await fetch('/input', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ index: input.index, value })
+                    });
+                }
             });
 
             container.appendChild(el);
@@ -81,10 +94,32 @@ function clickHitsInput(x, y) {
     });
 }
 
+async function check() {
+    await fetch('/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: client_token })
+    }).then(a=>{
+        if (a.status== 202){
+            console.log("token ok")
+            blocked=false
+            return true
+        }else{
+            console.log("not good")
+            blocked=true
+            return false
+        }
+    });
+}
+
 // Refresh snapshot
 async function refresh() {
     return new Promise(resolve => {
         snapshot.onload = async () => {
+            const ok = await check();
+            if (!ok){
+                resolve()
+            }
             await fetchInputs();
             resolve();
         };
@@ -105,12 +140,13 @@ container.addEventListener('click', async (e) => {
     }
 
     busy = true;
-
-    await fetch('/click', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x, y })
-    });
+    if (!blocked){
+        await fetch('/click', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ x, y })
+        });
+    }
 
     // No immediate refresh; server will push update via SSE
     busy = false;
@@ -119,8 +155,7 @@ container.addEventListener('click', async (e) => {
 // --- SSE listener for server-driven snapshot updates ---
 const evtSource = new EventSource("/updates");
 evtSource.onmessage = async () => {
-    console.log("uppies")
-    if (!busy) {
+    if (!busy && !blocked) {
         busy = true;
         await refresh();
         busy = false;
@@ -134,16 +169,18 @@ async function sendViewportSize() {
     fetch("/res", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ width: window.innerWidth, height: window.innerHeight })
+        body: JSON.stringify({ width: window.innerWidth, height: window.innerHeight, token: client_token })
     });
 
     // heartbeat every 10s
     setInterval(() => {
-        fetch("/heartbeat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token: clientToken })
-        });
+        if (!blocked){
+            fetch("/heartbeat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token: "bla" })
+            });
+        }
     }, 10000);
 }
 

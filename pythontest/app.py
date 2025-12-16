@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 import asyncio
 import io
 import hashlib
-
+import time
 
 app = FastAPI()
 
@@ -31,9 +31,12 @@ page_instance = None
 update_queue = asyncio.Queue()  # SSE notification queue
 init_lock = asyncio.Lock()
 browser_ready_event = asyncio.Event()  # signals that browser + page is ready
-
+last_heartbeat=None
+HEARTBEAT=20
+client_token=None
 
 async def init_browser():
+    print("create browser")
     global browser_instance, page_instance, client_viewport
     playwright = await async_playwright().start()
     browser_instance = await playwright.chromium.launch(headless=True)
@@ -82,13 +85,25 @@ async def ensure_browser_ready():
         # wait if another request is initializing
         await browser_ready_event.wait()
 
-
+async def monitor_heartbeat():
+    global last_heartbeat, browser_instance, page_instance, client_token, browser_ready_event
+    while True:
+        await asyncio.sleep(5)
+        if browser_instance is not None and last_heartbeat is not None and last_heartbeat <= time.time()-HEARTBEAT:
+            print("close browser")
+            await browser_instance.close()
+            last_heartbeat=None
+            browser_instance=None
+            page_instance=None
+            client_token=None
+            browser_ready_event=asyncio.Event()
 
 
 
 @app.on_event("startup")
 async def startup_even():
     asyncio.create_task(monitor_page_changes())
+    asyncio.create_task(monitor_heartbeat())
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -110,13 +125,13 @@ async def root():
 # -------------------
 @app.get("/snapshot")
 async def get_snapshot():
-    await ensure_browser_ready()
+    await browser_ready_event.wait()
     buf = await page_instance.screenshot()
     return StreamingResponse(io.BytesIO(buf), media_type="image/png")
 
 @app.get("/inputs")
 async def get_inputs():
-    await ensure_browser_ready()
+    await browser_ready_event.wait()
     inputs = await page_instance.query_selector_all('input, textarea')
     result = []
 
@@ -150,13 +165,13 @@ async def get_inputs():
 # -------------------
 @app.post("/click")
 async def post_click(click: ClickData):
-    await ensure_browser_ready()
+    await browser_ready_event.wait()
     await page_instance.mouse.click(click.x, click.y)
     return {"status": "ok"}
 
 @app.post("/input")
 async def post_input(data: dict):
-    await ensure_browser_ready()
+    await browser_ready_event.wait()
     index = data.get("index")
     value = data.get("value")
     inputs = await page_instance.query_selector_all("input, textarea")
@@ -181,15 +196,43 @@ async def updates():
 
 @app.post("/res")
 async def post_resolution(req: Request):
-    global client_viewport, page_instance
+    global client_viewport, page_instance, last_heartbeat, client_token
     data = await req.json()
+
+    token = data.get("token")
+    if not token or client_token is not None:
+        raise HTTPException(status_code=403, detail="Forbidden: token required")
+    
+    # Set the client token
+    client_token = token
+
     width = int(data.get("width", 1280))
     height = int(data.get("height", 720))
+    token=data.get("token")
+    
     client_viewport = {"width": width, "height": height}
     await ensure_browser_ready()
     # Apply viewport size to Playwright page
     if page_instance:
         await page_instance.set_viewport_size(client_viewport)
-
+    last_heartbeat=time.time()
     print(f"Client viewport set to: {width}x{height}")
     return {"status": "ok"}
+
+@app.post("/heartbeat")
+async def heartbeat():
+    global last_heartbeat
+    last_heartbeat=time.time()
+    return {"status": "ok"}
+
+@app.post("/check")
+async def check(req: Request):
+    global client_token
+    data= await req.json()
+    token = data.get("token", "error")
+    if not token or token != client_token:
+        raise HTTPException(status_code=403, detail="Forbidden: token required")
+    else:
+        raise HTTPException(status_code=202, detail="Token ok")
+
+    
