@@ -22,7 +22,7 @@ pub async fn login_handler(
     Json(login): Json<LoginRecord>
 )-> impl IntoResponse{
     match verify_login(&login) {
-        Err(_)=>return StatusCode::FORBIDDEN.into_response(),
+        Err(a)=>return (StatusCode::INTERNAL_SERVER_ERROR,a.to_string()).into_response(),
         Ok(res)=>{
             if res{
                 println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);

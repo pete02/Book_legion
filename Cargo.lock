@@ -5978,7 +5978,10 @@ name = "tribune_archivum"
 version = "0.1.0"
 dependencies = [
  "epub",
+ "regex",
  "scraper",
+ "serde",
+ "serde_json",
  "zip 6.0.0",
 ]
 

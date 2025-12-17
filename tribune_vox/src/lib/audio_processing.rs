@@ -30,7 +30,6 @@ pub fn text_to_wav(
                 "temperature": "0.9"
             }))
             .send();
-
         match result {
             Ok(response) => {
                 if response.status().is_success() {

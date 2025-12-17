@@ -4,11 +4,11 @@ use std::{io::BufReader};
 use std::fs::File;
 
 
-pub fn verify_toc(epub: &mut EpubDoc<BufReader<File>>)->Result<(),Box<dyn std::error::Error>>{
+pub fn verify_toc(epub: &mut EpubDoc<BufReader<File>>)->Result<u32,Box<dyn std::error::Error>>{
     let toc=epub.toc.clone();
     let spine=epub.spine.clone();
     if toc.len() ==0 {return Err("no toc found".into());}
-
+    let mut init=0;
     for ch in toc{
         let f=ch.content.to_str();
         match f {
@@ -17,6 +17,8 @@ pub fn verify_toc(epub: &mut EpubDoc<BufReader<File>>)->Result<(),Box<dyn std::e
                     epub.set_current_chapter(index);
                     if !check_title(epub, &ch.label) {
                         return Err("Toc not Aligned".into());
+                    }else{
+                        init=index as u32;
                     }
                 }
             },
@@ -25,7 +27,7 @@ pub fn verify_toc(epub: &mut EpubDoc<BufReader<File>>)->Result<(),Box<dyn std::e
             }
         }; 
     }
-    Ok(())
+    Ok(init)
 
 }
 
@@ -75,8 +77,7 @@ pub fn extract_heading(xhtml: &str) -> Option<String> {
         let lw = text.to_lowercase();
 
         if (lw.contains("chapter")
-            || lw.starts_with("prologue")
-            || lw.starts_with("epilogue"))
+            || lw.starts_with("prologue"))
             && text.split_whitespace().count() <= 12
         {
             return Some(text);

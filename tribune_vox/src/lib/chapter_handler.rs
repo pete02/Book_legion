@@ -31,6 +31,7 @@ pub fn handle_chapter(
     tempdir:&str,
     debug:bool
 ) -> Result<(), Box<dyn std::error::Error>> {
+    println!("start chapter: {}", chapter);
     epub.set_current_chapter(chapter);
     let text = get_clean_chapter(epub)?;
     ctx.current_chapter = chapter;
@@ -43,6 +44,9 @@ pub fn handle_chapter(
 
     let chunks: Vec<&str> = text.split('\n').collect();
     let length = chunks.len();
+    if debug{
+        println!("start chunk processing");
+    }
 
     for chunk in chunks {
         ctx.current_chunk += 1;
@@ -69,7 +73,9 @@ fn process_chunk(
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     wait_for_allowed_time(debug);
-
+    if debug{
+        println!("chunk processing");
+    }
     if chunk.is_empty() {
         return Ok(());
     }

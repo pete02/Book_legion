@@ -43,7 +43,15 @@ struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    audiobook(args)
+    let debug=args.debug.clone();
+    let start=std::time::Instant::now();
+    audiobook(args)?;
+    let end=std::time::Instant::now();
+    if debug{
+        println!("time took: {:?}", end-start);
+    }
+
+    Ok(())
 }
 
 

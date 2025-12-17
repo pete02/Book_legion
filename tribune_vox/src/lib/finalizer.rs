@@ -53,7 +53,7 @@ pub fn format_audiobook_from_chapters(
 
     let list_file_content =    if !options.debug{
         (initial_chapter..=end_chapter)
-        .map(|ch| format!("file '{}'", format!("{}/chapter_{:03}.wav", temp_dir, ch)))
+        .map(|ch| format!("file '{}'", format!("chapter_{:03}.wav", ch)))
         .collect::<Vec<_>>()
         .join("\n")
     }else{

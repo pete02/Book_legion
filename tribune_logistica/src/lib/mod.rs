@@ -4,7 +4,6 @@ use axum::{
 };
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
 
 pub mod book_handler;
 pub mod models;
@@ -37,21 +36,18 @@ pub async fn server()->() {
     });
 
     let app = Router::new()
-        .route("/api/login", post(login_handler))
-        .route("/api/refresh", post(refresh_handler))
-        .route("/api/init", get(init_handler))
-        .route("/api/book", post(book_handler))
-        .route("/api/audiomap",post(audiomap))
-        .route("/api/audio", post(audio_handler))
-        .route("/api/update", post(update_handler))
-        .route("/api/manifest", get(manifest_handler))
-        .route("/api/cover/{book}", get(cover_handler))
-        .route("/api/css/{book}", get(css_handler))
+        .route("/login", post(login_handler))
+        .route("/refresh", post(refresh_handler))
+        .route("/init", get(init_handler))
+        .route("/book", post(book_handler))
+        .route("/audiomap",post(audiomap))
+        .route("/audio", post(audio_handler))
+        .route("/update", post(update_handler))
+        .route("/manifest", get(manifest_handler))
+        .route("/cover/{book}", get(cover_handler))
+        .route("/css/{book}", get(css_handler))
         .with_state(state)
-        .layer(CorsLayer::permissive())
-        .fallback_service(
-            ServeDir::new("/public").fallback(ServeDir::new("/public/index.html"))
-        );
+        .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     println!("Server running on http://{}", addr);
