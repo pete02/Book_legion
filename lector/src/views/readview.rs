@@ -55,23 +55,15 @@ pub fn ReadInner()->Element{
                 Link {
                     to: Route::LibraryView {  },
                     button {
-                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;background-color: #999e09ff; color: white",
                         "Library"
                     }
                 }
                 Link{
                     to: Route::BookView {},
                     button {
-                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
+                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;background-color: #999e09ff; color: white",
                         "Book"
-                    }
-                }
-
-                Link{
-                    to: Route::AudioView {},
-                    button {
-                        style: "padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold;",
-                        "Listen"
                     }
                 }
             }

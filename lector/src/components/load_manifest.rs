@@ -18,10 +18,11 @@ pub fn use_load_manifest(mut manifest: Signal<Vec<BookStatus>> ) {
                     match serde_json::from_str::<Manifest>(&str){
                         Err(_)=>tracing::error!("could convert manifest"),
                         Ok(man )=>{
-                            let books: Vec<BookStatus> = man
+                            let mut books: Vec<BookStatus> = man
                             .into_iter()
                             .map(BookStatus::from)
                             .collect();
+                            books.sort_by_key(|b|b.name.clone());
                             manifest.set(books);
                         }
                     }
