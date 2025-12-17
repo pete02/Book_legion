@@ -36,12 +36,28 @@ HEARTBEAT=20
 client_token=None
 
 async def init_browser():
-    print("create browser")
-    global browser_instance, page_instance, client_viewport
+    global browser_instance, page_instance
+
     playwright = await async_playwright().start()
     browser_instance = await playwright.chromium.launch(headless=True)
-    page_instance = await browser_instance.new_page(viewport=client_viewport)
+    page_instance = await browser_instance.new_page()
+
+    async def route_handler(route):
+        url = route.request.url
+        print("url: ", url)
+        if "/api/" in url:
+            rewritten = url.replace(
+                "booklegion-lector/api",
+                "booklegion-tribune_logistica:8000"
+            )
+            print("replacing: ", rewritten)
+            await route.continue_(url=rewritten)
+        else:
+            await route.continue_()
+
+    await page_instance.route("**/*", route_handler)
     await page_instance.goto("http://booklegion-lector")
+
 
 async def monitor_page_changes():
     """Background task that watches the page DOM for changes."""
