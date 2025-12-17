@@ -1,3 +1,7 @@
+- mandatory:
+    - Remove complete need for mentions of time from frontend
+    - JIT audio compilation to replace the pregenerated audio
+
 - optional:
     - chapter list with buttons to jump there?
         - could also have an indication of current chapter
