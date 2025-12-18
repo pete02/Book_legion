@@ -3,15 +3,15 @@ use std::fs;
 use crate::models::*;
 
 
-pub fn load_books(status:&BookStatus) -> Result<HashMap<String, BookData>,Box<dyn std::error::Error>> {
-    let content = get_library_manifest(&status.json)?;
+pub fn load_books(path: &str) -> Result<HashMap<String, BookData>,Box<dyn std::error::Error>> {
+    let content = get_library_manifest(path)?;
     let books: HashMap<String, BookData> = serde_json::from_str(&content)?;
     Ok(books)
 }
 
 
 pub fn load_book(status:&BookStatus) ->Result<BookData, Box<dyn std::error::Error>>{
-    let books=load_books(&status)?;
+    let books=load_books(&status.json)?;
     let Some(book)=books.get(&status.name) else{return Err("No such book in library".into());};
     Ok(book.clone())
 }

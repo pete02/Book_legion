@@ -7,7 +7,7 @@ mod db_handler_tests {
     #[test]
     fn load_books_returns_all_books() {
         let (_dir, book_status, expected_bookdata) = test_helpers::setup_test_book();
-        let books = load_books(&book_status).unwrap();
+        let books = load_books(&book_status.json).unwrap();
 
         assert!(books.contains_key(&book_status.name));
         assert_eq!(books.get(&book_status.name).unwrap(), &expected_bookdata, "Books should hold bookdata");

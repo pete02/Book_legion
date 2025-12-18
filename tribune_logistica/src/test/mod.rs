@@ -1,5 +1,5 @@
 pub mod db_handler_tests;
-//pub mod audio_tests;
+pub mod audio_tests;
 pub mod helpers;
 
 

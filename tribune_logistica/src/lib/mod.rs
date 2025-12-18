@@ -7,7 +7,7 @@ use tower_http::cors::CorsLayer;
 
 //pub mod book_handler;
 pub mod models;
-//pub mod audio_handler;
+pub mod audio_handler;
 pub mod password_handler;
 
 pub mod db_handlers;

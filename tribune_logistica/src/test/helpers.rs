@@ -1,7 +1,9 @@
 pub mod test_helpers {
     use std::{collections::HashMap, path::Path};
     use std::fs::{self, File};
+    
     use tempfile::TempDir;
+    use tribune_logistica::db_handlers::load_books;
     use tribune_logistica::models::*;
 
     #[allow(dead_code)]
@@ -46,7 +48,7 @@ pub mod test_helpers {
 
         fs::create_dir_all(path).unwrap();
         let ap=format!("{}/{}.json",path.to_string_lossy(), book.name);
-        println!("will save audiomap to: {}",ap);
+        
 
         serde_json::to_writer_pretty(File::create(ap).unwrap(),&AudioMap{name:book.name.clone(), map:h}).unwrap();
 
@@ -63,14 +65,45 @@ pub mod test_helpers {
     pub fn setup_test_book()->(TempDir,BookStatus,BookData) {
         let book_name = "testbook";
         let dir=TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join(book_name)).unwrap();
         let manifest_path=dir.path().join("books.json");
         let book_path=dir.path().join(book_name);
         let bookdata=generate_temp_book_data(book_name);
         let bookstatus=gen_book_status(book_name, &bookdata,&book_path, &manifest_path);
 
-
+        let mp3_file = book_path.join(format!("{}.mp3", book_name));
+        std::fs::write(mp3_file, vec![1u8; 100]).unwrap();
         generate_temp_manifest(&manifest_path, &bookdata, book_name);
         gen_audio_map(&bookstatus,&book_path);
         (dir,bookstatus, bookdata)
+    }
+    #[allow(dead_code)]
+
+    pub fn load_real_data()->(BookStatus,BookData){
+        let b=load_books("./data/books.json").unwrap();
+        let book=b.get("mageling").unwrap();
+
+        let stat=BookStatus{
+            name: "mageling".to_owned(),
+            path: "./data/mageling/mageling".to_owned(),
+            chapter: book.initial_chapter,
+            chunk: 1,
+            chapter_to_chunk: book.chapter_to_chunk.clone(),
+            time: 0.0,
+            initial_chapter: book.initial_chapter,
+            json: "./data/books.json".to_owned(),
+            max_chapter: book.max_chapter,
+            duration: book.duration
+        };
+
+        return (stat,book.clone())
+    }
+
+
+    #[allow(dead_code)]
+    pub fn get_real_data(name:&str,base:&str,json:&str)->BookStatus{
+        let b=load_books(&format!("{}/{}",base,json)).unwrap();
+        let book=b.get(name).unwrap();
+        BookStatus::new(name, base, book.clone(), json)
     }
 }

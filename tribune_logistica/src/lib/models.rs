@@ -97,6 +97,22 @@ pub struct BookStatus {
     pub chapter_to_chunk: HashMap<u32,u32>,
     pub duration: f32
 }
+impl BookStatus{
+    pub fn new(name:&str, base_path:&str ,book:BookData, json_file:&str)->BookStatus{
+        BookStatus{
+            name: name.to_owned(),
+            path: format!("{}/{}",base_path,book.path),
+            chapter: book.current_chapter,
+            chunk: book.current_chunk,
+            chapter_to_chunk: book.chapter_to_chunk.clone(),
+            time: book.current_time,
+            initial_chapter: book.initial_chapter,
+            json: format!("{}/{}",base_path,json_file),
+            max_chapter: book.max_chapter,
+            duration: book.duration
+        }
+    }
+}
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
