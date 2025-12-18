@@ -6189,6 +6189,7 @@ dependencies = [
  "futures-util",
  "jsonwebtoken",
  "mp3-duration",
+ "regex",
  "serde",
  "serde_json",
  "serial_test",

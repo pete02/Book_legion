@@ -2,7 +2,7 @@ pub mod db_handler_tests;
 pub mod audio_tests;
 pub mod helpers;
 pub mod update_tests;
-//pub mod book_handler_tests;
+pub mod book_handler_tests;
 
 #[cfg(test)]
 mod tests {

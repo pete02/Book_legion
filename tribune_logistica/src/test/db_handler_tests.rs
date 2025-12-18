@@ -60,4 +60,99 @@ mod db_handler_tests {
         let err = get_library_manifest("/nonexistent/path.json").unwrap_err();
         assert!(err.to_string().contains("No such file"));
     }
+
+
+    #[cfg(test)]
+    mod init_book_tests {
+
+        use std::fs;
+
+        use tribune_logistica::db_handlers::init_book;
+        use crate::test::helpers::test_helpers;
+
+        #[test]
+        fn init_book_audio_success() {
+            let (temp_dir, _, _book_data,_) = test_helpers::setup_test_book();
+            let base: String=temp_dir.path().to_string_lossy().to_string();
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+
+            let result = init_book("testbook", "audio", &json_path.to_string(),&base);
+            
+            assert!(result.is_ok());
+            let book_status = result.unwrap();
+            assert_eq!(book_status.name, "testbook");
+            assert_eq!(book_status.chapter_to_chunk.len(), 1); // matches your dummy data
+        }
+
+        #[test]
+        fn init_book_text_success() {
+            let (temp_dir, _, _book_data,_) = test_helpers::setup_test_book();
+            let base: String=temp_dir.path().to_string_lossy().to_string();
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+
+            let result = init_book("testbook", "text", &json_path.to_string(), &base);
+            assert!(result.is_ok());
+            let book_status = result.unwrap();
+            assert_eq!(book_status.name, "testbook");
+        }
+
+        #[test]
+        fn init_book_errors_incorrect_format() {
+            let (temp_dir, _, _,_) = test_helpers::setup_test_book();
+            let base=temp_dir.path().to_string_lossy().to_string(); 
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+
+            let result = init_book("testbook", "video",&json_path.to_string(), &base);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err["status"], "incorrect format");
+        }
+
+        #[test]
+        fn init_book_errors_missing_audio() {
+            let (temp_dir, status, _,_) = test_helpers::setup_test_book();
+            let base=temp_dir.path().to_string_lossy().to_string(); 
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+            let audio=format!("{}/{}.mp3",status.path,status.name);
+            fs::remove_file(audio).unwrap();
+
+            // No audio or epub exists yet
+            let result = init_book("testbook", "audio", &json_path.to_string(), &base);
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err()["status"], "missing audiobook");
+        }
+
+        #[test]
+        fn init_book_errors_missing_epub() {
+            let (temp_dir, status, _,_) = test_helpers::setup_test_book();
+            let base=temp_dir.path().to_string_lossy().to_string(); 
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+            let epub=format!("{}/{}.epub",status.path,status.name);
+            fs::remove_file(epub).unwrap();
+
+            let result = init_book("testbook", "text", &json_path.to_string(), &base);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err()["status"], "missing book");
+        }
+
+        #[test]
+        fn init_book_errors_not_in_library() {
+            let (temp_dir, _, _,_) = test_helpers::setup_test_book();
+            let base=temp_dir.path().to_string_lossy().to_string(); 
+            let tmp_json_path = temp_dir.path().join("books.json");
+            let json_path=tmp_json_path.to_string_lossy();
+                
+
+            let result = init_book("nonexistent", "audio", &json_path.to_string(), &base);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err()["status"], "not in library");
+        }
+    }
+
 }

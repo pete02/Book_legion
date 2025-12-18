@@ -11,15 +11,15 @@ pub mod test_helpers {
     #[allow(dead_code)]
     fn generate_temp_book_data(name:&str,)->BookData{
         let mut g=HashMap::new();
-        g.insert(2, 10);
+        g.insert(1, 10);
         BookData{
             path: name.to_owned(),
-            initial_chapter: 2,
+            initial_chapter: 1,
             duration: 100.0,
             current_chunk:1,
-            current_chapter: 2,
+            current_chapter: 1,
             current_time: 0.0,
-            max_chapter: 2,
+            max_chapter: 1,
             chapter_to_chunk: g
         }
     }
@@ -137,7 +137,7 @@ pub mod test_helpers {
         let bookdata=generate_temp_book_data(book_name);
         let bookstatus=gen_book_status(book_name, &bookdata,&book_path, &manifest_path);
         
-        //generate_temp_book_files(&book_path, &book_name);
+        generate_temp_book_files(&book_path, &book_name);
         generate_temp_manifest(&manifest_path, &bookdata, book_name);
         let amap=gen_audio_map(&bookstatus,&book_path);
 
