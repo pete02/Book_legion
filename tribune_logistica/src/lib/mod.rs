@@ -14,9 +14,9 @@ pub mod db_handlers;
 pub mod update_handler;
 
 // Import your core logic here:
-//mod logic;
+mod logic;
 
-/*
+
 use logic::*;
 use crate::password_handler::generate_secret;
 
@@ -24,18 +24,15 @@ use crate::password_handler::generate_secret;
 struct AppState {
     manifest: String,
     prefix: String,
+    config: String,
     secret: [u8; 32]
-}
-impl AppState {
-    fn path(&self) -> String {
-        format!("{}/{}", self.prefix, self.manifest)
-    }
 }
 
 pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
-        prefix: "/data".to_string(),
+        prefix: "./data".to_string(),
+        config: "./config".to_string(),
         secret: generate_secret()
     });
 
@@ -45,8 +42,8 @@ pub async fn server()->() {
         .route("/init", get(init_handler))
         .route("/book", post(book_handler))
         .route("/audiomap",post(audiomap))
-        .route("/audio", post(audio_handler))
-        .route("/update", post(update_handler))
+        .route("/audio", post(audio_endpoint))
+        .route("/update", post(update_endpoint))
         .route("/manifest", get(manifest_handler))
         .route("/cover/{book}", get(cover_handler))
         .route("/css/{book}", get(css_handler))
@@ -88,4 +85,3 @@ async fn shutdown_signal() {
 
     println!("Shutdown signal received");
 }
-     */

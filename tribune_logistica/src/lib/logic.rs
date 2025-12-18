@@ -6,33 +6,42 @@ use axum::{
 };
 
 use chrono::Duration;
-use serde_json::json;
-use serde::Deserialize;
+use serde_json::{Value, json};
 use std::sync::Arc;
 
-use crate::{models::{BookStatus, InitQuery, LoginRecord, RefreshRecord}, password_handler::{check_refesh_token, generate_and_store_refresh_token, generate_jwt, verify_jwt, verify_login}};
-
+use crate::{audio_handler, db_handlers, models::*, password_handler, update_handler};
 use crate::AppState;
-
 use crate::db_handlers::*;
-
-use crate::book_handler::*; // your existing functions'
-
-use crate::audio_handler::get_audio_chunks;
+use crate::book_handler::*; 
 
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
     Json(login): Json<LoginRecord>
 )-> impl IntoResponse{
-    match verify_login(&login) {
+    let ppath=&format!("{}/user.json",state.config);
+    println!("REQUEST: /endpint login");
+    println!("sourcing pasword from {}",ppath);
+    let password_data=match get_password_data(&ppath){
+        Err(a)=>return (StatusCode::INTERNAL_SERVER_ERROR,a.to_string()).into_response(),
+        Ok(d)=>d
+    };
+
+    match password_handler::verify_login(&login,password_data.clone()) {
         Err(a)=>return (StatusCode::INTERNAL_SERVER_ERROR,a.to_string()).into_response(),
         Ok(res)=>{
             if res{
-                println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
-                let token=generate_jwt(&login.username, &state.secret, Duration::minutes(5));
-                match generate_and_store_refresh_token(&login.username){
-                    Ok(refresh)=>return (StatusCode::OK, Json(json!({ "access_token": token, "refresh_token": refresh }))).into_response(),
-                    Err(_)=>return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                let token=password_handler::generate_jwt(&login.username, &state.secret, Duration::minutes(5));
+                match password_handler::generate_and_store_refresh_token(&login.username, password_data){
+                    Ok((refresh,saving))=>{
+                        let _=save_password_data(&ppath, &saving);
+                        println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
+                        return (StatusCode::OK, Json(json!({ "access_token": token, "refresh_token": refresh }))).into_response()
+                    },
+                    Err(_)=>{
+                        println!("REQUEST: user: {} endpoint: /login,Denied ", &login.username);
+                        println!("Error in generating refresh token");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                    }
                 }
             }else{
                 println!("REQUEST: user: {} endpoint: /login, Denied", &login.username);
@@ -48,9 +57,16 @@ pub async fn refresh_handler(
     State(state): State<Arc<AppState>>,
     Json(refresh_record): Json<RefreshRecord>
 )-> impl IntoResponse{
-     match check_refesh_token(&refresh_record.username, &refresh_record.refresh_token, Duration::minutes(5), &state.secret) {
+    let ppath=&format!("{}/user.json",state.config);
+    let password_data=match get_password_data(&ppath){
+        Err(a)=>return (StatusCode::INTERNAL_SERVER_ERROR,a.to_string()).into_response(),
+        Ok(d)=>d
+    };
+
+     match password_handler::check_refesh_token(&refresh_record.username, &refresh_record.refresh_token, Duration::minutes(5), &state.secret,password_data) {
         Err(_)=>return StatusCode::FORBIDDEN.into_response(),
-        Ok((access,refresh))=>{
+        Ok((access,(refresh,saving)))=>{
+            let _=save_password_data(ppath, &saving);
             println!("TOKEN REFRESHED: user: {}",refresh_record.username);
             return (StatusCode::OK, Json(json!({ "access_token": access, "refresh_token": refresh }))).into_response()
         },
@@ -71,8 +87,8 @@ pub async fn init_handler(
         };
     println!(" REQUEST: user: {} , endoint: /init", user);
 
-
-    match init_book(&params.name, &params.book_type, &state.path()) {
+    let manifest_path=format!("{}/{}",state.prefix,state.manifest);
+    match db_handlers::init_book(&params.name, &params.book_type, &manifest_path,&state.prefix) {
         Ok(status) => Json(serde_json::to_value(status).unwrap()).into_response(),
         Err(err) => Json(err).into_response(),
     }
@@ -90,7 +106,7 @@ pub async fn book_handler(State(state): State<Arc<AppState>>,h:HeaderMap, Json(b
     println!(" REQUEST: user: {} , endoint: /book book:{}, chapter: {}", user, book.name, book.chapter);
 
     let mut headers: HeaderMap = HeaderMap::new();
-    match get_chapter(Some(book)) {
+    match get_chapter(&book) {
         Ok(text) => {
             headers.insert("Content-Type", HeaderValue::from_static("text/html; charset=utf-8"));
             headers.insert("status", HeaderValue::from_static("ok"));
@@ -116,8 +132,7 @@ pub async fn audiomap(State(state): State<Arc<AppState>>, h: HeaderMap, Json(boo
     };
     println!(" REQUEST: user: {} , endoint: /audiomap, book: {}", user, book.name);
 
-    let path=format!("{}/{}.json",book.name,book.name);
-    match get_audiomap(&path){
+    match get_audiomap(&book){
         Ok(map)=>    Json(json!({"status":"ok","data":map})).into_response(),
         Err(e)=>{
             println!("{}",e);
@@ -127,12 +142,8 @@ pub async fn audiomap(State(state): State<Arc<AppState>>, h: HeaderMap, Json(boo
 }
 
 
-#[derive(Deserialize)]
-pub struct AudioQuery {
-    chunk: u32,
-}
 
-pub async fn audio_handler(
+pub async fn audio_endpoint(
     State(state): State<Arc<AppState>>,
     h: HeaderMap,
     Query(query): Query<AudioQuery>,
@@ -147,22 +158,32 @@ pub async fn audio_handler(
         },
     };
     println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
+    handle_audio_chunks(&book,query.chunk).into_response()
+}
 
-    match get_audio_chunks(
-        Some(&book),
-        query.chunk,
-        &prefix()
+fn handle_audio_chunks(status:&BookStatus, advance: u32)->Json<Value>{
+    let map=match get_audiomap(status){
+        Ok(map)=>map,
+        Err(e)=>return Json(json!({"status": "error", "message": e.to_string()}))
+    };
+
+    match audio_handler::get_audio_chunks(
+        &status,
+        &map,
+        advance
     ) {
         Ok(chunk) => {
-            Json(json!({ "status": "error", "message": "bla".to_string() })).into_response()
+            Json(json!({ "status": "Ok", "chunks":chunk }))
         }
         Err(err) => {
             println!("{}",err);
-            Json(json!({ "status": "error", "message": err.to_string() })).into_response()
+            Json(json!({ "status": "error", "message": err.to_string() }))
         },
     }
 }
-pub async fn update_handler(
+
+
+pub async fn update_endpoint(
     State(state): State<Arc<AppState>>,
     h: HeaderMap,
     Json(book): Json<BookStatus>
@@ -175,10 +196,18 @@ pub async fn update_handler(
         },
     };
     println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
+    handle_update(&book).into_response()
+}
 
-    match update_progress(Some(book)) {
-        Ok(_) => Json(json!({ "status": "ok" })).into_response(),
-        Err(e) => Json(json!({ "status": "error", "message": e })).into_response(),
+fn handle_update(status:&BookStatus)->Json<Value>{
+    let map=match get_audiomap(&status){
+        Ok(map)=>map,
+        Err(e)=>return Json(json!({"status": "error", "message": e.to_string()}))
+    };
+
+    match update_handler::update_progress(status, &map) {
+        Ok(_) => Json(json!({ "status": "ok" })),
+        Err(e) => Json(json!({ "status": "error", "message": e })),
     }
 }
 
@@ -195,30 +224,28 @@ h: HeaderMap
         },
     };
     println!(" REQUEST: user: {} , endoint: /manifest", user);
+    handle_manifest(state).into_response()
+}
 
-    match get_library_manifest(&state.path()) {
-        Ok(data) => Json(serde_json::from_str::<serde_json::Value>(&data).unwrap()).into_response(),
-        Err(e) => Json(json!({ "status": "error", "message": e.to_string() })).into_response(),
+fn handle_manifest(state:Arc<AppState>)->Json<Value>{
+    let manifest_path=format!("{}/{}",state.prefix, state.manifest);
+    match get_library_manifest(&manifest_path) {
+        Ok(data) => Json(serde_json::from_str::<serde_json::Value>(&data).unwrap()),
+        Err(e) => Json(json!({ "status": "error","message": e.to_string(), "path used": manifest_path })),
     }
 }
 
+
 pub async fn cover_handler(
+    State(state): State<Arc<AppState>>,
     Path(book): Path<String>,
 ) -> impl IntoResponse {
     println!(" REQUEST: endoint: /cover book: {}",  book);
 
-    let book = format!("/data/{}/{}.epub",book,book);
+    let book = format!("{}/{}/{}.epub",state.prefix,book,book);
 
-    match extract_files(&book, vec![".jpg", ".jpeg"]) {
-        Ok(css)=>{
-            let mut values = css.values();
-            if values.len() == 1{
-                let Some(v)=values.next()else {return const_err_response("could not extract image".to_owned())};
-                return ([("Content-Type", "image/jpeg")],v.to_owned()).into_response();
-            }else{
-                return const_err_response(format!("cover not unabigious: {} pieces",values.len()));
-            }
-        }
+    match extract_cover(&book) {
+        Ok(cover)=>return ([("Content-Type", "image/jpeg")],cover.to_owned()).into_response(),
         Err(e)=> const_err_response(format!("could not extract cover: {}", e))
     }
 }
@@ -237,7 +264,8 @@ pub async fn css_handler( Path(book): Path<String>,
     };
     println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
 
-    let book = format!("/data/{}/{}.epub", book,book);
+    let book = format!("{}/{}/{}.epub",state.prefix,book,book);
+
     match extract_css(&book){
         Ok(css)=>([(header::CONTENT_TYPE, "text/css; charset=utf8")],css).into_response(),
         Err(e)=> const_err_response(format!("could not extract css: {}", e))
@@ -259,7 +287,7 @@ fn check_token(secret: &[u8], headers: &axum::http::HeaderMap)->Result<String,Re
         Some(t) => t,
         None => return Err((StatusCode::FORBIDDEN, "Missing token").into_response()),
     };
-    let username = match verify_jwt(token, secret) {
+    let username = match password_handler::verify_jwt(token, secret) {
         Ok(u) => u,
         Err(_) => return Err((StatusCode::FORBIDDEN, "Invalid token").into_response()),
     };

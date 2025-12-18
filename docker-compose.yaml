@@ -1,0 +1,54 @@
+
+services:
+  backend:
+    build:
+      context: ./tribune_logistica
+      dockerfile: Dockerfile
+    container_name: tribune_logistica
+    volumes:
+      - ./tribune_logistica/config:/config
+      - ./tribune_logistica/data:/data
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Router for backend
+      - "traefik.http.routers.booklegion-backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.booklegion-backend.entrypoints=web"
+      # Middleware to strip /api prefix
+      - "traefik.http.middlewares.booklegion-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.booklegion-backend.middlewares=booklegion-strip"
+      # Service port inside container
+      - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
+
+  frontend:
+    build:
+      context: ./lector
+      dockerfile: Dockerfile
+    container_name: lector
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8000
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80" 
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    command:
+      - "--api.insecure=true"              # Enable Traefik dashboard at :8081
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:8000"  # Expose HTTP on port 8000
+    ports:
+      - "8000:8000"   # Main HTTP port
+      - "8081:8081"   # Dashboard (optional)
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: unless-stopped

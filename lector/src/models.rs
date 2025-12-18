@@ -99,3 +99,15 @@ pub struct ChunkData{
     pub data:Chunkmap,
     pub status: String
 }
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioChunkResult {
+    pub data: Vec<u8>,
+    pub place:String,
+    pub reached_end: bool,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct JsonPayload{
+    pub chunks: Vec<AudioChunkResult>
+}

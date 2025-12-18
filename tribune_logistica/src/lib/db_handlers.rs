@@ -49,11 +49,21 @@ pub fn init_book(name: &str, book_type: &str, json_path: &str, base_path:&str) -
     if book_type=="text" && !Path::exists(Path::new(format!("{}/{}/{}.epub",base_path,&book.path,name).as_str())){
         return Err(error("missing book"));
     }
-
+    
     Ok(BookStatus::new(name, base_path, book.clone(), json_path))
 }
 
 
 pub fn prefix()->String{
     "./data".to_string()
+}
+
+
+
+pub fn get_password_data(path: &str)->Result<String, std::io::Error>{
+    fs::read_to_string(path)
+}
+
+pub fn save_password_data(path: &str, data:&str)->Result<(), std::io::Error>{
+    fs::write(path, data)
 }

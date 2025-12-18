@@ -28,6 +28,12 @@
     "json"
 }
 
+- /login
+    will log in
+    needs: pub struct LoginRecord {
+        pub username: String,
+        pub password: String,
+    }
 
 - /init?name=book,type=book_type
     will initialize a book
@@ -41,7 +47,7 @@
     tested, ok
 
 - POST /audio?chunk=x
-    will return the the the audio between the current chunk and the desired chunk, as well as a flag whether or not we reached end of the page. Requires BookStatus struct
+    will return the the the audio between the current chunk and the desired chunk as a vec of chunk and location, as well as a flag whether or not we reached end of the page. Requires BookStatus struct
     tested, ok
 
 - POST /audiomap

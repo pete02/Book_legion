@@ -1,29 +1,31 @@
 
+
 use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen_futures::spawn_local;
 use js_sys::{Array, Uint8Array};
 use web_sys::{Blob, BlobPropertyBag, Url};
 
 use crate::components::server_api;
-use crate::models::{BookStatus, GlobalState};
+use crate::models::{AudioChunkResult, BookStatus, GlobalState};
 use crate::components::audio::ADVANCE_AMOUNT;
 
 
 
 pub fn audio_sourcing(audio_url: Signal<Option<String>>, reload:Signal<bool>, time:Signal<f64>){
     let audio_url=audio_url.clone();
-    let resource=use_signal(||None);
+    let audio_urls: Signal<Vec<(String,String)>>=use_signal(||Vec::new());
+    let resource: Signal<Option<Vec<AudioChunkResult>>>=use_signal(||None);
     let private_state=use_signal(||None);
     
     reload_audio_watcher(private_state,reload, resource,audio_url, time);
-    audio_url_hook(audio_url, resource);
+    audio_url_hook(audio_url, audio_urls,resource);
     resource_fetch_hook(resource, private_state);
 }
 
 fn reload_audio_watcher(
     mut private_state:Signal<Option<BookStatus>>,
     mut reload:Signal<bool>,
-    mut resource: Signal<Option<Vec<u8>>>,
+    mut resource: Signal<Option<Vec<AudioChunkResult>>>,
     mut audio_url: Signal<Option<String>>,
     mut time:Signal<f64>
     ){
@@ -46,18 +48,35 @@ fn reload_audio_watcher(
 
 fn audio_url_hook(
     mut audio_url: Signal<Option<String>>,
-    mut resource: Signal<Option<Vec<u8>>>,
+    mut audio_urls:Signal<Vec<(String,String)>>,
+    mut resource: Signal<Option<Vec<AudioChunkResult>>>,
 ) {
     use_effect(move || {
         if audio_url().is_some() {return; }
-        let Some(bytes) = resource() else {return;};
-        let url = create_blob(bytes);
-        audio_url.set(Some(url));
-        resource.set(None);
+        if audio_urls().len()>0{
+            audio_urls.with_mut(|vec|{
+                let (place, url)=vec.remove(0);
+                audio_url.set(Some(url));
+
+                
+                tracing::debug!("load chunk: {}", place)
+            });
+            tracing::debug!("urls len: {}", audio_urls.len());
+        }else{
+            let Some(vec)=resource() else {return;};
+            let mut urls=Vec::new();
+            for v in vec {
+                let url=create_blob(v.data);
+                urls.push((v.place, url));
+            }
+            tracing::debug!("audio urls len: {}", urls.len());
+            audio_urls.set(urls);
+            resource.set(None);
+        }
     });
 }
 
-fn resource_fetch_hook(mut resource: Signal<Option<Vec<u8>>>, mut private_state:Signal<Option<BookStatus>>){
+fn resource_fetch_hook(mut resource: Signal<Option<Vec<AudioChunkResult>>>, mut private_state:Signal<Option<BookStatus>>){
     let mut fetching=use_signal(||false);
     let global=use_context::<Signal<GlobalState>>();
     use_effect(move ||{
@@ -74,17 +93,18 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<u8>>>, mut private_state:
                     tracing::error!("error in audio_fetch: {e}");
                     fetching.set(false);
                 }
-                Ok((reached_end, bytes))=>{
-                    if reached_end{
+                Ok(vec)=>{
+                    if vec[vec.len()-1].reached_end{
                         book.chapter+=1;
                         book.chunk=1
                     }else{
-                        book.chunk +=ADVANCE_AMOUNT+1;
+                        book.chunk +=ADVANCE_AMOUNT;
                     }
+
                     tracing::debug!("current book chunk: {}", book.chunk);
                     private_state.set(Some(book));
-                    tracing::debug!("private_stage: {:?}", private_state());
-                    resource.set(Some(bytes));
+                    tracing::debug!("resource len: {}", vec.len());
+                    resource.set(Some(vec));
                     fetching.set(false);
                 }
             }

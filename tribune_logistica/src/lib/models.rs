@@ -107,7 +107,7 @@ impl BookStatus{
             chapter_to_chunk: book.chapter_to_chunk.clone(),
             time: book.current_time,
             initial_chapter: book.initial_chapter,
-            json: format!("{}/{}",base_path,json_file),
+            json: json_file.to_owned(),
             max_chapter: book.max_chapter,
             duration: book.duration
         }
@@ -156,4 +156,10 @@ pub struct InitQuery {
     pub name: String,
     #[serde(rename = "type")]
     pub book_type: String,
+}
+
+
+#[derive(Deserialize)]
+pub struct AudioQuery {
+    pub chunk: u32,
 }

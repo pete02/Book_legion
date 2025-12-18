@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use dioxus::logger::tracing;
 
 
-use crate::models::{BookStatus, ChunkData, ChunkProgress, RefreshRecord, Tokens};
+use crate::models::{AudioChunkResult, BookStatus, ChunkData, ChunkProgress, JsonPayload, RefreshRecord, Tokens};
 
 use crate::components::audio::ADVANCE_AMOUNT;
 
 pub async fn fetch_audiomap(book: &BookStatus, access_token:String) -> Result<HashMap<String,ChunkProgress>, Box<dyn std::error::Error>> {
-    let data=reqwasm::http::Request::post("/api/audiomap")
+    let data=reqwasm::http::Request::post("http://0.0.0.0:8000/audiomap")
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", access_token))
         .body(serde_json::to_string(&book)?)
@@ -21,26 +21,26 @@ pub async fn fetch_audiomap(book: &BookStatus, access_token:String) -> Result<Ha
     return Ok(map)
 }
 
-pub async fn fetch_audio(book: &BookStatus, access_token:String) -> Result<(bool,Vec<u8>), Box<dyn std::error::Error>> {
+pub async fn fetch_audio(book: &BookStatus, access_token:String) -> Result<Vec<AudioChunkResult>, Box<dyn std::error::Error>> {
     let mut book=book.clone();
     book.chapter=book.chapter.clamp(book.initial_chapter, book.max_chapter);
     book.chunk=book.chunk.clamp(1, book.chapter_to_chunk[&book.chapter]);
 
-    let url = format!("/api/audio?chunk={}", ADVANCE_AMOUNT);
-    let bytes = reqwasm::http::Request::post(&url)
+    let url = format!("http://0.0.0.0:8000/audio?chunk={}", ADVANCE_AMOUNT);
+    let bytes: Result<JsonPayload, reqwasm::Error> = reqwasm::http::Request::post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", access_token))
         .body(serde_json::to_string(&book)?)
         .send()
-        .await?;
-    match bytes.headers().get("reached-end"){
-        Some(value)=> Ok((value == "true", bytes.binary().await?)),
-        None=>return Err("incorrect headers".into())
-    }
+        .await?
+        .json().await;
+    
+    let json= bytes?;
+    Ok(json.chunks)
 }
 
 pub async fn update_progress(book:BookStatus, access_token:String)->Result<(),Box<dyn std::error::Error>>{
-    let _=reqwasm::http::Request::post("/api/update")
+    let _=reqwasm::http::Request::post("http://0.0.0.0:8000/update")
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", access_token))
         .body(serde_json::to_string(&book)?)
@@ -52,7 +52,7 @@ pub async fn update_progress(book:BookStatus, access_token:String)->Result<(),Bo
 
 
 pub async fn fetch_chapter(book: BookStatus, access_token:String) -> Result<String, Box<dyn std::error::Error>> {
-    let url = "/api/book";
+    let url = "http://0.0.0.0:8000/book";
     let bytes = reqwasm::http::Request::post(url)
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", access_token))
@@ -64,7 +64,7 @@ pub async fn fetch_chapter(book: BookStatus, access_token:String) -> Result<Stri
 }
 
 pub async fn get_book(book_name:String, access_token:String) -> Result<BookStatus, Box<dyn std::error::Error>> {
-    let json: BookStatus = reqwasm::http::Request::get(&format!("/api/init?name={}&type=text",book_name))
+    let json: BookStatus = reqwasm::http::Request::get(&format!("http://0.0.0.0:8000/init?name={}&type=text",book_name))
         .header("Authorization", &format!("Bearer {}", access_token))
         .send()
         .await?
@@ -74,7 +74,7 @@ pub async fn get_book(book_name:String, access_token:String) -> Result<BookStatu
 }
 
 pub async fn fetch_css(book: &str, access_token:String) -> Result<String, Box<dyn std::error::Error>> {
-    let url = format!("/api/css/{}", book);
+    let url = format!("http://0.0.0.0:8000/css/{}", book);
     let resp = reqwasm::http::Request::get(&url)
         .header("Authorization", &format!("Bearer {}",access_token))
         .send().await?;
@@ -93,7 +93,7 @@ pub async fn fetch_login(
     user: &str,
     pass: &str,
 ) -> Result<Tokens, Box<dyn std::error::Error>> {
-    let url = "/api/login";
+    let url = "http://0.0.0.0:8000/login";
 
     let body = serde_json::json!({
         "username": user,
@@ -117,7 +117,7 @@ pub async fn fetch_login(
 
 pub async fn refresh_access_token(user:String, refresh_token:String)->Result<Tokens, Box<dyn std::error::Error>>{
     let record=RefreshRecord::new(user, refresh_token);
-    let resp=reqwasm::http::Request::post("/api/refresh")
+    let resp=reqwasm::http::Request::post("http://0.0.0.0:8000/refresh")
         .header("Content-Type", "application/json")
         .body(serde_json::to_string(&record)?)
         .send().await?;
@@ -129,7 +129,7 @@ pub async fn refresh_access_token(user:String, refresh_token:String)->Result<Tok
 pub async fn fetch_manifest(access_token:String)-> Result<String, Box<dyn std::error::Error>>{
     tracing::debug!("start manifest");
     tracing::debug!("access token got");
-    let url = format!("/api/manifest");
+    let url = format!("http://0.0.0.0:8000/manifest");
     let resp = reqwasm::http::Request::get(&url)
         .header("Authorization", &format!("Bearer {}",access_token))
         .send().await?;

@@ -5,14 +5,13 @@ use argon2::{
         rand_core::{OsRng, RngCore}
     }
 };
-use std::fs;
+
 use std::io;
 
 use crate::models::{Claims, LoginRecord, UserRecord};
 
 
-pub fn verify_login(login:&LoginRecord) -> io::Result<bool> {
-    let data = fs::read_to_string("/config/user.json")?;
+pub fn verify_login(login:&LoginRecord, data:String) -> io::Result<bool> {
     let user: UserRecord = serde_json::from_str(&data)?;
     if user.username != login.username {
         let dummy_hash = "$argon2id$v=19$m=19456,t=2,p=1$\
@@ -49,28 +48,26 @@ pub fn generate_jwt(username: &str, secret: &[u8], delta:TimeDelta) -> String {
 }
 use base64::{engine::general_purpose, Engine as _};
 pub fn generate_and_store_refresh_token(
-    username: &str
-) -> io::Result<String> {
+    username: &str,
+    password_data:String
+) -> io::Result<(String, String)> {
     let mut bytes = vec![0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     let token = general_purpose::URL_SAFE_NO_PAD.encode(&bytes);
 
-    let data = fs::read_to_string("/config/user.json")?;
-    let mut user: UserRecord = serde_json::from_str(&data)?;
+    let mut user: UserRecord = serde_json::from_str(&password_data)?;
 
     if user.username != username {
         return Err(io::Error::new(io::ErrorKind::NotFound, "User not found"));
     }
     user.refresh_token=token.clone();
     let json = serde_json::to_string_pretty(&user)?;
-    fs::write("/config/user.json", json)?;
 
-    Ok(token)
+    Ok((token, json))
 }
 
-pub fn check_refesh_token(username: &str, token: &str, delta:TimeDelta, secret: &[u8])-> io::Result<(String, String)>{
-    let data = fs::read_to_string("/config/user.json")?;
-    let user: UserRecord = serde_json::from_str(&data)?;
+pub fn check_refesh_token(username: &str, token: &str, delta:TimeDelta, secret: &[u8], password_data:String)-> io::Result<(String, (String,String))>{
+    let user: UserRecord = serde_json::from_str(&password_data)?;
 
     if user.username!=username{
         return Err(io::Error::new(io::ErrorKind::NotFound, "User not found"));
@@ -80,7 +77,7 @@ pub fn check_refesh_token(username: &str, token: &str, delta:TimeDelta, secret: 
         return Err(io::Error::new(io::ErrorKind::NotFound, "incorrect refesh token"));
     }
 
-    let refresh=generate_and_store_refresh_token(username)?;
+    let refresh=generate_and_store_refresh_token(username, password_data)?;
     let access=generate_jwt(username, secret, delta);
 
     Ok((access,refresh))

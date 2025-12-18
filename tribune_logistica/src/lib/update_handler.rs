@@ -3,7 +3,7 @@ use crate::db_handlers::*;
 use std::fs;
 
 
-pub fn update_progress(status:BookStatus, map:&AudioMap)->Result<(),String>{
+pub fn update_progress(status: &BookStatus, map:&AudioMap)->Result<(),String>{
     let mut books= load_books(&status.json).map_err(|_|"missing manifest")?;
     let book=books.get_mut(&status.name).ok_or("not in library")?;
     if status.chapter>book.max_chapter{

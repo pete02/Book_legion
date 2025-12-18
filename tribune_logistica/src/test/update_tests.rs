@@ -15,7 +15,7 @@ mod update_progress_tests {
         status.chapter = status.initial_chapter;
         status.time = 999.0; // should be overridden
 
-        update_progress(status.clone(),&map).unwrap();
+        update_progress(&status.clone(),&map).unwrap();
 
         let books = load_books(&status.json).unwrap();
         let book = books.get(&status.name).unwrap();
@@ -30,7 +30,7 @@ mod update_progress_tests {
         let (_dir, status, _data,_) = test_helpers::setup_test_book();
         let map=AudioMap{name: status.name.clone(), map:HashMap::new()};
 
-        update_progress(status.clone(),&map).unwrap();
+        update_progress(&status.clone(),&map).unwrap();
 
         let books = load_books(&status.json).unwrap();
         let book = books.get(&status.name).unwrap();
@@ -46,7 +46,7 @@ mod update_progress_tests {
 
         fs::remove_file(&status.json).unwrap();
 
-        let res = update_progress(status,&map);
+        let res = update_progress(&status,&map);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "missing manifest");
     }
@@ -57,7 +57,7 @@ mod update_progress_tests {
 
         status.name = "nonexistent".into();
 
-        let res = update_progress(status,&map);
+        let res = update_progress(&status,&map);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "not in library");
     }
@@ -68,7 +68,7 @@ mod update_progress_tests {
 
         status.chapter = 999;
 
-        let res = update_progress(status,&map);
+        let res = update_progress(&status,&map);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "chapter overflow");
     }
@@ -79,7 +79,7 @@ mod update_progress_tests {
 
         status.chapter = 3; // greater than chapter_to_chunk map
 
-        let res = update_progress(status,&map);
+        let res = update_progress(&status,&map);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "chapter overflow");
     }
@@ -91,7 +91,7 @@ mod update_progress_tests {
         let max = data.chapter_to_chunk[&status.chapter];
         status.chunk = max + 1;
 
-        let res = update_progress(status,&map);
+        let res = update_progress(&status,&map);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "chunk overflow");
     }

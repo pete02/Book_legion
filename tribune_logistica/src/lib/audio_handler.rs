@@ -60,7 +60,7 @@ pub fn get_audio_chunk(status: &BookStatus, audiomap:&AudioMap, chapter:usize, c
 
 
 
-static TEST:bool=true;
+static TEST:bool=false;
 fn slice_mp3(input: &str, output: &str, start: f32, end: f32) -> std::io::Result<()> {
 
     if !TEST{
