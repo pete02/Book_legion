@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use dioxus::logger::tracing;
 use dioxus::prelude::*;
 
 use web_sys::{HtmlAudioElement};
@@ -16,8 +19,8 @@ pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element 
     let precent= use_signal(||0.0);
 
     create_total_time(total, total_str);
-    create_current_time(time, cur_str, precent, total);
-
+    create_current_time(time, cur_str);
+    create_precentage(precent);
 
     rsx! {
     div {
@@ -33,7 +36,7 @@ pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element 
             }
             p {
                 class: "absolute left-0 -bottom-6 text-sm",
-                "{cur_str()} / {total_str()}"
+                "{cur_str()}"
             }
         }
 
@@ -45,7 +48,7 @@ pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element 
 
 
 #[component]
-pub fn ControlButtons(playing: Signal<bool>, time: Signal<f64>)->Element{
+pub fn ControlButtons(playing: Signal<bool>, reload:Signal<i32> )->Element{
     rsx! {
         div {
             class: "my-2 flex items-center gap-4",
@@ -57,7 +60,7 @@ pub fn ControlButtons(playing: Signal<bool>, time: Signal<f64>)->Element{
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| { time_jump(time, -30.0); },
+                onclick: move |_| { reload.set(-1); },
                 img {
                     class: "w-6 h-6 object-contain transform -scale-x-100",
                     src: FORWARD
@@ -80,7 +83,7 @@ pub fn ControlButtons(playing: Signal<bool>, time: Signal<f64>)->Element{
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| { time_jump(time, 30.0);  },
+                onclick: move |_| { reload.set(1);  },
                 img {
                     class: "w-6 h-6 object-contain",
                     src: FORWARD
@@ -91,23 +94,10 @@ pub fn ControlButtons(playing: Signal<bool>, time: Signal<f64>)->Element{
     
 }
 
-
-fn time_jump(mut time: Signal<f64>, jump:f64){
-    let global=use_context::<Signal<GlobalState>>();
-    let Some(book)=global().book else {return;};
-    time.with_mut(|t|{
-        *t=(*t+jump).clamp(0.0, book.duration);
-    });
-
-}
-
-fn create_current_time(current: Signal<f64>, cur_str: Signal<String>, precent:Signal<f64>, total:Signal<f64>){
+fn create_current_time(current: Signal<f64>, cur_str: Signal<String>){
 
     use_effect({
-        let mut cur_str=cur_str.clone();
-        let mut precent=precent.clone();
-        move || {
-            precent.set(if total() > 0.0 { current()/total()*100.0 } else { 0.0 });
+        let mut cur_str=cur_str.clone();        move || {
             let t=current() as i32;
             cur_str.set(format_time(t));
         }
@@ -135,6 +125,19 @@ fn create_total_time(total:Signal<f64>, total_str:Signal<String>){
 }
 
 
+fn create_precentage(mut precent:Signal<f64>){
+    let global=use_context::<Signal<GlobalState>>();
+    use_effect(move||{
+        let Some(book)=global().book.clone() else {return;};
+        let cur=(calculate_max_chunks(book.initial_chapter, book.chapter-1, &book.chapter_to_chunk) +book.chunk)as f64;
+        let max=calculate_max_chunks(book.initial_chapter, book.max_chapter, &book.chapter_to_chunk) as f64;
+        tracing::debug!("now: {}", cur);
+        tracing::debug!("max: {}",max);
+        precent.set((cur/max)*100.0);
+    });
+}
+
+
 fn format_time(seconds: i32) -> String {
     format!("{:02}:{:02}:{:02}", seconds/3600, (seconds/60)%60, seconds%60)
 }
@@ -150,4 +153,14 @@ fn playpause(playing: Signal<bool>){
             let _ = audio.play();
         }
     }
+}
+
+
+fn calculate_max_chunks(start:u32, stop:u32, chapter_to_chunk:&HashMap<u32,u32>)->u32{
+    let mut chuhks=0;
+    for i in start..=stop{
+        let Some(num)=chapter_to_chunk.get(&i) else{return chuhks;};
+        chuhks+=num;
+    }
+    chuhks
 }

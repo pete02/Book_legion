@@ -1,25 +1,11 @@
-use std::collections::HashMap;
-
 use dioxus::logger::tracing;
 
 
-use crate::models::{AudioChunkResult, BookStatus, ChunkData, ChunkProgress, JsonPayload, RefreshRecord, Tokens};
+use crate::models::{AudioChunkResult, BookStatus, JsonPayload, RefreshRecord, Tokens};
 
 use crate::components::audio::ADVANCE_AMOUNT;
 
-pub async fn fetch_audiomap(book: &BookStatus, access_token:String) -> Result<HashMap<String,ChunkProgress>, Box<dyn std::error::Error>> {
-    let data=reqwasm::http::Request::post("http://0.0.0.0:8000/audiomap")
-        .header("Content-Type", "application/json")
-        .header("Authorization", &format!("Bearer {}", access_token))
-        .body(serde_json::to_string(&book)?)
-        .send()
-        .await?.text().await?;
 
-
-    let chunkdata:ChunkData=serde_json::from_str(&data)?;
-    let map: HashMap<String, ChunkProgress>=chunkdata.data.map;
-    return Ok(map)
-}
 
 pub async fn fetch_audio(book: &BookStatus, access_token:String) -> Result<Vec<AudioChunkResult>, Box<dyn std::error::Error>> {
     let mut book=book.clone();

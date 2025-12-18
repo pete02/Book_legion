@@ -81,26 +81,6 @@ pub struct Tokens{
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChunkProgress {
-    pub chapter_number: u32,
-    pub chunk_number: u32,
-    pub start_time: f64,
-    pub duration: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chunkmap{
-    pub name: String,
-    pub map: HashMap<String,ChunkProgress>
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChunkData{
-    pub data:Chunkmap,
-    pub status: String
-}
-
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioChunkResult {
     pub data: Vec<u8>,

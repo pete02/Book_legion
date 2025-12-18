@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_chunk_calculator, use_playback_tick};
+use crate::components::audio::{AudioPlayer, ControlButtons, TimeBar, audio_sourcing, use_playback_tick};
 use crate::components::{BookCover, global_updater, load_name, use_book_parsing};
 use crate::models::GlobalState;
 use crate::views::Route;
@@ -27,7 +27,7 @@ pub fn AudioView()->Element{
 #[component]
 fn AudioInner( ) -> Element {
     let playing= use_signal(||false);
-    let reload=use_signal(||true); // to load the book first time
+    let reload=use_signal(||0); // to load the book first time
 
     let time = use_signal(|| 0.0);
 
@@ -35,7 +35,6 @@ fn AudioInner( ) -> Element {
     let book=use_signal(||"".to_string());
     
     use_book_parsing(book);
-    use_chunk_calculator(time, reload);
     load_name(book);
     use_playback_tick(playing, time);
 
@@ -73,7 +72,7 @@ fn AudioInner( ) -> Element {
             div {
                 class: "w-full flex flex-col items-center justify-start",
                 TimeBar { time, audio_url }
-                ControlButtons {playing, time}
+                ControlButtons {playing, reload}
             }   
          }
     }
