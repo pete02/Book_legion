@@ -1,10 +1,12 @@
 pub mod test_helpers {
     use std::{collections::HashMap, path::Path};
     use std::fs::{self, File};
-    
+    use std::io::Write;    
     use tempfile::TempDir;
     use tribune_logistica::db_handlers::load_books;
     use tribune_logistica::models::*;
+    use zip::ZipWriter;
+    use zip::write::FileOptions;
 
     #[allow(dead_code)]
     fn generate_temp_book_data(name:&str,)->BookData{
@@ -39,7 +41,7 @@ pub mod test_helpers {
     }
 
     #[allow(dead_code)]
-    fn gen_audio_map(book:&BookStatus,path:&Path){
+    fn gen_audio_map(book:&BookStatus,path:&Path)->AudioMap{
         let mut h:HashMap<String,AudioMapEntry>=HashMap::new();
 
         for i in 1..=10{
@@ -48,9 +50,9 @@ pub mod test_helpers {
 
         fs::create_dir_all(path).unwrap();
         let ap=format!("{}/{}.json",path.to_string_lossy(), book.name);
-        
-
-        serde_json::to_writer_pretty(File::create(ap).unwrap(),&AudioMap{name:book.name.clone(), map:h}).unwrap();
+        let map=AudioMap{name:book.name.clone(), map:h};
+        serde_json::to_writer_pretty(File::create(ap).unwrap(),&map).unwrap();
+        map
 
     }
 
@@ -60,22 +62,87 @@ pub mod test_helpers {
         h.insert(name.to_owned(), data);
         serde_json::to_writer_pretty(File::create(bookdir).unwrap(),&h).unwrap();
     }
+    #[allow(dead_code)]
+    fn generate_temp_book_files(book_path:&Path, name:&str){
+        let mp3=book_path.join(format!("{}.mp3",name));
+        
+        std::fs::write(&mp3, vec![1u8; 100]).unwrap();
+        let epub=book_path.join(format!("{}.epub",name));
+        create_minimal_epub(&epub).unwrap()
+
+    }
+
+    fn create_minimal_epub(path: &Path) -> std::io::Result<()> {
+        let file = File::create(path)?;
+        let mut zip = ZipWriter::new(file);
+
+        let stored: FileOptions<()> = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let deflated: FileOptions<()> = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+        // REQUIRED: mimetype must be first and uncompressed
+        zip.start_file("mimetype", stored)?;
+        zip.write_all(b"application/epub+zip")?;
+
+        // META-INF/container.xml
+        zip.start_file("META-INF/container.xml", deflated)?;
+        zip.write_all(br#"<?xml version="1.0"?>
+    <container version="1.0"
+        xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+    <rootfiles>
+        <rootfile full-path="OEBPS/content.opf"
+                media-type="application/oebps-package+xml"/>
+    </rootfiles>
+    </container>"#)?;
+
+        // content.opf
+        zip.start_file("OEBPS/content.opf", deflated)?;
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+    <package version="3.0"
+            xmlns="http://www.idpf.org/2007/opf"
+            unique-identifier="BookId">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:title>Test Book</dc:title>
+        <dc:language>en</dc:language>
+        <dc:identifier id="BookId">test</dc:identifier>
+    </metadata>
+    <manifest>
+        <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    </manifest>
+    <spine>
+        <itemref idref="c1"/>
+    </spine>
+    </package>"#)?;
+
+        // chapter
+        zip.start_file("OEBPS/chapter1.xhtml", deflated)?;
+        zip.write_all(br#"<?xml version="1.0" encoding="utf-8"?>
+    <html xmlns="http://www.w3.org/1999/xhtml">
+    <body>
+        <p>Hello chapter one</p>
+    </body>
+    </html>"#)?;
+
+        zip.finish()?;
+        Ok(())
+    }
 
 #[allow(dead_code)]
-    pub fn setup_test_book()->(TempDir,BookStatus,BookData) {
+    pub fn setup_test_book()->(TempDir,BookStatus,BookData, AudioMap) {
         let book_name = "testbook";
         let dir=TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join(book_name)).unwrap();
         let manifest_path=dir.path().join("books.json");
         let book_path=dir.path().join(book_name);
+
         let bookdata=generate_temp_book_data(book_name);
         let bookstatus=gen_book_status(book_name, &bookdata,&book_path, &manifest_path);
-
-        let mp3_file = book_path.join(format!("{}.mp3", book_name));
-        std::fs::write(mp3_file, vec![1u8; 100]).unwrap();
+        
+        //generate_temp_book_files(&book_path, &book_name);
         generate_temp_manifest(&manifest_path, &bookdata, book_name);
-        gen_audio_map(&bookstatus,&book_path);
-        (dir,bookstatus, bookdata)
+        let amap=gen_audio_map(&bookstatus,&book_path);
+
+
+        (dir,bookstatus, bookdata, amap)
     }
     #[allow(dead_code)]
 

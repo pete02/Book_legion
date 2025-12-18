@@ -1,3 +1,4 @@
+use axum::http::status;
 use serde_json::json;
 use zip::ZipArchive;
 use std::{collections::HashMap, path::Path};
@@ -11,8 +12,6 @@ use crate::db_handlers::*;
 fn error(msg: &str) -> serde_json::Value {
     json!({ "status": msg, "chapter": -1, "chunk": -1 })
 }
-
-
 
 pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookStatus,serde_json::Value> {
     if book_type != "audio" && book_type != "text" {
@@ -32,7 +31,7 @@ pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookSt
 
     Ok(BookStatus{
         name: name.to_owned(),
-        path: book.path.to_owned(),
+        path: format!("{}/{}",prefix(),book.path),
         chapter: book.current_chapter,
         chunk: book.current_chunk,
         chapter_to_chunk: book.chapter_to_chunk.clone(),
@@ -44,47 +43,8 @@ pub fn init_book(name: &str, book_type: &str, books_path: &str) -> Result<BookSt
     })
 }
 
-pub fn update_progress(book_option:Option<BookStatus>)->Result<(),String>{
-    
-    let status=book_option.ok_or("no initialized book")?;
-    let mut books= load_books(&status.json).map_err(|_|"missing manifest")?;
-    let book=books.get_mut(&status.name).ok_or("not in library")?;
-
-    let path= format!("{}/{}.json", book.path, book.path);
-    let map=get_audiomap(&path).map_err(|_| "no book audiomap found")?;
-    if status.chapter>book.max_chapter{
-        return Err("chapter overflow".into());
-    }
-
-    let max_chunks = book.chapter_to_chunk.get(&status.chapter)
-    .ok_or("invalid chapter number")?;
-    if &status.chunk>max_chunks{
-        return Err("chunk overflow".into());
-    }
-
-    let true_time=map.get((status.chapter as usize, status.chunk as usize));
-    match true_time {
-        None=>{
-            book.current_chunk=status.chunk;
-            book.current_chapter=status.chapter;
-            book.current_time=status.time;
-        },
-        Some(time)=>{
-            book.current_chunk=status.chunk;
-            book.current_chapter=status.chapter;
-            book.current_time=time.start_time;
-        }
-    }
-
-    
-    let data = serde_json::to_string_pretty(&books).map_err(|_| "cannot turn books into json")?;
-    fs::write(&status.json, data).map_err(|_| "error in writing to library manifest")?;
-    Ok(())
-}
-
-pub fn get_chapter(book_option:Option<BookStatus>)->Result<String,String>{
-    let status=book_option.ok_or("no initialized book")?;
-    let path=format!("{}/{}/{}.epub",prefix(), status.path,status.name);
+pub fn get_chapter(status:&BookStatus)->Result<String,String>{
+    let path=format!("{}/{}.epub", status.path,status.name);
     let mut book=EpubDoc::new(&path).map_err(|_|"Failed to open EPUB in the path".to_owned())?;
     
     if status.chapter as usize >book.get_num_chapters(){
@@ -100,7 +60,6 @@ pub fn get_chapter(book_option:Option<BookStatus>)->Result<String,String>{
     }
 }
 
-
 pub fn extract_css(path:&str)-> Result<String, Box<dyn std::error::Error>>{
     let mut css="".to_owned();
     let files=extract_files(path, vec![".css"])?;
@@ -110,9 +69,6 @@ pub fn extract_css(path:&str)-> Result<String, Box<dyn std::error::Error>>{
     }
     Ok(css)
 }
-
-
-
 
 pub fn extract_files(path: &str, file_types:Vec<&str>)->Result<HashMap<String,Vec<u8>>,Box<dyn std::error::Error>>{
     let book=File::open(path)?;
