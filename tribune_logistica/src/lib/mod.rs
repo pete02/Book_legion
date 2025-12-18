@@ -5,15 +5,18 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::cors::CorsLayer;
 
-pub mod book_handler;
+//pub mod book_handler;
 pub mod models;
-
+//pub mod audio_handler;
 pub mod password_handler;
 
-// Import your core logic here:
-mod logic;
-use logic::*;
+pub mod db_handlers;
 
+// Import your core logic here:
+//mod logic;
+
+/*
+use logic::*;
 use crate::password_handler::generate_secret;
 
 #[derive(Clone)]
@@ -84,3 +87,4 @@ async fn shutdown_signal() {
 
     println!("Shutdown signal received");
 }
+     */

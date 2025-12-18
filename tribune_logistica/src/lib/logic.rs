@@ -14,8 +14,11 @@ use crate::{models::{BookStatus, InitQuery, LoginRecord, RefreshRecord}, passwor
 
 use crate::AppState;
 
+use crate::db_handlers::*;
 
-use crate::book_handler::*; // your existing functions
+use crate::book_handler::*; // your existing functions'
+
+use crate::audio_handler::get_audio_chunks;
 
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
@@ -145,19 +148,13 @@ pub async fn audio_handler(
     };
     println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
 
-    match get_audio_chunk(
+    match get_audio_chunks(
         Some(&book),
-        query.chunk
+        query.chunk,
+        &prefix()
     ) {
         Ok(chunk) => {
-            println!("Sending audio");
-            let mut headers = HeaderMap::new();
-            headers.insert("Content-Type", HeaderValue::from_static("audio/mpeg"));
-            headers.insert("Content-Length", HeaderValue::from_str(&chunk.data.len().to_string()).unwrap());
-            headers.insert("Reached-End", HeaderValue::from_str(&chunk.reached_end.to_string()).unwrap());
-            
-            headers.insert("Access-Control-Allow-Origin", HeaderValue::from_static("*"));
-            (headers, chunk.data).into_response()
+            Json(json!({ "status": "error", "message": "bla".to_string() })).into_response()
         }
         Err(err) => {
             println!("{}",err);
