@@ -4,7 +4,7 @@ use std::fs::{self,File};
 use std::io::Read;
 use crate::models::*;
 
-static TEST:bool=true;
+static TEST:bool=false;
 
 pub fn get_audio_chunks(status:&BookStatus, audiomap:&AudioMap, advance:u32)->Result<Vec<AudioChunkResult>,Box<dyn std::error::Error + Send + Sync>>{
     get_audio_chunks_conf(status, audiomap, advance,  "chunk.mp3")

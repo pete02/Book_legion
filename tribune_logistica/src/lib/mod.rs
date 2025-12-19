@@ -12,13 +12,14 @@ pub mod password_handler;
 
 pub mod db_handlers;
 pub mod update_handler;
+use tokio::sync::{RwLock, mpsc};
 
 // Import your core logic here:
 mod logic;
 
 
 use logic::*;
-use crate::password_handler::generate_secret;
+use crate::{buffer_handler::FillerCommand, models::AudioBuffer, password_handler::generate_secret};
 
 pub mod buffer_handler;
 
@@ -27,7 +28,9 @@ struct AppState {
     manifest: String,
     prefix: String,
     config: String,
-    secret: [u8; 32]
+    secret: [u8; 32],
+    global_buffer: Arc<RwLock<Option<Arc<RwLock<AudioBuffer>>>>>,
+    filler_tx: Arc<RwLock<Option<mpsc::Sender<FillerCommand>>>>,
 }
 
 pub async fn server()->() {
@@ -35,7 +38,9 @@ pub async fn server()->() {
         manifest: "books.json".to_string(),
         prefix: "./data".to_string(),
         config: "./config".to_string(),
-        secret: generate_secret()
+        secret: generate_secret(),
+    global_buffer: Arc::new(RwLock::new(Some(Arc::new(RwLock::new(AudioBuffer::new(20, 30)))))),
+    filler_tx: Arc::new(RwLock::new(None)),
     });
 
     let app = Router::new()

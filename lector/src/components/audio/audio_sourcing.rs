@@ -147,7 +147,7 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<AudioChunkResult>>>, mut 
                         book.chapter+=1;
                         book.chunk=1
                     }else{
-                        book.chunk +=ADVANCE_AMOUNT;
+                        book.chunk +=vec.len() as u32;
                     }
 
                     private_state.set(Some(book));

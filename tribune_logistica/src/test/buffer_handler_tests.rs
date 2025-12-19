@@ -159,6 +159,42 @@ mod buffer_tests{
 
     #[tokio::test]
     #[serial]
+    async fn request_ahead_within_buffer() {
+        let t=test_helpers::get_real_data("fused", "./data", "books.json");
+
+        let mut cursor = ChunkCursor {
+            chapter: t.chapter,
+            chunk: t.chunk,
+            chapter_to_chunk: t.chapter_to_chunk.clone(),
+            max_chapter: t.max_chapter,
+        };
+
+        let book = BookKey {
+            name: t.name.clone(),
+            path: t.path.clone(),
+        };
+        
+
+        let buffer = Arc::new(RwLock::new(AudioBuffer::new(3, 6)));
+        let tx = test_helpers::start_filler(buffer.clone()).await;
+        test_helpers::ensure_and_wait(&tx, book.clone(), cursor.clone()).await;
+
+        cursor.chunk += 4; // seek ahead
+
+        test_helpers::ensure_and_wait(&tx, book, cursor.clone()).await;
+        let buf = buffer.read().await;
+        
+        let first = buf.chunks.front().expect("buffer empty after reset");
+        let (ch, ck) = test_helpers::parse_place(&first.place);
+
+        assert_eq!(ch, cursor.chapter, "incorrect chapter");
+        assert_eq!(ck, cursor.chunk, "incorrect chapter");
+    }
+
+
+
+    #[tokio::test]
+    #[serial]
     async fn request_too_far_behind_resets_buffer() {
         let t=test_helpers::get_real_data("fused", "./data", "books.json");
 
@@ -271,4 +307,107 @@ mod buffer_tests{
 
 
 
+}
+
+#[cfg(test)]
+mod seek_tests {
+    use tribune_logistica::models::ChunkCursor;
+    use tribune_logistica::buffer_handler::SeekDecision;
+    use tribune_logistica::buffer_handler::classify_seek;
+
+
+
+    fn cursor(
+        chapter: u32,
+        chunk: u32,
+        chapter_to_chunk: &[(u32, u32)],
+        max_chapter: u32,
+    ) -> ChunkCursor {
+        ChunkCursor {
+            chapter,
+            chunk,
+            chapter_to_chunk: chapter_to_chunk.iter().cloned().collect(),
+            max_chapter,
+        }
+    }
+
+    fn chapters() -> Vec<(u32, u32)> {
+        vec![
+            (1, 10),
+            (2, 10),
+            (3, 10),
+        ]
+    }
+
+    /*
+     * Cursor is at: chapter 2, chunk 5
+     * Buffered = 6
+     *
+     * Oldest buffered position:
+     *   chapter 2, chunk 5
+     *   rewind 6 → chapter 1, chunk 9
+     */
+
+    #[test]
+    fn seek_ahead_of_cursor_resets() {
+        let c = cursor(2, 5, &chapters(), 3);
+        let start = cursor(2, 6, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 6);
+        assert_eq!(decision, SeekDecision::Reset);
+    }
+
+    #[test]
+    fn seek_far_behind_resets() {
+        let c = cursor(2, 5, &chapters(), 3);
+        let start = cursor(1, 1, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 6);
+        assert_eq!(decision, SeekDecision::Reset);
+    }
+
+    #[test]
+    fn seek_exactly_at_oldest_is_noop() {
+        let c = cursor(2, 5, &chapters(), 3);
+        let start = cursor(1, 9, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 6);
+        assert_eq!(decision, SeekDecision::NoOp);
+    }
+
+    #[test]
+    fn seek_inside_buffer_trims() {
+        let c = cursor(2, 5, &chapters(), 3);
+        let start = cursor(2, 3, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 6);
+        assert_eq!(decision, SeekDecision::TrimToStart);
+    }
+
+    #[test]
+    fn seek_same_position_is_noop() {
+        let c = cursor(2, 5, &chapters(), 3);
+        let start = cursor(1, 9, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 6);
+        assert_eq!(decision, SeekDecision::NoOp);
+    }
+
+    #[test]
+    fn seek_cross_chapter_inside_buffer_trims() {
+        let c = cursor(2, 3, &chapters(), 3);
+        let start = cursor(1, 10, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 5);
+        assert_eq!(decision, SeekDecision::TrimToStart);
+    }
+
+    #[test]
+    fn seek_cross_chapter_too_far_resets() {
+        let c = cursor(2, 3, &chapters(), 3);
+        let start = cursor(1, 4, &chapters(), 3);
+
+        let decision = classify_seek(&start, &c, 5);
+        assert_eq!(decision, SeekDecision::Reset);
+    }
 }

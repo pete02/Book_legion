@@ -212,6 +212,15 @@ impl AudioBuffer {
     pub fn pop(&mut self) -> Option<AudioChunkResult> {
         self.chunks.pop_front()
     }
+    pub fn trim_until(&mut self, chapter: u32, chunk: u32) {
+        while let Some(front) = self.chunks.front() {
+            let (ch, ck) = parse_place(&front.place);
+            if ch == chapter && ck == chunk {
+                break;
+            }
+            self.chunks.pop_front();
+        }
+    }
 }
 
 
@@ -219,6 +228,15 @@ impl AudioBuffer {
 pub struct Position {
     pub chapter: u32,
     pub chunk: u32,
+}
+
+impl Position {
+    pub fn from(cursor:&ChunkCursor)->Position{
+        Position {
+            chapter: cursor.chapter,
+            chunk: cursor.chunk,
+        }
+    }
 }
 
 impl Ord for Position {
@@ -234,4 +252,27 @@ impl PartialOrd for Position {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
+}
+
+fn parse_place(place: &str) -> (u32, u32) {
+    let mut parts = place.split(',');
+
+    let chapter = parts
+        .next()
+        .expect("place missing chapter")
+        .parse::<u32>()
+        .expect("invalid chapter in place");
+
+    let chunk = parts
+        .next()
+        .expect("place missing chunk")
+        .parse::<u32>()
+        .expect("invalid chunk in place");
+
+    assert!(
+        parts.next().is_none(),
+        "place contains extra components"
+    );
+
+    (chapter, chunk)
 }

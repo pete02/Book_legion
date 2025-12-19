@@ -131,8 +131,6 @@ fn create_precentage(mut precent:Signal<f64>){
         let Some(book)=global().book.clone() else {return;};
         let cur=(calculate_max_chunks(book.initial_chapter, book.chapter-1, &book.chapter_to_chunk) +book.chunk)as f64;
         let max=calculate_max_chunks(book.initial_chapter, book.max_chapter, &book.chapter_to_chunk) as f64;
-        tracing::debug!("now: {}", cur);
-        tracing::debug!("max: {}",max);
         precent.set((cur/max)*100.0);
     });
 }

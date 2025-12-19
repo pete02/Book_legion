@@ -13,12 +13,20 @@ pub enum FillerCommand {
     Stop,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum SeekDecision {
+    Reset,          // outside window or backwards
+    TrimToStart,    // ahead but inside buffer
+    NoOp,           // same or behind cursor but still valid
+}
+
 pub async fn run_filler(
     mut rx: mpsc::Receiver<FillerCommand>,
     buffer: Arc<RwLock<AudioBuffer>>,
 ) {
     let mut current_book: Option<BookKey> = None;
     let mut cursor: Option<ChunkCursor> = None;
+    let mut just_reset=false;
 
     while let Some(cmd) = rx.recv().await {
         match cmd {
@@ -34,11 +42,20 @@ pub async fn run_filler(
                 }else{
                     let mut buf = buffer.write().await;
                     let c= cursor.clone().unwrap();
-                    if is_outside_window(&start, &c, buf.chunks.len())
-                    {
-                        cursor=Some(start);
-                        buf.clear(book.clone());
+                    match classify_seek(&start, &c, buf.chunks.len()) {
+                        SeekDecision::Reset => {
+                            buf.clear(book.clone());
+                            cursor = Some(start);
+                            just_reset = true;
+                        }
+
+                        SeekDecision::TrimToStart => {
+                            buf.trim_until(start.chapter, start.chunk);
+                        }
+
+                        SeekDecision::NoOp => {}
                     }
+
                 }
 
                 let should_not_start={
@@ -122,15 +139,8 @@ fn is_outside_window(
     cursor: &ChunkCursor,
     buffered: usize,
 ) -> bool {
-    let start_pos = Position {
-        chapter: start.chapter,
-        chunk: start.chunk,
-    };
-
-    let cursor_pos = Position {
-        chapter: cursor.chapter,
-        chunk: cursor.chunk,
-    };
+    let start_pos = Position::from(start);
+    let cursor_pos = Position::from(cursor);
 
     // Requested ahead of cursor → reset
     if start_pos > cursor_pos {
@@ -140,17 +150,42 @@ fn is_outside_window(
     // Compute oldest buffered position (may cross chapters)
     let oldest = rewind_cursor(cursor.clone(), buffered);
 
-    let oldest_pos = Position {
-        chapter: oldest.chapter,
-        chunk: oldest.chunk,
-    };
-
+    let oldest_pos = Position::from(&oldest);
     // Requested too far behind → reset
     if start_pos < oldest_pos {
         return true;
     }
 
     false
+}
+
+
+pub fn classify_seek(
+    start: &ChunkCursor,
+    cursor: &ChunkCursor,
+    buffered: usize,
+) -> SeekDecision {
+    let start_pos = Position::from(start);
+    let cursor_pos = Position::from(cursor);
+    // Ahead of cursor → always reset
+    if start_pos > cursor_pos {
+        return SeekDecision::Reset;
+    }
+
+    let oldest = rewind_cursor(cursor.clone(), buffered);
+    let oldest_pos = Position::from(&oldest);
+
+    // Too far behind → reset
+    if start_pos < oldest_pos {
+        return SeekDecision::Reset;
+    }
+
+    // Ahead of oldest but <= cursor → trim
+    if start_pos > oldest_pos {
+        return SeekDecision::TrimToStart;
+    }
+
+    SeekDecision::NoOp
 }
 
 

@@ -8,11 +8,14 @@ use axum::{
 use chrono::Duration;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use tokio::sync::{RwLock, mpsc};
 
-use crate::{audio_handler, db_handlers, models::*, password_handler, update_handler};
+use crate::{audio_handler, buffer_handler::FillerCommand, db_handlers, models::*, password_handler, update_handler};
 use crate::AppState;
 use crate::db_handlers::*;
 use crate::book_handler::*; 
+
+
 
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
@@ -158,30 +161,92 @@ pub async fn audio_endpoint(
         },
     };
     println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
-    handle_audio_chunks(&book,query.chunk).into_response()
+    handle_audio_chunks(&book,query.chunk,state).await.into_response()
 }
-
-fn handle_audio_chunks(status:&BookStatus, advance: u32)->Json<Value>{
-    let map=match get_audiomap(status){
-        Ok(map)=>map,
-        Err(e)=>return Json(json!({"status": "error", "message": e.to_string()}))
+pub async fn handle_audio_chunks(
+    status: &BookStatus,
+    advance: u32,
+    state: Arc<AppState>,
+) -> Json<Value> {
+    // Get or initialize the global buffer
+    let buffer = {
+        let mut buf_lock = state.global_buffer.write().await;
+        if buf_lock.is_none() {
+            *buf_lock = Some(Arc::new(RwLock::new(AudioBuffer::new(3, 8))));
+        }
+        buf_lock.as_ref().unwrap().clone()
     };
 
-    match audio_handler::get_audio_chunks(
-        &status,
-        &map,
-        advance
-    ) {
-        Ok(chunk) => {
-            Json(json!({ "status": "Ok", "chunks":chunk }))
+    // Get or initialize the filler sender
+    let tx = {
+        let mut tx_lock = state.filler_tx.write().await;
+        if tx_lock.is_none() {
+            *tx_lock = Some(start_filler(buffer.clone()).await);
         }
-        Err(err) => {
-            println!("{}",err);
-            Json(json!({ "status": "error", "message": err.to_string() }))
-        },
+        tx_lock.as_ref().unwrap().clone()
+    };
+
+    // Ensure the buffer is populated, only wait if empty
+    {
+        let buf_read = buffer.read().await;
+        if buf_read.chunks.is_empty() {
+            drop(buf_read); // release read lock
+
+            let cursor = ChunkCursor {
+                chapter: status.chapter,
+                chunk: status.chunk,
+                chapter_to_chunk: status.chapter_to_chunk.clone(),
+                max_chapter: status.max_chapter,
+            };
+
+            tx.send(FillerCommand::Ensure {
+                book: BookKey {
+                    name: status.name.clone(),
+                    path: status.path.clone(),
+                },
+                start: cursor,
+            })
+            .await
+            .unwrap();
+
+            // Wait until at least one chunk is ready
+            loop {
+                let buf_check = buffer.read().await;
+                if !buf_check.chunks.is_empty() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }
     }
+
+    // Grab either `advance` or available chunks, whichever is smaller
+    let mut chunks_to_return = Vec::new();
+    {
+        let mut buf_write = buffer.write().await;
+        for _ in 0..advance.min(buf_write.chunks.len() as u32) {
+            if let Some(chunk) = buf_write.pop() {
+                chunks_to_return.push(chunk);
+            }
+        }
+    }
+    for ch in &chunks_to_return{
+        print!("{}, ",ch.place);
+    };
+
+    Json(json!({
+        "status": "Ok",
+        "chunks": chunks_to_return
+    }))
 }
 
+
+/// Starts the global filler if not already started
+pub async fn start_filler(buffer: Arc<RwLock<AudioBuffer>>) -> mpsc::Sender<FillerCommand> {
+    let (tx, rx) = mpsc::channel(8);
+    tokio::spawn(crate::buffer_handler::run_filler(rx, buffer));
+    tx
+}
 
 pub async fn update_endpoint(
     State(state): State<Arc<AppState>>,
