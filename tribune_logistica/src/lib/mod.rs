@@ -41,8 +41,8 @@ struct AppState {
 pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
-        prefix: "./data".to_string(),
-        config: "./config".to_string(),
+        prefix: "/data".to_string(),
+        config: "/config".to_string(),
         secret: generate_secret(),
     global_buffer: Arc::new(RwLock::new(Some(Arc::new(RwLock::new(AudioBuffer::new(20, 30)))))),
     filler_tx: Arc::new(RwLock::new(None)),

@@ -41,11 +41,6 @@ pub fn init_book(name: &str, book_type: &str, json_path: &str, base_path:&str) -
     let books = load_books(&json_path).map_err(|_|error(&format!("missing library manifest: {}",&json_path)))?;
     let book=books.get(name).ok_or(error("not in library"))?;
 
-
-    if book_type=="audio" && !Path::exists(Path::new(format!("{}/{}/{}.mp3",base_path,&book.path,name).as_str())){
-        return Err(error("missing audiobook"));
-    }
-
     if book_type=="text" && !Path::exists(Path::new(format!("{}/{}/{}.epub",base_path,&book.path,name).as_str())){
         return Err(error("missing book"));
     }

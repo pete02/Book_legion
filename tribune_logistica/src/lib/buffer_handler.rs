@@ -37,8 +37,7 @@ pub async fn run_filler(
     let fetch_lock = Arc::new(Mutex::new(false));
 
     // Channel for completed chunks
-    let (tx_chunk, mut rx_chunk) = mpsc::channel::<AudioChunkResult>(100);
-
+    let (tx_chunk, mut rx_chunk) = mpsc::channel::<(AudioChunkResult, Option<BookKey>)>(100);
     loop {
         tokio::select! {
             // --- Handle commands ---
@@ -132,7 +131,7 @@ pub async fn run_filler(
                 let status_clone = status.clone();
                 let c_clone = c.clone();
                 let at_end_clone = at_end;
-
+                let current_book=current_book.clone();
                 tokio::spawn(async move {
                     // Fetch audio chunk
                     let data = match audio_gen_handler::get_audio_chunk(&status_clone).await {
@@ -152,7 +151,7 @@ pub async fn run_filler(
                         reached_end: at_end_clone,
                     };
 
-                    if tx_clone.send(chunk).await.is_err() {
+                    if tx_clone.send((chunk,current_book)).await.is_err() {
                         eprintln!("Failed to send audio chunk to channel");
                     }
 
@@ -166,9 +165,11 @@ pub async fn run_filler(
         }
 
         // --- Drain completed chunks from channel ---
-        while let Ok(chunk) = rx_chunk.try_recv() {
-            let mut buf = buffer.write().await;
-            buf.push(chunk);
+        while let Ok((chunk,key)) = rx_chunk.try_recv() {
+            if key==current_book{
+                let mut buf = buffer.write().await;
+                buf.push(chunk);
+            }
         }
     }
 }

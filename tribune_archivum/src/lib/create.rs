@@ -101,51 +101,52 @@ use zip::write::FileOptions;
 use std::io::{Read, Write,Cursor};
 
 
+
 pub fn replace_file_in_epub(
     path: &str,
     file_to_replace: &str,
     new_content: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
-    let mut src = std::fs::File::open(path)?;
+    let mut src = File::open(path)?;
     let mut zip = ZipArchive::new(&mut src)?;
 
-    let mut buffer = Vec::new();
-    {
-        let mut file = zip.by_name(file_to_replace)
-            .map_err(|_| format!("Missing file in EPUB: {}", file_to_replace))?;
-        file.read_to_end(&mut buffer)?;
-    }
-
-
     let mut out = Cursor::new(Vec::new());
-    {
-        let mut writer = ZipWriter::new(&mut out);
+    let mut writer = ZipWriter::new(&mut out);
 
-        for i in 0..zip.len() {
-            let mut file = zip.by_index(i)?;
-            let name = file.name().to_string();
+    let mut replaced = false;
 
-            let options = FileOptions::<()>::default()
-                .compression_method(file.compression())
-                .unix_permissions(file.unix_mode().unwrap_or(0o644));
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i)?;
+        let name = file.name().to_string();
 
-            writer.start_file(name.clone(), options)?;
+        let options = FileOptions::<()>::default()
+            .compression_method(file.compression())
+            .unix_permissions(file.unix_mode().unwrap_or(0o644));
 
-            if name == file_to_replace {
-                writer.write_all(new_content.as_bytes())?;
-            } else {
-                let mut contents = Vec::new();
-                file.read_to_end(&mut contents)?;
-                writer.write_all(&contents)?;
-            }
+        writer.start_file(name.clone(), options)?;
+
+        if name == file_to_replace {
+            writer.write_all(new_content.as_bytes())?;
+            replaced = true;
+        } else {
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents)?;
+            writer.write_all(&contents)?;
         }
-
-        writer.finish()?;
     }
 
-    // Step 3: Write the updated ZIP back to disk
-    std::fs::write(path, out.into_inner())?;
+    // If the file did not exist, create it
+    if !replaced {
+        let options = FileOptions::<()>::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o644);
 
+        writer.start_file(file_to_replace, options)?;
+        writer.write_all(new_content.as_bytes())?;
+    }
+
+    writer.finish()?;
+
+    std::fs::write(path, out.into_inner())?;
     Ok(())
 }

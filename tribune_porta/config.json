@@ -1,0 +1,16 @@
+{
+    "royal_road":{
+        "parent_url":"https://www.royalroad.com",
+        "chapter": "div.chapter-inner.chapter-content",
+        "title":"div.col-md-5.col-lg-6.col-md-offset-1.text-center.md-text-left > h1",
+        "book": "#chapters > tbody",
+        "limiter":"data-volume-id",
+        "list":{
+            "wrapper":"table",
+            "selector":"tr"
+        },
+        "remover":[
+            "span"
+        ]
+    }
+}

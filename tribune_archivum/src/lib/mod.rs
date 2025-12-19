@@ -14,17 +14,17 @@ mod generate_book;
 mod models;
 
 
-pub fn check_epub(path:&str, book_id:&str)->Result<(),Box<dyn std::error::Error>>{
+pub fn check_epub(path:&str, book_id:&str, name:&str)->Result<(),Box<dyn std::error::Error>>{
     println!("path: {}",path);
     match verify_epub(path) {
      Ok(index)=>{
         println!("no patch needed");
-        generate_book_instance(path, index)?;
+        generate_book_instance(path, index,name)?;
     },
      Err(_)=>{
         generate_toc(path, book_id)?;
         let index=verify_epub(path)?;
-        generate_book_instance(path, index)?;
+        generate_book_instance(path, index,name)?;
         println!("book patched");
         }
     }
@@ -47,12 +47,12 @@ fn verify_epub(path:&str)->Result<u32,Box< dyn std::error::Error>>{
     get_first_chapter(&mut epub)
 }
 use std::fs::File;
-fn generate_book_instance(path:&str, init:u32)->Result<(),Box< dyn std::error::Error>> {
+fn generate_book_instance(path:&str, init:u32, name:&str)->Result<(),Box< dyn std::error::Error>> {
     let mut epub=EpubDoc::new(path)?;
     let max=epub.get_num_chapters() as u32;
     println!("init: {}", init);
     let mut book=Book{
-        path:path.to_owned(),
+        path:name.to_owned(),
         initial_chapter:init,
         duration:0.0,
         current_chunk:1,
@@ -67,7 +67,7 @@ fn generate_book_instance(path:&str, init:u32)->Result<(),Box< dyn std::error::E
         let vec:Vec<&str>=txt.split('\n').collect();
         book.chapter_to_chunk.insert(i, vec.len() as u32);
     }
-
+    println!("save book");
     save_book(book)?;
     Ok(())
 }
@@ -76,7 +76,7 @@ use std::path::Path;
 
 fn save_book(book: Book) -> Result<(), Box<dyn std::error::Error>> {
     // Read the existing books
-    let mut file = File::open("book.json")?;
+    let mut file = File::open("./book.json")?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     

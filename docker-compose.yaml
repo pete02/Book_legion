@@ -4,7 +4,7 @@ services:
     build:
       context: ./tribune_logistica
       dockerfile: Dockerfile
-    container_name: tribune_logistica
+    container_name: tribune_logistica-gen
     volumes:
       - ./tribune_logistica/config:/config
       - ./tribune_logistica/data:/data
@@ -26,7 +26,7 @@ services:
     build:
       context: ./lector
       dockerfile: Dockerfile
-    container_name: lector
+    container_name: lector-gen
     depends_on:
       - backend
     environment:
