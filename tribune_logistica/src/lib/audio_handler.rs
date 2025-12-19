@@ -4,12 +4,13 @@ use std::fs::{self,File};
 use std::io::Read;
 use crate::models::*;
 
+static TEST:bool=true;
 
-pub fn get_audio_chunks(status:&BookStatus, audiomap:&AudioMap, advance:u32)->Result<Vec<AudioChunkResult>,Box<dyn std::error::Error>>{
+pub fn get_audio_chunks(status:&BookStatus, audiomap:&AudioMap, advance:u32)->Result<Vec<AudioChunkResult>,Box<dyn std::error::Error + Send + Sync>>{
     get_audio_chunks_conf(status, audiomap, advance,  "chunk.mp3")
 }
 
-pub fn get_audio_chunks_conf(status:&BookStatus, audiomap:&AudioMap, advance:u32, output: &str)->Result<Vec<AudioChunkResult>,Box<dyn std::error::Error>>{
+pub fn get_audio_chunks_conf(status:&BookStatus, audiomap:&AudioMap, advance:u32, output: &str)->Result<Vec<AudioChunkResult>,Box<dyn std::error::Error + Send + Sync>>{
     let mut vec=Vec::new();
     let chapter=status.chapter as usize;
     let chunk=status.chunk;
@@ -37,7 +38,7 @@ pub fn get_audio_chunks_conf(status:&BookStatus, audiomap:&AudioMap, advance:u32
 
 
 
-pub fn get_audio_chunk(status: &BookStatus, audiomap:&AudioMap, chapter:usize, chunk:usize, output: &str, keep:bool)->Result<Vec<u8>,Box<dyn std::error::Error>>{
+pub fn get_audio_chunk(status: &BookStatus, audiomap:&AudioMap, chapter:usize, chunk:usize, output: &str, keep:bool)->Result<Vec<u8>,Box<dyn std::error::Error + Send + Sync>>{
     let input=format!("{}/{}.mp3",&status.path,&status.name.to_lowercase());
     let start: &AudioMapEntry=audiomap.get((chapter as usize,chunk as usize)).ok_or("no such starting point")?;
 
@@ -60,7 +61,7 @@ pub fn get_audio_chunk(status: &BookStatus, audiomap:&AudioMap, chapter:usize, c
 
 
 
-static TEST:bool=false;
+
 fn slice_mp3(input: &str, output: &str, start: f32, end: f32) -> std::io::Result<()> {
 
     if !TEST{

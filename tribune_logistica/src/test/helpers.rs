@@ -7,11 +7,17 @@ pub mod test_helpers {
     use tribune_logistica::models::*;
     use zip::ZipWriter;
     use zip::write::FileOptions;
+    use std::collections::VecDeque;
+    use std::sync::Arc;
+    use tokio::sync::{RwLock, mpsc};
+    use tribune_logistica::buffer_handler::{self, FillerCommand};
 
     #[allow(dead_code)]
     fn generate_temp_book_data(name:&str,)->BookData{
         let mut g=HashMap::new();
         g.insert(1, 10);
+        g.insert(2, 10);
+        g.insert(3, 10);
         BookData{
             path: name.to_owned(),
             initial_chapter: 1,
@@ -19,7 +25,7 @@ pub mod test_helpers {
             current_chunk:1,
             current_chapter: 1,
             current_time: 0.0,
-            max_chapter: 1,
+            max_chapter: 3,
             chapter_to_chunk: g
         }
     }
@@ -173,4 +179,49 @@ pub mod test_helpers {
         let book=b.get(name).unwrap();
         BookStatus::new(name, base, book.clone(), json)
     }
+
+    pub async fn start_filler(
+        buffer: Arc<RwLock<AudioBuffer>>,
+    ) -> mpsc::Sender<FillerCommand> {
+        let (tx, rx) = mpsc::channel(8);
+        tokio::spawn(buffer_handler::run_filler(rx, buffer));
+        tx
+    }
+
+    pub async fn ensure_and_wait(
+        tx: &mpsc::Sender<FillerCommand>,
+        book: BookKey,
+        cursor: ChunkCursor,
+    ) {
+        tx.send(FillerCommand::Ensure { book, start: cursor })
+            .await
+            .unwrap();
+
+        // Allow filler to run
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
+    pub fn parse_place(place: &str) -> (u32, u32) {
+        let mut parts = place.split(',');
+
+        let chapter = parts
+            .next()
+            .expect("place missing chapter")
+            .parse::<u32>()
+            .expect("invalid chapter in place");
+
+        let chunk = parts
+            .next()
+            .expect("place missing chunk")
+            .parse::<u32>()
+            .expect("invalid chunk in place");
+
+        assert!(
+            parts.next().is_none(),
+            "place contains extra components"
+        );
+
+        (chapter, chunk)
+    }
+
 }

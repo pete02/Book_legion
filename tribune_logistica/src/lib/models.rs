@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use serde::{Serialize, Deserialize};
 
@@ -162,4 +162,76 @@ pub struct InitQuery {
 #[derive(Deserialize)]
 pub struct AudioQuery {
     pub chunk: u32,
+}
+
+
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BookKey {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChunkCursor {
+    pub chapter: u32,
+    pub chunk: u32,
+    pub chapter_to_chunk:HashMap<u32,u32>,
+    pub max_chapter: u32
+}
+
+pub struct AudioBuffer {
+    pub book: Option<BookKey>,
+    pub chunks: VecDeque<AudioChunkResult>,
+    pub min_size: usize,
+    pub max_size: usize,
+}
+
+impl AudioBuffer {
+    pub fn new(min_size:usize, max_size: usize) -> Self {
+        Self {
+            book: None,
+            chunks: VecDeque::new(),
+            max_size,
+            min_size: min_size
+        }
+    }
+
+    pub fn clear(&mut self, book: BookKey) {
+        self.book = Some(book);
+        self.chunks.clear();
+    }
+
+    pub fn push(&mut self, chunk: AudioChunkResult) {
+        if self.chunks.len() >= self.max_size {
+            self.chunks.pop_front();
+        }
+        self.chunks.push_back(chunk);
+    }
+
+    pub fn pop(&mut self) -> Option<AudioChunkResult> {
+        self.chunks.pop_front()
+    }
+}
+
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Position {
+    pub chapter: u32,
+    pub chunk: u32,
+}
+
+impl Ord for Position {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.chapter.cmp(&other.chapter) {
+            std::cmp::Ordering::Equal => self.chunk.cmp(&other.chunk),
+            o => o,
+        }
+    }
+}
+
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }

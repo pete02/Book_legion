@@ -20,6 +20,8 @@ mod logic;
 use logic::*;
 use crate::password_handler::generate_secret;
 
+pub mod buffer_handler;
+
 #[derive(Clone)]
 struct AppState {
     manifest: String,

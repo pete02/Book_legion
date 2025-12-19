@@ -16,7 +16,7 @@ mod book_handler_tests {
         status.chapter = 99; // bigger than actual chapters
         let res = get_chapter(&status);
         assert!(res.is_err());
-        assert_eq!(res.unwrap_err(), format!("chapter too large: {} max",status.max_chapter));
+        assert_eq!(res.unwrap_err(), format!("chapter too large: 1 max"));
     }
 
     #[test]

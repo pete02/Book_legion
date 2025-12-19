@@ -82,7 +82,7 @@ mod db_handler_tests {
             assert!(result.is_ok());
             let book_status = result.unwrap();
             assert_eq!(book_status.name, "testbook");
-            assert_eq!(book_status.chapter_to_chunk.len(), 1); // matches your dummy data
+            assert_eq!(book_status.chapter_to_chunk.len(), 3); // matches your dummy data
         }
 
         #[test]

@@ -77,7 +77,7 @@ mod update_progress_tests {
     fn errors_on_invalid_chapter_number() {
         let (_dir, mut status, _data,map) = test_helpers::setup_test_book();
 
-        status.chapter = 3; // greater than chapter_to_chunk map
+        status.chapter = 333333; // greater than chapter_to_chunk map
 
         let res = update_progress(&status,&map);
         assert!(res.is_err());
