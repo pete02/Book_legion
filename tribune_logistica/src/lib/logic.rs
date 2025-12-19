@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 
-use crate::{audio_handler, buffer_handler::FillerCommand, db_handlers, models::*, password_handler, update_handler};
+use crate::{ buffer_handler::{self, FillerCommand}, db_handlers, models::*, password_handler, update_handler};
 use crate::AppState;
 use crate::db_handlers::*;
 use crate::book_handler::*; 
@@ -163,80 +163,82 @@ pub async fn audio_endpoint(
     println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
     handle_audio_chunks(&book,query.chunk,state).await.into_response()
 }
+
+use tokio::sync::oneshot;
+
 pub async fn handle_audio_chunks(
     status: &BookStatus,
     advance: u32,
     state: Arc<AppState>,
 ) -> Json<Value> {
-    // Get or initialize the global buffer
+    println!("asked: {}, {}", status.chapter, status.chunk);
     let buffer = {
-        let mut buf_lock = state.global_buffer.write().await;
-        if buf_lock.is_none() {
-            *buf_lock = Some(Arc::new(RwLock::new(AudioBuffer::new(3, 8))));
-        }
-        buf_lock.as_ref().unwrap().clone()
+        let mut lock = state.global_buffer.write().await;
+        lock.get_or_insert_with(|| Arc::new(RwLock::new(AudioBuffer::new(3, 8))))
+            .clone()
     };
-
-    // Get or initialize the filler sender
     let tx = {
-        let mut tx_lock = state.filler_tx.write().await;
-        if tx_lock.is_none() {
-            *tx_lock = Some(start_filler(buffer.clone()).await);
+        let mut lock = state.filler_tx.write().await;
+
+        if lock.is_none() {
+            let sender = start_filler(buffer.clone()).await;
+            *lock = Some(sender);
         }
-        tx_lock.as_ref().unwrap().clone()
+
+        lock.as_ref().unwrap().clone()
     };
 
-    // Ensure the buffer is populated, only wait if empty
-    {
-        let buf_read = buffer.read().await;
-        if buf_read.chunks.is_empty() {
-            drop(buf_read); // release read lock
+    // ALWAYS ensure — cheap, idempotent
+    let (decision_tx, decision_rx) = oneshot::channel();
 
-            let cursor = ChunkCursor {
-                chapter: status.chapter,
-                chunk: status.chunk,
-                chapter_to_chunk: status.chapter_to_chunk.clone(),
-                max_chapter: status.max_chapter,
-            };
+    // Send the Ensure command with the channel
+    tx.send(FillerCommand::Ensure {
+        book: BookKey {
+            name: status.name.clone(),
+            path: status.path.clone(),
+        },
+        start: ChunkCursor {
+            chapter: status.chapter,
+            chunk: status.chunk,
+            chapter_to_chunk: status.chapter_to_chunk.clone(),
+            max_chapter: status.max_chapter,
+        },
+        respond_to: Some(decision_tx),
+    }).await.unwrap();
 
-            tx.send(FillerCommand::Ensure {
-                book: BookKey {
-                    name: status.name.clone(),
-                    path: status.path.clone(),
-                },
-                start: cursor,
-            })
-            .await
-            .unwrap();
-
-            // Wait until at least one chunk is ready
-            loop {
-                let buf_check = buffer.read().await;
-                if !buf_check.chunks.is_empty() {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            }
-        }
+    // Await the decision from the filler
+    let decision: buffer_handler::SeekDecision = decision_rx.await.unwrap();
+    if decision == buffer_handler::SeekDecision::Reset{
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    // Grab either `advance` or available chunks, whichever is smaller
-    let mut chunks_to_return = Vec::new();
+    // Wait ONLY if buffer empty
+    loop {
+        let buf = buffer.read().await;
+        if !buf.chunks.is_empty() {
+            break;
+        }
+        drop(buf);
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    // Drain immediately available chunks
+    let mut out = Vec::new();
     {
-        let mut buf_write = buffer.write().await;
-        for _ in 0..advance.min(buf_write.chunks.len() as u32) {
-            if let Some(chunk) = buf_write.pop() {
-                chunks_to_return.push(chunk);
+        print!("sending: ");
+        let mut buf = buffer.write().await;
+        for _ in 0..advance.min(buf.chunks.len() as u32) {
+            if let Some(c) = buf.pop() {
+                print!(", {}",c.place);
+                out.push(c);
             }
         }
+        println!("");
     }
-    for ch in &chunks_to_return{
-        print!("{}, ",ch.place);
-    };
 
     Json(json!({
         "status": "Ok",
-        "chunks": chunks_to_return
+        "chunks": out
     }))
 }
 
@@ -260,7 +262,7 @@ pub async fn update_endpoint(
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
+    //println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
     handle_update(&book).into_response()
 }
 

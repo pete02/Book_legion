@@ -7,7 +7,6 @@ pub mod test_helpers {
     use tribune_logistica::models::*;
     use zip::ZipWriter;
     use zip::write::FileOptions;
-    use std::collections::VecDeque;
     use std::sync::Arc;
     use tokio::sync::{RwLock, mpsc};
     use tribune_logistica::buffer_handler::{self, FillerCommand};
@@ -180,6 +179,7 @@ pub mod test_helpers {
         BookStatus::new(name, base, book.clone(), json)
     }
 
+    #[allow(dead_code)]
     pub async fn start_filler(
         buffer: Arc<RwLock<AudioBuffer>>,
     ) -> mpsc::Sender<FillerCommand> {
@@ -187,20 +187,30 @@ pub mod test_helpers {
         tokio::spawn(buffer_handler::run_filler(rx, buffer));
         tx
     }
-
+    #[allow(dead_code)]
     pub async fn ensure_and_wait(
         tx: &mpsc::Sender<FillerCommand>,
         book: BookKey,
         cursor: ChunkCursor,
-    ) {
-        tx.send(FillerCommand::Ensure { book, start: cursor })
-            .await
-            .unwrap();
+    ) -> buffer_handler::SeekDecision {
+        use tokio::sync::oneshot;
 
-        // Allow filler to run
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let (decision_tx, decision_rx) = oneshot::channel();
+
+        tx.send(FillerCommand::Ensure {
+            book,
+            start: cursor,
+            respond_to: Some(decision_tx),
+        }).await.unwrap();
+
+        // Wait for the filler to make its decision
+        let decision = decision_rx.await.unwrap();
+        decision
+
     }
 
+
+    #[allow(dead_code)]
     pub fn parse_place(place: &str) -> (u32, u32) {
         let mut parts = place.split(',');
 

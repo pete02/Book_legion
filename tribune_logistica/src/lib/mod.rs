@@ -33,6 +33,9 @@ struct AppState {
     filler_tx: Arc<RwLock<Option<mpsc::Sender<FillerCommand>>>>,
 }
 
+//        .route("/audiomap",post(audiomap))
+
+
 pub async fn server()->() {
     let state = Arc::new(AppState {
         manifest: "books.json".to_string(),
@@ -48,7 +51,6 @@ pub async fn server()->() {
         .route("/refresh", post(refresh_handler))
         .route("/init", get(init_handler))
         .route("/book", post(book_handler))
-        .route("/audiomap",post(audiomap))
         .route("/audio", post(audio_endpoint))
         .route("/update", post(update_endpoint))
         .route("/manifest", get(manifest_handler))

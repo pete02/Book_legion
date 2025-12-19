@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
 
 use web_sys::{HtmlAudioElement};
@@ -13,14 +12,11 @@ use crate::models::GlobalState;
 
 #[component]
 pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element {
-    let total=use_signal(||0.0);
-    let total_str=use_signal(||"".to_owned());
-    let cur_str=use_signal(||"".to_owned());
+    let total=use_signal(||0);
+    let cur=use_signal(||0);
     let precent= use_signal(||0.0);
 
-    create_total_time(total, total_str);
-    create_current_time(time, cur_str);
-    create_precentage(precent);
+    create_precentage(precent, cur, total);
 
     rsx! {
     div {
@@ -36,7 +32,7 @@ pub fn TimeBar(time: Signal<f64>, audio_url: Signal<Option<String>>) -> Element 
             }
             p {
                 class: "absolute left-0 -bottom-6 text-sm",
-                "{cur_str()}"
+                "{cur()} / {total()}"
             }
         }
 
@@ -125,13 +121,17 @@ fn create_total_time(total:Signal<f64>, total_str:Signal<String>){
 }
 
 
-fn create_precentage(mut precent:Signal<f64>){
+fn create_precentage(mut precent:Signal<f64>,mut cur_s:Signal<u32>, mut total:Signal<u32>){
     let global=use_context::<Signal<GlobalState>>();
     use_effect(move||{
         let Some(book)=global().book.clone() else {return;};
-        let cur=(calculate_max_chunks(book.initial_chapter, book.chapter-1, &book.chapter_to_chunk) +book.chunk)as f64;
-        let max=calculate_max_chunks(book.initial_chapter, book.max_chapter, &book.chapter_to_chunk) as f64;
-        precent.set((cur/max)*100.0);
+        let cur=(calculate_max_chunks(book.initial_chapter, book.chapter-1, &book.chapter_to_chunk) +book.chunk);
+        let max=calculate_max_chunks(book.initial_chapter, book.max_chapter, &book.chapter_to_chunk);
+        
+        cur_s.set(cur);
+        total.set(max);
+
+        precent.set((cur as f64 /max as f64)*100.0);
     });
 }
 

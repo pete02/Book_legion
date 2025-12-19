@@ -254,7 +254,7 @@ impl PartialOrd for Position {
     }
 }
 
-fn parse_place(place: &str) -> (u32, u32) {
+pub fn parse_place(place: &str) -> (u32, u32) {
     let mut parts = place.split(',');
 
     let chapter = parts

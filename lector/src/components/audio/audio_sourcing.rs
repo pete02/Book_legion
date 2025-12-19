@@ -1,11 +1,11 @@
+use dioxus::html::a::rel;
 use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen_futures::spawn_local;
 use js_sys::{Array, Uint8Array};
 use web_sys::{Blob, BlobPropertyBag, Url};
 
 use crate::components::server_api;
-use crate::models::{AudioChunkResult, BookStatus, GlobalState};
-use crate::components::audio::ADVANCE_AMOUNT;
+use crate::models::{AudioChunkResult, BookStatus, GlobalState, parse_place};
 
 
 
@@ -56,29 +56,40 @@ fn walker(mut walk:Signal<(i32,i32)> , mut jump:Signal<i32>, mut reload:Signal<b
             let hop=5*jump();
             global.with_mut(|state|{
                 let Some(book)=&mut state.book else {return;};
+                if !book.chapter_to_chunk.contains_key(&book.chapter) {return;};
+                    
                 tracing::debug!("hop: {}",hop);
-                if hop !=0{
-                    jump.set(0);
-                    if book.chunk as i32 +hop <0 && book.chapter != book.initial_chapter {
-                        book.chapter -=1;
-                        book.chunk=book.chapter_to_chunk[&(book.chapter-1)];
-                        reload.set(true);
-                        return;
-                    }else if book.chapter <=book.max_chapter && book.chunk as i32+hop > book.chapter_to_chunk[&book.chapter] as i32{
-                        book.chapter +=1;
-                        book.chunk=1;
-                        reload.set(true);
-                        return;
+                if jump()==-1{
+                    if book.chunk as i32 +hop < 1{
+                        tracing::debug!("chap: {}",book.chapter);
+                        if book.chapter > book.initial_chapter{
+                            let max= book.chapter_to_chunk[&book.chapter];
+                            book.chunk= (max as i32+book.chunk as i32 + hop) as u32;
+                            book.chapter -=1;
+                            reload.set(true);
+                        }
                     }else{
-                        let a=book.chunk as i32+hop;
-                        tracing::debug!("new chunk: {}", a);
-                        book.chunk=a as u32;
+                        book.chunk = (book.chunk as i32 + hop) as u32;
                         reload.set(true);
-                        return;
+                    }
+                }else{
+                    let max=book.chapter_to_chunk[&book.chapter];
+                    if book.chunk+hop as u32>max{
+                        if book.chapter <book.max_chapter{
+                            book.chunk=max-hop as u32;
+                            book.chapter +=1;
+                            reload.set(true);
+                        }
+                    }else{
+                        book.chunk=book.chunk+hop as u32;
+                        reload.set(true);
                     }
                 }
-            })
+            });
+            jump.set(0);
+            if reload(){return;}
         }
+
         if walk()!=(0,0){
             global.with_mut(|state|{
                 let Some(book)=&mut state.book else { return;};
@@ -101,6 +112,8 @@ fn audio_url_hook(
 ) {
     use_effect(move || {
         if audio_url().is_some() {return; }
+        if resource().is_none() {return;}
+
         if audio_urls().len()>0{
             audio_urls.with_mut(|vec|{
                 let (place, url)=vec.remove(0);
@@ -111,16 +124,15 @@ fn audio_url_hook(
 
             });
         }else{
-            let Some(vec)=resource() else {return;};
+            let Some(vec)=resource().clone() else {return;};
             let mut urls=Vec::new();
             for v in vec {
                 let url=create_blob(v.data);
                 urls.push((v.place, url));
 
             }
-            tracing::debug!("audio urls len: {}", urls.len());
-            audio_urls.set(urls);
             resource.set(None);
+            audio_urls.set(urls);
         }
     });
 }
@@ -143,13 +155,18 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<AudioChunkResult>>>, mut 
                     fetching.set(false);
                 }
                 Ok(vec)=>{
-                    if vec[vec.len()-1].reached_end{
-                        book.chapter+=1;
-                        book.chunk=1
-                    }else{
-                        book.chunk +=vec.len() as u32;
+                    if let Some(last_chunk) = vec.last() {
+                        if last_chunk.reached_end {
+                            book.chapter += 1;
+                            book.chunk = 1;
+                        } else {
+                            // Use last chunk's position to update book.chunk reliably
+                            let (ch, ck) = parse_place(&last_chunk.place);
+                            book.chapter = ch;
+                            book.chunk = ck + 1;
+                        }
                     }
-
+                    tracing::debug!("resource len: {}", vec.len());
                     private_state.set(Some(book));
                     resource.set(Some(vec));
                     fetching.set(false);

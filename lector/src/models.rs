@@ -94,3 +94,26 @@ pub struct AudioChunkResult {
 pub struct JsonPayload{
     pub chunks: Vec<AudioChunkResult>
 }
+
+pub fn parse_place(place: &str) -> (u32, u32) {
+    let mut parts = place.split(',');
+
+    let chapter = parts
+        .next()
+        .expect("place missing chapter")
+        .parse::<u32>()
+        .expect("invalid chapter in place");
+
+    let chunk = parts
+        .next()
+        .expect("place missing chunk")
+        .parse::<u32>()
+        .expect("invalid chunk in place");
+
+    assert!(
+        parts.next().is_none(),
+        "place contains extra components"
+    );
+
+    (chapter, chunk)
+}

@@ -12,6 +12,7 @@ pub async fn fetch_audio(book: &BookStatus, access_token:String) -> Result<Vec<A
     book.chapter=book.chapter.clamp(book.initial_chapter, book.max_chapter);
     book.chunk=book.chunk.clamp(1, book.chapter_to_chunk[&book.chapter]);
 
+    println!("asking: {},{}",book.chapter, book.chunk);
     let url = format!("http://0.0.0.0:8000/audio?chunk={}", ADVANCE_AMOUNT);
     let bytes: Result<JsonPayload, reqwasm::Error> = reqwasm::http::Request::post(&url)
         .header("Content-Type", "application/json")
