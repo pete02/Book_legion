@@ -79,7 +79,7 @@ def tts():
     # Stream audio back
     buffer = io.BytesIO()
     wav16 = (wav * 32767.0).clamp(-32768, 32767).short()
-    ta.save(buffer, wav16.cpu(), model.sr, format="wav")
+    ta.save(buffer, wav16.cpu(), model.sr, format="mp3", encoding="MP3")
     buffer.seek(0)
     end = time.perf_counter()
     CUMULATIVE_AUDIO_GEN_TIME += (end - start)
@@ -89,7 +89,7 @@ def tts():
         f"{CUMULATIVE_AUDIO_GEN_TIME:.4f}s"
     )
     
-    return HTTPResponse(body=buffer.read(), content_type="audio/wav")
+    return HTTPResponse(body=buffer.read(), content_type="audio/mp3")
 
 
 def check_voiceactors_dir():

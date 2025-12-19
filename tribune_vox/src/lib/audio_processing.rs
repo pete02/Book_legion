@@ -19,7 +19,7 @@ pub fn text_to_wav(
         .build()?;
 
     const MAX_RETRIES: usize = 3;
-
+    println!("ip:{}", ip);
     for attempt in 1..=MAX_RETRIES {
         let result = client
             .post(ip)

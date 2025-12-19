@@ -33,7 +33,6 @@ pub fn handle_chapter(
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("start chapter: {}", chapter);
     epub.set_current_chapter(chapter);
-    let text = get_clean_chapter(epub)?;
     ctx.current_chapter = chapter;
     ctx.current_chunk = 0;
     ctx.current_time=0.0;
@@ -42,6 +41,7 @@ pub fn handle_chapter(
     let chapter_wav_path = format!("{}/chapter_{:03}.wav", tempdir, ctx.current_chapter);
     let mut writer = create_writer(&chapter_wav_path, &ctx.server_ip)?;
 
+    let text = get_clean_chapter(epub)?;
     let chunks: Vec<&str> = text.split('\n').collect();
     let length = chunks.len();
     if debug{

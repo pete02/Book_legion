@@ -13,6 +13,8 @@ pub mod password_handler;
 pub mod db_handlers;
 pub mod update_handler;
 use tokio::sync::{RwLock, mpsc};
+pub mod audio_gen_handler;
+
 
 // Import your core logic here:
 mod logic;

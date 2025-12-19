@@ -16,7 +16,7 @@ tribune_test() {
   docker build -t "lumilukko/${name}" . && \
   docker run \
     --rm \
-    -p "${port}:${port}" \
+    -p "3000:${port}" \
     "$@" \
     "lumilukko/${name}"
 }

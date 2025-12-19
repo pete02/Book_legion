@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
+use tokio::sync::Mutex;
 
-use crate::{db_handlers, models::*};
+
+
+use crate::{audio_gen_handler, db_handlers, models::*};
 use crate::audio_handler;
 use tokio::sync::oneshot;
+use tokio::time::{sleep, Duration, timeout};
 
 pub enum FillerCommand {
     Ensure {
@@ -29,23 +33,29 @@ pub async fn run_filler(
     let mut current_book: Option<BookKey> = None;
     let mut cursor: Option<ChunkCursor> = None;
 
+    // Lock to ensure only one fetch at a time
+    let fetch_lock = Arc::new(Mutex::new(false));
+
+    // Channel for completed chunks
+    let (tx_chunk, mut rx_chunk) = mpsc::channel::<AudioChunkResult>(100);
+
     loop {
         tokio::select! {
-            // Control plane: reconcile intent
+            // --- Handle commands ---
             Some(cmd) = rx.recv() => {
                 match cmd {
                     FillerCommand::Stop => break,
 
                     FillerCommand::Ensure { book, start, respond_to } => {
                         let mut buf = buffer.write().await;
-                        
-                        let decision=if current_book.as_ref() != Some(&book) {
+
+                        let decision = if current_book.as_ref() != Some(&book) {
                             buf.clear(book.clone());
                             current_book = Some(book);
                             cursor = Some(start);
                             SeekDecision::Reset
-                        }else{
-                            let c=classify_seek(&start, &buf);
+                        } else {
+                            let c = classify_seek(&start, &buf);
                             match c {
                                 SeekDecision::Reset => {
                                     buf.clear(current_book.clone().unwrap());
@@ -58,22 +68,22 @@ pub async fn run_filler(
                             }
                             c
                         };
-                        if let Some(tx)=respond_to{
-                            let _ =tx.send(decision);
+
+                        if let Some(tx) = respond_to {
+                            let _ = tx.send(decision);
                         }
                     }
                 }
             }
 
-            // Work loop: fill opportunistically
-            _ = tokio::time::sleep(std::time::Duration::from_millis(10)) => {
+            // --- Opportunistic filler ---
+            _ = sleep(Duration::from_millis(10)) => {
                 let c = match cursor.clone() {
                     Some(c) => c,
                     None => continue,
                 };
-                let at_end=
-                    c.chapter == c.max_chapter &&
-                    c.chunk == c.chapter_to_chunk[&c.chapter];
+
+                let at_end = c.chapter == c.max_chapter && c.chunk == c.chapter_to_chunk[&c.chapter];
 
                 let should_fill = {
                     let buf = buffer.read().await;
@@ -97,34 +107,72 @@ pub async fn run_filler(
                     duration: 0.0,
                 };
 
-                let map = match db_handlers::get_audiomap(&status) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                };
+                // --- Try to acquire fetch lock for 10ms ---
+                let mut start_fetch = false;
+                match timeout(Duration::from_millis(10), fetch_lock.lock()).await {
+                    Ok(mut guard) => {
+                        if !*guard {
+                            *guard = true;
+                            start_fetch = true;
+                        }
+                    }
+                    Err(_) => {
+                        // Lock unavailable, skip this iteration
+                        continue;
+                    }
+                }
 
-                let data = match audio_handler::get_audio_chunk(
-                    &status,
-                    &map,
-                    c.chapter as usize,
-                    c.chunk as usize,
-                    "test.mp3",
-                    false,
-                ) {
-                    Ok(d) => d,
-                    Err(_) => continue,
-                };
-                let mut buf = buffer.write().await;
-                buf.push(AudioChunkResult {
-                    data,
-                    place: format!("{},{}", c.chapter, c.chunk),
-                    reached_end: at_end,
+                if !start_fetch {
+                    continue;
+                }
+
+                // Clone variables for the spawned task
+                let fetch_lock_clone = Arc::clone(&fetch_lock);
+                let tx_clone = tx_chunk.clone();
+                let status_clone = status.clone();
+                let c_clone = c.clone();
+                let at_end_clone = at_end;
+
+                tokio::spawn(async move {
+                    // Fetch audio chunk
+                    let data = match audio_gen_handler::get_audio_chunk(&status_clone).await {
+                        Ok(d) => d,
+                        Err(err) => {
+                            eprintln!("Failed to get audio chunk: {}", err);
+                            let mut guard = fetch_lock_clone.lock().await;
+                            *guard = false;
+                            return;
+                        }
+                    };
+
+                    // Send completed chunk to channel
+                    let chunk = AudioChunkResult {
+                        data,
+                        place: format!("{},{}", c_clone.chapter, c_clone.chunk),
+                        reached_end: at_end_clone,
+                    };
+
+                    if tx_clone.send(chunk).await.is_err() {
+                        eprintln!("Failed to send audio chunk to channel");
+                    }
+
+                    // Release fetch lock
+                    let mut guard = fetch_lock_clone.lock().await;
+                    *guard = false;
                 });
 
                 cursor = Some(advance_cursor(c));
             }
         }
+
+        // --- Drain completed chunks from channel ---
+        while let Ok(chunk) = rx_chunk.try_recv() {
+            let mut buf = buffer.write().await;
+            buf.push(chunk);
+        }
     }
 }
+
 
 
 pub fn advance_cursor(mut c: ChunkCursor) -> ChunkCursor {
