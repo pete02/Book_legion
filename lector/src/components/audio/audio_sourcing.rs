@@ -1,8 +1,4 @@
-
-
-use dioxus::html::link::rel;
 use dioxus::{logger::tracing, prelude::*};
-use reqwasm::websocket::State;
 use wasm_bindgen_futures::spawn_local;
 use js_sys::{Array, Uint8Array};
 use web_sys::{Blob, BlobPropertyBag, Url};
