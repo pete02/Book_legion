@@ -1,11 +1,11 @@
 use dioxus::html::a::rel;
 use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen_futures::spawn_local;
-use js_sys::{Array, Uint8Array};
+use js_sys::{Array, Uint8Array, global};
 use web_sys::{Blob, BlobPropertyBag, Url};
 
 use crate::components::server_api;
-use crate::models::{AudioChunkResult, BookStatus, GlobalState, parse_place};
+use crate::models::{AudioChunkResult, BookStatus, GlobalState, Place, parse_place};
 
 
 
@@ -143,10 +143,12 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<AudioChunkResult>>>, mut 
     use_effect(move ||{
         if fetching() {return;}
         if resource().is_some() {return;}
+        let Some(gbook)=global().book.clone() else {return;};
         let Some(mut book)=private_state().clone() else {return;};
         let Some(access_token)= global().access_token.clone() else {return;};
-        if book.chapter > book.max_chapter {return;}
-
+        if book.reached_end() {return;}
+        
+        let global_place=Place::new(gbook.chapter, gbook.chunk);
         fetching.set(true);
         spawn_local(async move{
             match server_api::fetch_audio(&book, access_token).await{
@@ -156,14 +158,24 @@ fn resource_fetch_hook(mut resource: Signal<Option<Vec<AudioChunkResult>>>, mut 
                 }
                 Ok(vec)=>{
                     if let Some(last_chunk) = vec.last() {
-                        if last_chunk.reached_end {
-                            book.chapter += 1;
-                            book.chunk = 1;
-                        } else {
-                            // Use last chunk's position to update book.chunk reliably
-                            let (ch, ck) = parse_place(&last_chunk.place);
-                            book.chapter = ch;
-                            book.chunk = ck + 1;
+                        let last_place = parse_place(&last_chunk.place);
+                        if last_place >= global_place{
+                            if last_chunk.reached_end {
+                                book.chapter =last_place.chapter+1;
+                                book.chunk = 1;
+                            } else {
+                                // Use last chunk's position to update book.chunk reliably
+                                book.chapter = last_place.chapter;
+                                book.chunk = last_place.chunk + 1;
+                            }
+                        }else{
+                            if gbook.reached_chapter_end(){
+                                book.chapter=gbook.chapter+1;
+                                book.chunk=1;
+                            }else{
+                                book.chapter=gbook.chapter;
+                                book.chunk=gbook.chunk+1;
+                            }
                         }
                     }
                     tracing::debug!("resource len: {}", vec.len());

@@ -15,6 +15,21 @@ pub struct BookStatus {
     pub duration: f64,
     pub chapter_to_chunk: HashMap<u32,u32>,
 }
+impl BookStatus {
+    pub fn reached_chapter_end(&self) -> bool {
+        // 1. Check that chapter exists
+        let Some(&last_chunk) = self.chapter_to_chunk.get(&self.chapter) else {
+            return true;
+        };
+
+        // 2. Compare chunk
+        self.chunk == last_chunk
+    }
+
+    pub fn reached_end(&self)-> bool{
+        self.reached_chapter_end() && self.chapter == self.max_chapter
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ManifestEntry {
@@ -95,7 +110,45 @@ pub struct JsonPayload{
     pub chunks: Vec<AudioChunkResult>
 }
 
-pub fn parse_place(place: &str) -> (u32, u32) {
+
+use std::cmp::Ordering;
+
+#[derive(Debug, Clone, Copy)]
+pub struct Place {
+    pub chapter: u32,
+    pub chunk: u32,
+}
+
+impl Place {
+    pub fn new(chapter: u32, chunk: u32) -> Self {
+        Self { chapter, chunk }
+    }
+}
+
+impl PartialEq for Place {
+    fn eq(&self, other: &Self) -> bool {
+        self.chapter == other.chapter && self.chunk == other.chunk
+    }
+}
+
+impl Eq for Place {}
+
+impl PartialOrd for Place {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Place {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.chapter
+            .cmp(&other.chapter)
+            .then_with(|| self.chunk.cmp(&other.chunk))
+    }
+}
+
+
+pub fn parse_place(place: &str) -> Place {
     let mut parts = place.split(',');
 
     let chapter = parts
@@ -115,5 +168,5 @@ pub fn parse_place(place: &str) -> (u32, u32) {
         "place contains extra components"
     );
 
-    (chapter, chunk)
+    Place::new(chapter, chunk)
 }
