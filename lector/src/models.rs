@@ -29,6 +29,21 @@ impl BookStatus {
     pub fn reached_end(&self)-> bool{
         self.reached_chapter_end() && self.chapter == self.max_chapter
     }
+
+    pub fn get_current_pos(&self)->Place{
+        Place::new(self.chapter,self.chunk)
+    }
+
+    pub fn set_place(&mut self, place:Place){
+        if self.max_chapter >= place.chapter && self.initial_chapter <= place.chapter{
+            let Some(max_chunk)=self.chapter_to_chunk.get(&place.chapter) else {return;};
+            if place.chunk >=1 && place.chunk <=*max_chunk{
+                self.chapter=place.chapter;
+                self.chunk=place.chunk;
+            }
+        }
+    }
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -123,6 +138,69 @@ impl Place {
     pub fn new(chapter: u32, chunk: u32) -> Self {
         Self { chapter, chunk }
     }
+
+    pub fn parse(place: &str) -> Place {
+        let mut parts = place.split(',');
+
+        let chapter = parts
+            .next()
+            .expect("place missing chapter")
+            .parse::<u32>()
+            .expect("invalid chapter in place");
+
+        let chunk = parts
+            .next()
+            .expect("place missing chunk")
+            .parse::<u32>()
+            .expect("invalid chunk in place");
+
+        assert!(
+            parts.next().is_none(),
+            "place contains extra components"
+        );
+
+        Place::new(chapter, chunk)
+    }
+
+    pub fn next(&mut self,map:&HashMap<u32,u32>)-> Place{
+        let Some(max_chunk)=map.get(&self.chapter)else {return *self};
+        if self.chunk == *max_chunk{
+            if map.keys().any(|f| *f == self.chapter+1){
+                self.chapter+=1;
+                self.chunk=1;
+            }
+        }else{
+            self.chunk+=1;
+        }
+
+        return *self
+    }
+
+    pub fn prev(&mut self,map:&HashMap<u32,u32>)-> Place{
+        if self.chunk == 1{
+            if map.keys().any(|f| *f == self.chapter-1){
+                let Some(max_chunk)=map.get(&(self.chapter-1))else {return *self};
+                self.chapter-=1;
+                self.chunk=*max_chunk;
+            }
+        }else{
+            self.chunk-=1;
+        }
+
+        return *self
+    }
+
+    pub fn jump_next(&mut self, amount: i32, map:&HashMap<u32,u32>){
+        for _i in 0..amount{
+            self.next(map);
+        }
+    }
+    pub fn jump_prev(&mut self, amount: i32, map:&HashMap<u32,u32>){
+        for _i in 0..amount{
+            self.prev(map);
+        }
+    }
+
 }
 
 impl PartialEq for Place {
@@ -148,25 +226,3 @@ impl Ord for Place {
 }
 
 
-pub fn parse_place(place: &str) -> Place {
-    let mut parts = place.split(',');
-
-    let chapter = parts
-        .next()
-        .expect("place missing chapter")
-        .parse::<u32>()
-        .expect("invalid chapter in place");
-
-    let chunk = parts
-        .next()
-        .expect("place missing chunk")
-        .parse::<u32>()
-        .expect("invalid chunk in place");
-
-    assert!(
-        parts.next().is_none(),
-        "place contains extra components"
-    );
-
-    Place::new(chapter, chunk)
-}

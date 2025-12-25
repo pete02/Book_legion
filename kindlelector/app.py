@@ -11,6 +11,7 @@ import time
 
 app = FastAPI()
 
+
 # -------------------
 # Data Models
 # -------------------
@@ -22,7 +23,7 @@ class InputData(BaseModel):
     index: int
     value: str
     
-client_viewport = {"width": 1280, "height": 720}
+client_viewport = {"width": 647, "height": 845}
 # -------------------
 # Global Browser State
 # -------------------
@@ -36,12 +37,12 @@ HEARTBEAT=20
 client_token=None
 
 async def init_browser():
-    global browser_instance, page_instance
+    global browser_instance, page_instance, client_viewport
 
     playwright = await async_playwright().start()
     browser_instance = await playwright.chromium.launch(headless=True)
     page_instance = await browser_instance.new_page()
-
+    await page_instance.set_viewport_size(client_viewport)
     async def route_handler(route):
         url = route.request.url
         print("url: ", url)
@@ -56,7 +57,7 @@ async def init_browser():
             await route.continue_()
 
     await page_instance.route("**/*", route_handler)
-    await page_instance.goto("http://booklegion-lector")
+    await page_instance.goto("http://booklegion-lector-staging")
 
 
 async def monitor_page_changes():
@@ -221,16 +222,10 @@ async def post_resolution(req: Request):
     
     # Set the client token
     client_token = token
-
-    width = int(data.get("width", 1280))
-    height = int(data.get("height", 720))
     token=data.get("token")
     
-    client_viewport = {"width": width, "height": height}
     await ensure_browser_ready()
     # Apply viewport size to Playwright page
-    if page_instance:
-        await page_instance.set_viewport_size(client_viewport)
     last_heartbeat=time.time()
     print(f"Client viewport set to: {width}x{height}")
     return {"status": "ok"}

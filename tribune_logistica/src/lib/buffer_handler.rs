@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, Semaphore};
 use tokio::sync::Mutex;
 
 
@@ -33,14 +33,19 @@ pub async fn run_filler(
     let mut current_book: Option<BookKey> = None;
     let mut cursor: Option<ChunkCursor> = None;
 
-    // Lock to ensure only one fetch at a time
-    let fetch_lock = Arc::new(Mutex::new(false));
+    // Only one fetch at a time, non-blocking
+    let fetch_sem = Arc::new(Semaphore::new(1));
 
-    // Channel for completed chunks
-    let (tx_chunk, mut rx_chunk) = mpsc::channel::<(AudioChunkResult, Option<BookKey>)>(100);
+    let (tx_chunk, mut rx_chunk) =
+        mpsc::channel::<(AudioChunkResult, Option<BookKey>)>(100);
+
     loop {
         tokio::select! {
-            // --- Handle commands ---
+            biased;
+
+            // -------------------------------------------------
+            // 1️⃣ Commands — ALWAYS highest priority
+            // -------------------------------------------------
             Some(cmd) = rx.recv() => {
                 match cmd {
                     FillerCommand::Stop => break,
@@ -54,10 +59,10 @@ pub async fn run_filler(
                             cursor = Some(start);
                             SeekDecision::Reset
                         } else {
-                            let c = classify_seek(&start, &buf);
-                            match c {
+                            let d = classify_seek(&start, &buf);
+                            match d {
                                 SeekDecision::Reset => {
-                                    buf.clear(current_book.clone().unwrap());
+                                    buf.clear(book.clone());
                                     cursor = Some(start);
                                 }
                                 SeekDecision::TrimToStart => {
@@ -65,7 +70,7 @@ pub async fn run_filler(
                                 }
                                 SeekDecision::NoOp => {}
                             }
-                            c
+                            d
                         };
 
                         if let Some(tx) = respond_to {
@@ -75,27 +80,49 @@ pub async fn run_filler(
                 }
             }
 
-            // --- Opportunistic filler ---
-            _ = sleep(Duration::from_millis(10)) => {
-                let c = match cursor.clone() {
-                    Some(c) => c,
-                    None => continue,
-                };
+            // -------------------------------------------------
+            // 2️⃣ Drain completed chunks into buffer
+            // -------------------------------------------------
+            Some((chunk, key)) = rx_chunk.recv() => {
+                if key == current_book {
+                    let mut buf = buffer.write().await;
+                    buf.push(chunk);
+                }
+            }
 
-                let at_end = c.chapter == c.max_chapter && c.chunk == c.chapter_to_chunk[&c.chapter];
+            // -------------------------------------------------
+            // 3️⃣ Spawn fetch if buffer needs data
+            // -------------------------------------------------
+            maybe_fetch = async {
+                let fetch_sem = Arc::clone(&fetch_sem);
+                let c = cursor.clone()?;
+                let book = current_book.clone()?;
 
                 let should_fill = {
                     let buf = buffer.read().await;
-                    buf.chunks.len() < buf.max_size && !at_end
+                    buf.chunks.len() < buf.max_size
                 };
 
                 if !should_fill {
-                    continue;
+                    return None;
                 }
+                
+                let permit = fetch_sem.try_acquire_owned().ok()?;
+
+                Some((c, book, permit))
+            } => {
+                let (c, book, permit) = match maybe_fetch {
+                    Some(v) => v,
+                    None => continue,
+                };
+
+                let at_end =
+                    c.chapter == c.max_chapter &&
+                    c.chunk == c.chapter_to_chunk[&c.chapter];
 
                 let status = BookStatus {
-                    name: current_book.as_ref().unwrap().name.clone(),
-                    path: current_book.as_ref().unwrap().path.clone(),
+                    name: book.name.clone(),
+                    path: book.path.clone(),
                     chapter: c.chapter,
                     chunk: c.chunk,
                     initial_chapter: 0,
@@ -106,74 +133,32 @@ pub async fn run_filler(
                     duration: 0.0,
                 };
 
-                // --- Try to acquire fetch lock for 10ms ---
-                let mut start_fetch = false;
-                match timeout(Duration::from_millis(10), fetch_lock.lock()).await {
-                    Ok(mut guard) => {
-                        if !*guard {
-                            *guard = true;
-                            start_fetch = true;
-                        }
-                    }
-                    Err(_) => {
-                        // Lock unavailable, skip this iteration
-                        continue;
-                    }
-                }
+                let tx = tx_chunk.clone();
+                let next_cursor = advance_cursor(c.clone());
 
-                if !start_fetch {
-                    continue;
-                }
-
-                // Clone variables for the spawned task
-                let fetch_lock_clone = Arc::clone(&fetch_lock);
-                let tx_clone = tx_chunk.clone();
-                let status_clone = status.clone();
-                let c_clone = c.clone();
-                let at_end_clone = at_end;
-                let current_book=current_book.clone();
                 tokio::spawn(async move {
-                    // Fetch audio chunk
-                    let data = match audio_gen_handler::get_audio_chunk(&status_clone).await {
-                        Ok(d) => d,
-                        Err(err) => {
-                            eprintln!("Failed to get audio chunk: {}", err);
-                            let mut guard = fetch_lock_clone.lock().await;
-                            *guard = false;
-                            return;
+                    let _permit = permit; // released on drop
+
+                    match audio_gen_handler::get_audio_chunk(&status).await {
+                        Ok(data) => {
+                            let chunk = AudioChunkResult {
+                                data,
+                                place: format!("{},{}", c.chapter, c.chunk),
+                                reached_end: at_end,
+                            };
+                            let _ = tx.send((chunk, Some(book))).await;
                         }
-                    };
-
-                    // Send completed chunk to channel
-                    let chunk = AudioChunkResult {
-                        data,
-                        place: format!("{},{}", c_clone.chapter, c_clone.chunk),
-                        reached_end: at_end_clone,
-                    };
-
-                    if tx_clone.send((chunk,current_book)).await.is_err() {
-                        eprintln!("Failed to send audio chunk to channel");
+                        Err(e) => {
+                            eprintln!("Audio fetch failed: {e}");
+                        }
                     }
-
-                    // Release fetch lock
-                    let mut guard = fetch_lock_clone.lock().await;
-                    *guard = false;
                 });
 
-                cursor = Some(advance_cursor(c));
-            }
-        }
-
-        // --- Drain completed chunks from channel ---
-        while let Ok((chunk,key)) = rx_chunk.try_recv() {
-            if key==current_book{
-                let mut buf = buffer.write().await;
-                buf.push(chunk);
+                cursor = Some(next_cursor);
             }
         }
     }
 }
-
 
 
 pub fn advance_cursor(mut c: ChunkCursor) -> ChunkCursor {
