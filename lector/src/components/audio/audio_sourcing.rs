@@ -1,5 +1,6 @@
 use dioxus::{logger::tracing, prelude::*};
 use js_sys::{Array, Uint8Array};
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{Blob, BlobPropertyBag, Url};
 
 use crate::components::server_api;
@@ -86,7 +87,8 @@ fn audio_url_hook(
 ) {
     use_effect(move || {
         if audio_url().is_some() {return; }
-        if audio_urls().is_empty() {return;}
+        if audio_urls().len() == 0 {return;}
+        tracing::debug!("set audio_url");
         let (place,url)=audio_urls().remove(0);
         walk.set(place);
         audio_url.set(Some(url));
@@ -98,14 +100,15 @@ fn audio_urls_hook(
     audio_urls:Signal<Vec<(Place,String)>>,
     mut resource: Signal<Vec<AudioChunkResult>>
 ){
-    if !audio_urls().is_empty() {return;}
-    if resource().is_empty(){return;}
+    if audio_urls().len() > 0 {return;}
+    if resource().len() == 0{return;}
     
     for v in resource(){
         let url=create_blob(v.data);
         let place=Place::parse(&v.place);
         audio_urls().push((place,url));
     }
+    tracing::debug!("set audio-urls");
     resource.set(Vec::new());
 
 }
@@ -119,7 +122,7 @@ fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>){
         let Some(mut book)=global().book else {return;};
         let Some(token)=global().access_token else{return;};
 
-        if !resource().is_empty() {return;}
+        if resource().len() != 0 {return;}
         if fetching() {return;}
         if book.reached_end() {return;}
 
@@ -132,13 +135,15 @@ fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>){
 
         book.set_place(fetch_pos.next(&book.chapter_to_chunk));
         fetching.set(true);
-        spawn(async move{
+        tracing::debug!("start fetch");
+        spawn_local(async move{
             match server_api::fetch_audio(&book, token).await{
                 Err(a)=>{
                     fetching.set(false);
                     tracing::error!("error in audio fetching: {}",a);
                 },
                 Ok(vec)=>{
+                    tracing::debug!("feched chunks");
                     fetching.set(false);
                     resource.set(vec.clone());
                     let Some(last)=vec.last() else {return;};
