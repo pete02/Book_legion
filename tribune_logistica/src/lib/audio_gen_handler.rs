@@ -20,7 +20,7 @@ pub async fn get_audio_chunk(status: &BookStatus) -> Result<Vec<u8>, Box<dyn std
 
     let clean_text = tokio::task::spawn_blocking(move || clean_html(&chunk_txt)).await??;
 
-    text_to_wav_async(&clean_text, "sofia", "http://booklegion-tribune_dictio:8000/tts").await
+    text_to_wav_async(&clean_text, "sofia", "http://192.168.88.244:8000/tts").await
 }
 
 pub fn clean_html(html:&str)->Result<String, Box<dyn std::error::Error + Send + Sync>>{
