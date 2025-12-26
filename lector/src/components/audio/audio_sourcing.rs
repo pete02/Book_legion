@@ -19,7 +19,7 @@ pub fn audio_sourcing(audio_url: Signal<Option<String>>, jump:Signal<i32>, time:
     reload_audio_watcher(reload, resource,audio_url, audio_urls,time);
     audio_url_hook(audio_url, audio_urls, walk);
     audio_urls_hook(audio_urls, resource);
-    resource_fetch_hook(resource);
+    resource_fetch_hook(resource,audio_url);
     walker(walk, jump, reload);
 }
 
@@ -82,14 +82,16 @@ fn walker(mut walk:Signal<Place> , mut jump:Signal<i32>, mut reload:Signal<bool>
 
 fn audio_url_hook(
     mut audio_url: Signal<Option<String>>,
-    audio_urls:Signal<Vec<(Place,String)>>,
+    mut audio_urls:Signal<Vec<(Place,String)>>,
     mut walk:Signal<Place>
 ) {
     use_effect(move || {
         if audio_url().is_some() {return; }
         if audio_urls().len() == 0 {return;}
-        tracing::debug!("set audio_url");
-        let (place,url)=audio_urls().remove(0);
+        let mut temp=audio_urls();
+        let (place,url)=temp.remove(0);
+        audio_urls.set(temp);
+        tracing::info!("set audio_url: {:?}",place);
         walk.set(place);
         audio_url.set(Some(url));
     });
@@ -97,27 +99,28 @@ fn audio_url_hook(
 
 
 fn audio_urls_hook(
-    audio_urls:Signal<Vec<(Place,String)>>,
+    mut audio_urls:Signal<Vec<(Place,String)>>,
     mut resource: Signal<Vec<AudioChunkResult>>
 ){
     if audio_urls().len() > 0 {return;}
     if resource().len() == 0{return;}
-    
+    let mut temp=Vec::new();
     for v in resource(){
         let url=create_blob(v.data);
         let place=Place::parse(&v.place);
-        audio_urls().push((place,url));
+        temp.push((place,url))
     }
-    tracing::debug!("set audio-urls");
+    audio_urls.set(temp);
+    tracing::info!("set audio-urls: {}", audio_urls().len());
     resource.set(Vec::new());
 
 }
 
-fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>){
+fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>, audio_url: Signal<Option<String>>){
     let mut fetching=use_signal(||false);
     let global=use_context::<Signal<GlobalState>>();
     let mut last_place=use_signal(||Place::new(0,0));
-
+    let mut first=use_signal(||true);
     use_effect(move ||{
         let Some(mut book)=global().book else {return;};
         let Some(token)=global().access_token else{return;};
@@ -133,9 +136,18 @@ fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>){
             fetch_pos=last_place();
         }
 
-        book.set_place(fetch_pos.next(&book.chapter_to_chunk));
+        tracing::info!("fetch pos: {:?}",fetch_pos);
+        if !first(){
+            tracing::info!("next pos");
+            fetch_pos=fetch_pos.next(&book.chapter_to_chunk);
+        }else{
+            tracing::info!("first pos");
+            first.set(false);
+        }
+        tracing::info!("will fetch: {:?}",fetch_pos);
+        book.set_place(fetch_pos);
         fetching.set(true);
-        tracing::debug!("start fetch");
+        tracing::info!("start fetch");
         spawn_local(async move{
             match server_api::fetch_audio(&book, token).await{
                 Err(a)=>{
@@ -143,10 +155,10 @@ fn resource_fetch_hook(mut resource: Signal<Vec<AudioChunkResult>>){
                     tracing::error!("error in audio fetching: {}",a);
                 },
                 Ok(vec)=>{
-                    tracing::debug!("feched chunks");
                     fetching.set(false);
                     resource.set(vec.clone());
                     let Some(last)=vec.last() else {return;};
+                    tracing::info!("feched chunks: {}", resource().len());
                     let place=Place::parse(&last.place);
                     last_place.set(place);
                 }

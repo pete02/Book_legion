@@ -162,7 +162,7 @@ impl Place {
         Place::new(chapter, chunk)
     }
 
-    pub fn next(&mut self,map:&HashMap<u32,u32>)-> Place{
+    pub fn next(&mut self,map:&HashMap<u32,u32>)->Place{
         let Some(max_chunk)=map.get(&self.chapter)else {return *self};
         if self.chunk == *max_chunk{
             if map.keys().any(|f| *f == self.chapter+1){
@@ -172,14 +172,13 @@ impl Place {
         }else{
             self.chunk+=1;
         }
-
         return *self
     }
 
-    pub fn prev(&mut self,map:&HashMap<u32,u32>)-> Place{
+    pub fn prev(&mut self,map:&HashMap<u32,u32>){
         if self.chunk == 1{
             if map.keys().any(|f| *f == self.chapter-1){
-                let Some(max_chunk)=map.get(&(self.chapter-1))else {return *self};
+                let Some(max_chunk)=map.get(&(self.chapter-1))else {return};
                 self.chapter-=1;
                 self.chunk=*max_chunk;
             }
@@ -187,7 +186,6 @@ impl Place {
             self.chunk-=1;
         }
 
-        return *self
     }
 
     pub fn jump_next(&mut self, amount: i32, map:&HashMap<u32,u32>){
