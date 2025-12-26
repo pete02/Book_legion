@@ -22,8 +22,8 @@ pub async fn login_handler(
     Json(login): Json<LoginRecord>
 )-> impl IntoResponse{
     let ppath=&format!("{}/user.json",state.config);
-    println!("REQUEST: /endpint login");
-    println!("sourcing pasword from {}",ppath);
+    //println!("REQUEST: /endpint login");
+    //println!("sourcing pasword from {}",ppath);
     let password_data=match get_password_data(&ppath){
         Err(a)=>return (StatusCode::INTERNAL_SERVER_ERROR,a.to_string()).into_response(),
         Ok(d)=>d
@@ -37,17 +37,17 @@ pub async fn login_handler(
                 match password_handler::generate_and_store_refresh_token(&login.username, password_data){
                     Ok((refresh,saving))=>{
                         let _=save_password_data(&ppath, &saving);
-                        println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
+                        //println!("REQUEST: user: {} endpoint: /login, Success ", &login.username);
                         return (StatusCode::OK, Json(json!({ "access_token": token, "refresh_token": refresh }))).into_response()
                     },
                     Err(_)=>{
-                        println!("REQUEST: user: {} endpoint: /login,Denied ", &login.username);
-                        println!("Error in generating refresh token");
+                        //println!("REQUEST: user: {} endpoint: /login,Denied ", &login.username);
+                        //println!("Error in generating refresh token");
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response()
                     }
                 }
             }else{
-                println!("REQUEST: user: {} endpoint: /login, Denied", &login.username);
+                //println!("REQUEST: user: {} endpoint: /login, Denied", &login.username);
                 return StatusCode::FORBIDDEN.into_response()
             }
         }
@@ -70,7 +70,7 @@ pub async fn refresh_handler(
         Err(_)=>return StatusCode::FORBIDDEN.into_response(),
         Ok((access,(refresh,saving)))=>{
             let _=save_password_data(ppath, &saving);
-            println!("TOKEN REFRESHED: user: {}",refresh_record.username);
+            //println!("TOKEN REFRESHED: user: {}",refresh_record.username);
             return (StatusCode::OK, Json(json!({ "access_token": access, "refresh_token": refresh }))).into_response()
         },
     }
@@ -84,11 +84,11 @@ pub async fn init_handler(
     let user = match check_token(state.secret.as_ref(), &headers) {
             Ok(u) => u,
             Err(resp) => {
-                println!("REQUEST DENIED: endpoint /init");
+                //println!("REQUEST DENIED: endpoint /init");
                 return resp
             },
         };
-    println!(" REQUEST: user: {} , endoint: /init", user);
+    //println!(" REQUEST: user: {} , endoint: /init", user);
 
     let manifest_path=format!("{}/{}",state.prefix,state.manifest);
     match db_handlers::init_book(&params.name, &params.book_type, &manifest_path,&state.prefix) {
@@ -102,11 +102,11 @@ pub async fn book_handler(State(state): State<Arc<AppState>>,h:HeaderMap, Json(b
     let user = match check_token(state.secret.as_ref(), &h) {
             Ok(u) => u,
             Err(resp) => {
-                println!("REQUEST DENIED: endpoint /book");
+                //println!("REQUEST DENIED: endpoint /book");
                 return resp
             },
         };
-    println!(" REQUEST: user: {} , endoint: /book book:{}, chapter: {}", user, book.name, book.chapter);
+    //println!(" REQUEST: user: {} , endoint: /book book:{}, chapter: {}", user, book.name, book.chapter);
 
     let mut headers: HeaderMap = HeaderMap::new();
     match get_chapter(&book) {
@@ -129,16 +129,16 @@ pub async fn audiomap(State(state): State<Arc<AppState>>, h: HeaderMap, Json(boo
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
         Err(resp) => {
-            println!("REQUEST DENIED: endpoint /audiomap");
+            //println!("REQUEST DENIED: endpoint /audiomap");
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /audiomap, book: {}", user, book.name);
+    //println!(" REQUEST: user: {} , endoint: /audiomap, book: {}", user, book.name);
 
     match get_audiomap(&book){
         Ok(map)=>    Json(json!({"status":"ok","data":map})).into_response(),
         Err(e)=>{
-            println!("{}",e);
+            //println!("{}",e);
             Json(json!({"status":"error","data":"error in audiomap"})).into_response()
         }
     }
@@ -156,11 +156,11 @@ pub async fn audio_endpoint(
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
         Err(resp) =>{
-            println!("REQUEST DENIED: endpoint: /audio");
+            //println!("REQUEST DENIED: endpoint: /audio");
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
+    //println!(" REQUEST: user: {} , endoint: /audio={}, book: {}", user, query.chunk, book.name);
     handle_audio_chunks(&book,query.chunk,state).await.into_response()
 }
 
@@ -192,7 +192,7 @@ pub async fn handle_audio_chunks(
     let (decision_tx, decision_rx) = oneshot::channel();
 
     // Send the Ensure command with the channel
-    println!("start ensure");
+    //println!("start ensure");
     tx.send(FillerCommand::Ensure {
         book: BookKey {
             name: status.name.clone(),
@@ -214,7 +214,7 @@ pub async fn handle_audio_chunks(
     }
 
     // Wait ONLY if buffer empty
-    println!("start read");
+    //println!("start read");
     loop {
         let buf = buffer.read().await;
         if !buf.chunks.is_empty() {
@@ -223,7 +223,7 @@ pub async fn handle_audio_chunks(
         drop(buf);
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    println!("end read");
+    //println!("end read");
     // Drain immediately available chunks
     let mut out = Vec::new();
     {
@@ -260,17 +260,21 @@ pub async fn update_endpoint(
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
         Err(resp) => {
-            println!("REQUEST DENIED: endpoint / update");
+            //println!("REQUEST DENIED: endpoint / update");
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
+    //println!(" REQUEST: user: {} , endoint: /update book: {}", user,  book.name);
     handle_update(&book).into_response()
 }
 
 fn handle_update(status:&BookStatus)->Json<Value>{
+    let map=match get_audiomap(&status){
+        Ok(map)=>map,
+        Err(e)=>return Json(json!({"status": "error", "message": e.to_string()}))
+    };
 
-    match update_handler::update_progress(status) {
+    match update_handler::update_progress(status, &map) {
         Ok(_) => Json(json!({ "status": "ok" })),
         Err(e) => Json(json!({ "status": "error", "message": e })),
     }
@@ -284,11 +288,11 @@ h: HeaderMap
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
         Err(resp) => {
-            println!("REQUEST DENIED: endpoint /manifest");
+            //println!("REQUEST DENIED: endpoint /manifest");
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /manifest", user);
+    //println!(" REQUEST: user: {} , endoint: /manifest", user);
     handle_manifest(state).into_response()
 }
 
@@ -305,7 +309,7 @@ pub async fn cover_handler(
     State(state): State<Arc<AppState>>,
     Path(book): Path<String>,
 ) -> impl IntoResponse {
-    println!(" REQUEST: endoint: /cover book: {}",  book);
+    //println!(" REQUEST: endoint: /cover book: {}",  book);
 
     let book = format!("{}/{}/{}.epub",state.prefix,book,book);
 
@@ -323,11 +327,11 @@ pub async fn css_handler( Path(book): Path<String>,
     let user = match check_token(state.secret.as_ref(), &h) {
         Ok(u) => u,
         Err(resp) => {
-            println!("REQUEST DENIED: endpoint /css");
+            //println!("REQUEST DENIED: endpoint /css");
             return resp
         },
     };
-    println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
+    //println!(" REQUEST: user: {} , endoint: /css book: {}", user,  book);
 
     let book = format!("{}/{}/{}.epub",state.prefix,book,book);
 
