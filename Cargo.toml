@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "lector",
-    "tribune_logistica",
     "tribune_porta",
     "tribune_vox",
     "tribune_archivum", "tribune_secreto", "playground",

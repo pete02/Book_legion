@@ -1,1 +1,0 @@
-docker build --tag lumilukko/tribune_logistica . && docker run -v ./config:/config -v ./data:/data -p 8000:8000 lumilukko/tribune_logistica

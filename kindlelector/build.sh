@@ -1,1 +1,0 @@
-docker build --tag lumilukko/kindlelector:latest . && docker push lumilukko/kindlelector:latest

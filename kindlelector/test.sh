@@ -1,1 +1,0 @@
-docker build --tag pythontest . && docker run -v ./static:/static -p 8000:8000 pythontest
