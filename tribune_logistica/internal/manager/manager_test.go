@@ -21,7 +21,7 @@ func assertCursorSlicesEqual(t *testing.T, got, want []types.Cursor) {
 }
 
 func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{
 		0: 2,
 		1: 1,
@@ -39,7 +39,7 @@ func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
 	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
-	chunks, err := org.GetChunks(start, 4, maxChunks)
+	chunks, err := org.GetChunks("t", start, 4, maxChunks)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,8 +53,37 @@ func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
 	}
 }
 
+func TestIncorrectIdEmptiesBuffer(t *testing.T) {
+	buf := buffer.NewBuffer("t")
+	maxChunks := map[int]int{
+		0: 2,
+		1: 1,
+	}
+
+	for ch := 0; ch <= 1; ch++ {
+		for c := 0; c <= maxChunks[ch]; c++ {
+			buf.Add(buffer.Chunk{
+				ID:   types.Cursor{Chapter: ch, Chunk: c},
+				Data: []byte{byte(ch*10 + c)},
+			})
+		}
+	}
+
+	org := manager.NewOrganizer(buf, 2)
+
+	start := types.Cursor{0, 0}
+	chunks, err := org.GetChunks("a", start, 4, maxChunks)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(chunks) != 0 {
+		t.Fatalf("expected 0 chunks, got %d", len(chunks))
+	}
+}
+
 func TestOrganizerGetChunks_MissingFirstChunk_ReturnsNothing(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{
 		0: 2,
 	}
@@ -68,7 +97,7 @@ func TestOrganizerGetChunks_MissingFirstChunk_ReturnsNothing(t *testing.T) {
 	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
-	chunks, _ := org.GetChunks(start, 3, maxChunks)
+	chunks, _ := org.GetChunks("t", start, 3, maxChunks)
 
 	if len(chunks) != 0 {
 		t.Fatalf("expected 0 chunks, got %d", len(chunks))
@@ -83,7 +112,7 @@ func TestOrganizerGetChunks_MissingFirstChunk_ReturnsNothing(t *testing.T) {
 }
 
 func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{
 		0: 3,
 	}
@@ -94,7 +123,7 @@ func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
 	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
-	chunks, _ := org.GetChunks(start, 4, maxChunks)
+	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
 
 	if len(chunks) != 1 {
 		t.Fatalf("expected 1 contiguous chunk, got %d", len(chunks))
@@ -109,7 +138,7 @@ func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
 }
 
 func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{
 		0: 1,
 		1: 2,
@@ -122,7 +151,7 @@ func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
 	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
-	chunks, _ := org.GetChunks(start, 4, maxChunks)
+	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
 
 	if len(chunks) != 3 {
 		t.Fatalf("expected 3 contiguous chunks, got %d", len(chunks))
@@ -137,13 +166,13 @@ func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
 }
 
 func TestOrganizerOrderList_Invariants(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{0: 3}
 
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 1}, Data: []byte{1}})
 
 	org := manager.NewOrganizer(buf, 3)
-	org.GetChunks(types.Cursor{0, 0}, 4, maxChunks)
+	org.GetChunks("t", types.Cursor{0, 0}, 4, maxChunks)
 
 	seen := make(map[types.Cursor]bool)
 	for _, c := range org.OrderList {
@@ -166,7 +195,7 @@ func TestOrganizerOrderList_Invariants(t *testing.T) {
 }
 
 func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{0: 5}
 
 	for i := 0; i <= 2; i++ {
@@ -179,7 +208,7 @@ func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
 	org := manager.NewOrganizer(buf, 6) // half = 3
 
 	start := types.Cursor{0, 0}
-	_, _ = org.GetChunks(start, 3, maxChunks)
+	_, _ = org.GetChunks("t", start, 3, maxChunks)
 
 	for i := 0; i <= 2; i++ {
 		if _, ok := buf.Get(types.Cursor{0, i}); !ok {
@@ -189,7 +218,7 @@ func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
 }
 
 func TestManagerTrimsBackwardBeyondHalfBuffer(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{0: 10}
 
 	for i := 0; i <= 6; i++ {
@@ -202,7 +231,7 @@ func TestManagerTrimsBackwardBeyondHalfBuffer(t *testing.T) {
 	org := manager.NewOrganizer(buf, 6) // half = 3
 
 	start := types.Cursor{0, 3}
-	chunks, _ := org.GetChunks(start, 3, maxChunks)
+	chunks, _ := org.GetChunks("t", start, 3, maxChunks)
 
 	if len(chunks) != 3 {
 		t.Fatalf("expected 3 chunks, got %d", len(chunks))
@@ -237,7 +266,7 @@ func TestManagerTrimsBackwardBeyondHalfBuffer(t *testing.T) {
 }
 
 func TestManagerTrimRespectsChapterBoundaries(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{
 		0: 2,
 		1: 2,
@@ -253,7 +282,7 @@ func TestManagerTrimRespectsChapterBoundaries(t *testing.T) {
 	org := manager.NewOrganizer(buf, 4) // half = 2
 
 	start := types.Cursor{0, 1}
-	org.GetChunks(start, 3, maxChunks)
+	org.GetChunks("t", start, 3, maxChunks)
 
 	// anchor = {1,0}
 	// keep last 2 backward + anchor

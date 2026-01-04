@@ -16,8 +16,9 @@ type Buffer struct {
 	mu    sync.RWMutex
 }
 
-func NewBuffer() *Buffer {
+func NewBuffer(id string) *Buffer {
 	return &Buffer{
+		Id:    id,
 		Store: make(map[Cursor][]byte),
 	}
 }

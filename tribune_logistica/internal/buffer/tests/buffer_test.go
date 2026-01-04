@@ -3,13 +3,15 @@ package buffer_test
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/buffer"
+	"github.com/book_legion-tribune_logistica/internal/types"
 )
 
 func TestBufferAddGet(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	c1 := buffer.Cursor{Chapter: 0, Chunk: 0}
 	data1 := []byte("chunk1")
@@ -25,7 +27,7 @@ func TestBufferAddGet(t *testing.T) {
 }
 
 func TestBufferHas(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	c1 := buffer.Cursor{Chapter: 0, Chunk: 0}
 	c2 := buffer.Cursor{Chapter: 0, Chunk: 1}
@@ -42,7 +44,7 @@ func TestBufferHas(t *testing.T) {
 }
 
 func TestBufferClear(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	buf.Add(buffer.Chunk{ID: buffer.Cursor{Chapter: 0, Chunk: 0}, Data: []byte("a")})
 	buf.Clear()
@@ -53,7 +55,7 @@ func TestBufferClear(t *testing.T) {
 }
 
 func TestBufferTrimSingleChapter(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	maxChunks := map[int]int{0: 5} // chapter 0 has 5 chunks: 0..4
 
@@ -85,7 +87,7 @@ func TestBufferTrimSingleChapter(t *testing.T) {
 }
 
 func TestBufferTrimMultipleChapters(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	// chapter -> max chunk
 	maxChunks := map[int]int{
@@ -147,7 +149,7 @@ func TestBufferTrimMultipleChapters(t *testing.T) {
 }
 
 func TestTrimEmptyBuffer(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	// Should not panic or fail
 	maxChunks := map[int]int{0: 2}
@@ -155,7 +157,7 @@ func TestTrimEmptyBuffer(t *testing.T) {
 }
 
 func TestTrimStepsZero(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 	c := buffer.Cursor{Chapter: 0, Chunk: 0}
 	buf.Add(buffer.Chunk{ID: c, Data: []byte("data")})
 
@@ -168,7 +170,7 @@ func TestTrimStepsZero(t *testing.T) {
 }
 
 func TestTrimStepsNegative(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 	c := buffer.Cursor{Chapter: 0, Chunk: 0}
 	buf.Add(buffer.Chunk{ID: c, Data: []byte("data")})
 
@@ -182,7 +184,7 @@ func TestTrimStepsNegative(t *testing.T) {
 }
 
 func TestTrimPastMinChapter(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 
 	// Add first chapter
 	buf.Add(buffer.Chunk{ID: buffer.Cursor{Chapter: 0, Chunk: 0}, Data: []byte("a")})
@@ -200,7 +202,7 @@ func TestTrimPastMinChapter(t *testing.T) {
 }
 
 func TestTrimUnknownChapterInMaxChunks(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 	buf.Add(buffer.Chunk{ID: buffer.Cursor{Chapter: 1, Chunk: 0}, Data: []byte("b")})
 
 	// maxChunks does not contain chapter 0 or 1
@@ -213,7 +215,7 @@ func TestTrimUnknownChapterInMaxChunks(t *testing.T) {
 }
 
 func TestAddOverwriteChunk(t *testing.T) {
-	buf := buffer.NewBuffer()
+	buf := buffer.NewBuffer("")
 	c := buffer.Cursor{Chapter: 0, Chunk: 0}
 
 	buf.Add(buffer.Chunk{ID: c, Data: []byte("first")})
@@ -226,4 +228,91 @@ func TestAddOverwriteChunk(t *testing.T) {
 	if string(got) != "second" {
 		t.Errorf("expected chunk to be overwritten with 'second', got %s", got)
 	}
+}
+
+func makeChunk(id types.Cursor, data string) types.Chunk {
+	return types.Chunk{ID: id, Data: []byte(data)}
+}
+
+func TestBufferConcurrentAddGet(t *testing.T) {
+	buf := buffer.NewBuffer("test")
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+	numChunks := 10
+
+	// Writer goroutines
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(base int) {
+			defer wg.Done()
+			for j := range numChunks {
+				id := types.Cursor{Chapter: base, Chunk: j}
+				buf.Add(makeChunk(id, "data"))
+			}
+		}(i)
+	}
+
+	// Reader goroutines
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(base int) {
+			defer wg.Done()
+			for j := range numChunks {
+				id := types.Cursor{Chapter: base, Chunk: j}
+				buf.Get(id)
+				buf.Has(id)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestBufferConcurrentTrim(t *testing.T) {
+	buf := buffer.NewBuffer("trim-test")
+	numChunks := 10
+
+	// Populate buffer
+	for i := range numChunks {
+		id := types.Cursor{Chapter: 0, Chunk: i}
+		buf.Add(makeChunk(id, "data"))
+	}
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(offset int) {
+			defer wg.Done()
+			anchor := types.Cursor{Chapter: 0, Chunk: numChunks - 1 - offset}
+			maxChunks := map[int]int{0: numChunks}
+			buf.Trim(anchor, 10, 0, maxChunks)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestBufferConcurrentClear(t *testing.T) {
+	buf := buffer.NewBuffer("clear-test")
+	numChunks := 10
+
+	for i := range numChunks {
+		buf.Add(makeChunk(types.Cursor{Chapter: 0, Chunk: i}, "data"))
+	}
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for range numGoroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			buf.Clear()
+		}()
+	}
+
+	wg.Wait()
 }
