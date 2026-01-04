@@ -1,7 +1,9 @@
 package manager_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/book_legion-tribune_logistica/internal/buffer"
 	"github.com/book_legion-tribune_logistica/internal/manager"
@@ -51,64 +53,6 @@ func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
 	if len(org.OrderList) != 0 {
 		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
 	}
-}
-
-func TestIncorrectIdEmptiesBuffer(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
-	}
-
-	for ch := 0; ch <= 1; ch++ {
-		for c := 0; c <= maxChunks[ch]; c++ {
-			buf.Add(buffer.Chunk{
-				ID:   types.Cursor{Chapter: ch, Chunk: c},
-				Data: []byte{byte(ch*10 + c)},
-			})
-		}
-	}
-
-	org := manager.NewOrganizer(buf, 2)
-
-	start := types.Cursor{0, 0}
-	chunks, err := org.GetChunks("a", start, 4, maxChunks)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(chunks) != 0 {
-		t.Fatalf("expected 0 chunks, got %d", len(chunks))
-	}
-}
-
-func TestOrganizerGetChunks_MissingFirstChunk_ReturnsNothing(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 2,
-	}
-
-	// Buffer has later chunk, but not the first
-	buf.Add(buffer.Chunk{
-		ID:   types.Cursor{0, 1},
-		Data: []byte{1},
-	})
-
-	org := manager.NewOrganizer(buf, 2)
-
-	start := types.Cursor{0, 0}
-	chunks, _ := org.GetChunks("t", start, 3, maxChunks)
-
-	if len(chunks) != 0 {
-		t.Fatalf("expected 0 chunks, got %d", len(chunks))
-	}
-
-	expectedOrder := []types.Cursor{
-		{0, 0},
-		{0, 2},
-	}
-
-	assertCursorSlicesEqual(t, org.OrderList, expectedOrder)
 }
 
 func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
@@ -163,35 +107,6 @@ func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
 	}
 
 	assertCursorSlicesEqual(t, org.OrderList, expectedOrder)
-}
-
-func TestOrganizerOrderList_Invariants(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{0: 3}
-
-	buf.Add(buffer.Chunk{ID: types.Cursor{0, 1}, Data: []byte{1}})
-
-	org := manager.NewOrganizer(buf, 3)
-	org.GetChunks("t", types.Cursor{0, 0}, 4, maxChunks)
-
-	seen := make(map[types.Cursor]bool)
-	for _, c := range org.OrderList {
-		if seen[c] {
-			t.Fatalf("duplicate cursor %v in OrderList", c)
-		}
-		seen[c] = true
-
-		if _, ok := buf.Get(c); ok {
-			t.Fatalf("cursor %v in OrderList already exists in buffer", c)
-		}
-	}
-
-	// Ensure sorted
-	for i := 1; i < len(org.OrderList); i++ {
-		if org.OrderList[i-1].CompareCursor(org.OrderList[i]) > 0 {
-			t.Fatalf("OrderList not sorted: %v", org.OrderList)
-		}
-	}
 }
 
 func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
@@ -305,6 +220,368 @@ func TestManagerTrimRespectsChapterBoundaries(t *testing.T) {
 	for _, c := range trimmed {
 		if _, ok := buf.Get(c); ok {
 			t.Fatalf("expected %v to be trimmed", c)
+		}
+	}
+}
+
+func makeChunk(id types.Cursor, data string) types.Chunk {
+	return types.Chunk{ID: id, Data: []byte(data)}
+}
+
+func TestStartOrderProcessor_HappyPath(t *testing.T) {
+	buf := buffer.NewBuffer("buf-happy")
+	org := manager.NewOrganizer(buf, 5)
+
+	// Add several cursors to order list
+	cursors := []types.Cursor{
+		{Chapter: 0, Chunk: 0},
+		{Chapter: 0, Chunk: 1},
+		{Chapter: 0, Chunk: 2},
+	}
+
+	for _, c := range cursors {
+		org.AddToOrderForTest(c)
+	}
+
+	// fetchFn simulates 2-second fetch per cursor
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		time.Sleep(2 * time.Second)
+		return makeChunk(c, "data"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	// Wait enough for all fetches to complete
+	time.Sleep(time.Duration(len(cursors)*2+1) * time.Second)
+
+	// Verify all chunks are now in the buffer
+	for _, c := range cursors {
+		data, ok := buf.Get(c)
+		if !ok {
+			t.Errorf("expected chunk %v in buffer, but not found", c)
+		}
+		if string(data) != "data" {
+			t.Errorf("unexpected data for chunk %v: %s", c, string(data))
+		}
+	}
+
+	// Verify OrderList is empty
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) != 0 {
+		t.Errorf("expected OrderList to be empty, but has %d items", len(org.OrderList))
+	}
+}
+
+func TestProcessor_PartialSuccess(t *testing.T) {
+	buf := buffer.NewBuffer("buf-partial")
+	org := manager.NewOrganizer(buf, 5)
+
+	cursors := []types.Cursor{
+		{Chapter: 0, Chunk: 0},
+		{Chapter: 0, Chunk: 1},
+		{Chapter: 0, Chunk: 2},
+	}
+
+	for _, c := range cursors {
+		org.AddToOrderForTest(c)
+	}
+
+	// Only even chunks succeed
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		if c.Chunk%2 == 0 {
+			return makeChunk(c, "ok"), true
+		}
+		return types.Chunk{}, false
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	// Wait a bit to let processor run
+	// No time.Sleep needed in real unit, since fetchFn is instant
+	time.Sleep(10 * time.Millisecond)
+	// Verify buffer contains only successful chunks
+	for _, c := range cursors {
+		data, ok := buf.Get(c)
+		if c.Chunk%2 == 0 {
+			if !ok {
+				t.Errorf("expected chunk %v in buffer", c)
+			}
+			if string(data) != "ok" {
+				t.Errorf("unexpected data for chunk %v: %s", c, string(data))
+			}
+		} else {
+			if ok {
+				t.Errorf("unexpected chunk %v in buffer", c)
+			}
+		}
+	}
+
+	// OrderList contains only failed cursors
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	for _, c := range org.OrderList {
+		if c.Chunk%2 == 0 {
+			t.Errorf("chunk %v should have been removed from OrderList", c)
+		}
+	}
+}
+
+func TestProcessor_ConcurrentClear(t *testing.T) {
+	buf := buffer.NewBuffer("buf-clear")
+	org := manager.NewOrganizer(buf, 5)
+
+	cursors := []types.Cursor{
+		{Chapter: 0, Chunk: 0},
+		{Chapter: 0, Chunk: 1},
+	}
+
+	for _, c := range cursors {
+		org.AddToOrderForTest(c)
+	}
+
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		return makeChunk(c, "ok"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	// Concurrent Clear
+	org.Clear()
+	time.Sleep(10 * time.Millisecond)
+	// Verify buffer may contain nothing and OrderList is empty
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) != 0 {
+		t.Errorf("expected OrderList empty after Clear, got %v", org.OrderList)
+	}
+}
+
+func TestProcessor_EmptyOrderListThenAdd(t *testing.T) {
+	buf := buffer.NewBuffer("buf-empty")
+	org := manager.NewOrganizer(buf, 5)
+
+	// Start processor with empty list
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		return makeChunk(c, "ok"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	// Add orders dynamically
+	c := types.Cursor{Chapter: 0, Chunk: 0}
+	org.AddToOrderForTest(c)
+	time.Sleep(10 * time.Millisecond)
+	// Verify chunk added to buffer
+	data, ok := buf.Get(c)
+	if !ok || string(data) != "ok" {
+		t.Errorf("expected dynamic chunk in buffer")
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	// OrderList should be empty
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) != 0 {
+		t.Errorf("expected OrderList empty after dynamic addition")
+	}
+}
+
+func TestProcessor_DuplicateCursors(t *testing.T) {
+	buf := buffer.NewBuffer("buf-dup")
+	org := manager.NewOrganizer(buf, 5)
+
+	c := types.Cursor{Chapter: 0, Chunk: 0}
+
+	// Add same cursor multiple times
+	org.AddToOrderForTest(c)
+	org.AddToOrderForTest(c)
+	org.AddToOrderForTest(c)
+
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		return makeChunk(c, "ok"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+	time.Sleep(10 * time.Millisecond)
+	// Verify only one chunk in buffer
+	data, ok := buf.Get(c)
+	if !ok || string(data) != "ok" {
+		t.Errorf("expected chunk in buffer")
+	}
+
+	// Verify OrderList is empty
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) != 0 {
+		t.Errorf("expected OrderList empty after processing duplicates")
+	}
+}
+
+func TestProcessor_StopChannel(t *testing.T) {
+	buf := buffer.NewBuffer("buf-stop")
+	org := manager.NewOrganizer(buf, 5)
+
+	c := types.Cursor{Chapter: 0, Chunk: 0}
+	org.AddToOrderForTest(c)
+
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		return makeChunk(c, "ok"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+
+	// Immediately stop
+	close(stop)
+
+	time.Sleep(10 * time.Millisecond)
+	// Buffer may or may not have the chunk depending on timing
+	// Verify no panic and OrderList is either empty or contains cursor
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) > 1 {
+		t.Errorf("OrderList should have <= 1 item, got %d", len(org.OrderList))
+	}
+}
+
+func TestProcessor_HighConcurrencyStress(t *testing.T) {
+	buf := buffer.NewBuffer("buf-stress")
+	org := manager.NewOrganizer(buf, 10)
+
+	// Add 50 cursors
+	for i := range 50 {
+		c := types.Cursor{Chapter: 0, Chunk: i}
+		org.AddToOrderForTest(c)
+	}
+
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		return makeChunk(c, "ok"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	// Concurrently add/remove orders
+	var wg sync.WaitGroup
+	for i := 50; i < 60; i++ {
+		wg.Add(1)
+		go func(chunk int) {
+			defer wg.Done()
+			c := types.Cursor{Chapter: 0, Chunk: chunk}
+			org.AddToOrderForTest(c)
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify all expected chunks in buffer
+	for i := range 60 {
+		c := types.Cursor{Chapter: 0, Chunk: i}
+		data, ok := buf.Get(c)
+		if !ok || string(data) != "ok" {
+			t.Errorf("expected chunk %v in buffer", c)
+		}
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	// OrderList should be empty
+	org.MuLockTest()
+	defer org.MuUnlockTest()
+	if len(org.OrderList) != 0 {
+		t.Errorf("expected OrderList empty after stress test")
+	}
+}
+
+func TestOrganizerOrderList_Invariants(t *testing.T) {
+	buf := buffer.NewBuffer("t")
+	maxChunks := map[int]int{0: 3}
+
+	// Add starting chunk so GetChunks doesn't block
+	buf.Add(buffer.Chunk{ID: types.Cursor{0, 0}, Data: []byte{0}})
+	buf.Add(buffer.Chunk{ID: types.Cursor{0, 1}, Data: []byte{1}})
+
+	org := manager.NewOrganizer(buf, 10)
+	org.GetChunks("t", types.Cursor{0, 0}, 4, maxChunks)
+
+	seen := make(map[types.Cursor]bool)
+	for _, c := range org.OrderList {
+		if seen[c] {
+			t.Fatalf("duplicate cursor %v in OrderList", c)
+		}
+		seen[c] = true
+
+		if _, ok := buf.Get(c); ok {
+			t.Fatalf("cursor %v in OrderList already exists in buffer", c)
+		}
+	}
+
+	// Ensure sorted
+	for i := 1; i < len(org.OrderList); i++ {
+		if org.OrderList[i-1].CompareCursor(org.OrderList[i]) > 0 {
+			t.Fatalf("OrderList not sorted: %v", org.OrderList)
+		}
+	}
+}
+
+func TestGetChunks_BlocksUntilOneChunkThenProcessorFillsRest(t *testing.T) {
+	buf := buffer.NewBuffer("buf-block")
+	org := manager.NewOrganizer(buf, 5)
+	maxChunks := map[int]int{0: 4} // 5 chunks total: 0..4
+
+	// Simulate fetchFn with delay per chunk
+	var mu sync.Mutex
+	fetched := make(map[types.Cursor]bool)
+
+	fetchFn := func(c types.Cursor) (buffer.Chunk, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if fetched[c] {
+			return buffer.Chunk{}, false
+		}
+
+		// mark as fetched
+		fetched[c] = true
+
+		// simulate fetching time
+		time.Sleep(50 * time.Millisecond)
+		return makeChunk(c, "data"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	start := types.Cursor{Chapter: 0, Chunk: 0}
+
+	// Request chunks — should block until at least chunk 0 is available
+	result, err := org.GetChunks("buf-block", start, 5, maxChunks)
+	if err != nil {
+		t.Fatalf("GetChunks returned error: %v", err)
+	}
+
+	// Immediately after return, only the first chunk should be guaranteed
+	if len(result) != 1 {
+		t.Fatalf("expected 1 chunk returned immediately, got %d", len(result))
+	}
+	if string(result[0].Data) != "data" || result[0].ID != start {
+		t.Fatalf("unexpected first chunk: %+v", result[0])
+	}
+
+	// Wait a bit longer than processor fetch delay to allow remaining chunks to be added
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify that the buffer now contains all chunks 0..4
+	for i := 0; i <= 4; i++ {
+		c := types.Cursor{Chapter: 0, Chunk: i}
+		data, ok := buf.Get(c)
+		if !ok {
+			t.Errorf("expected chunk %v in buffer", c)
+		} else if string(data) != "data" {
+			t.Errorf("unexpected data for chunk %v: %s", c, string(data))
 		}
 	}
 }

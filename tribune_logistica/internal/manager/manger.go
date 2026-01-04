@@ -14,15 +14,18 @@ type Organizer struct {
 	OrderList  []types.Cursor
 	orderSet   map[types.Cursor]bool
 	mu         sync.Mutex
+	cond       *sync.Cond
 }
 
 func NewOrganizer(buf *buffer.Buffer, bufferSize int) *Organizer {
-	return &Organizer{
+	o := &Organizer{
 		Buf:        buf,
 		BufferSize: bufferSize,
 		OrderList:  make([]types.Cursor, 0),
 		orderSet:   make(map[types.Cursor]bool, bufferSize*2),
 	}
+	o.cond = sync.NewCond(&o.mu)
+	return o
 }
 
 func (o *Organizer) Clear() {
@@ -35,8 +38,13 @@ func (o *Organizer) Clear() {
 
 func (o *Organizer) GetChunks(id string, start types.Cursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
 	o.handleNewId(id)
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	if !o.ensureStartExists(start, maxChunks) {
-		return nil, nil
+		for !o.Buf.Has(start) {
+			o.cond.Wait()
+		}
 	}
 
 	result, lastReturned := o.collectContiguousChunks(start, count, maxChunks)
@@ -57,10 +65,10 @@ func (o *Organizer) ensureStartExists(start types.Cursor, maxChunks map[int]int)
 
 	if !o.Buf.Has(start) {
 
-		o.addToOrder(start)
+		o.addToOrderLocked(start)
 		extra := nextCursors(start, o.BufferSize*2, maxChunks)
 		for _, c := range extra {
-			o.addToOrder(c)
+			o.addToOrderLocked(c)
 		}
 		return false
 	} else {
@@ -118,7 +126,7 @@ func (o *Organizer) updateOrderList(missing []types.Cursor, maxChunks map[int]in
 	}
 
 	for _, c := range missing {
-		o.addToOrder(c)
+		o.addToOrderLocked(c)
 	}
 }
 
@@ -152,11 +160,7 @@ func nextCursors(start types.Cursor, n int, maxChunks map[int]int) []types.Curso
 	return cursors
 }
 
-// addToOrder adds a cursor to the order list only if not already present
-func (o *Organizer) addToOrder(c types.Cursor) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
+func (o *Organizer) addToOrderLocked(c types.Cursor) {
 	if o.orderSet[c] || o.Buf.Has(c) {
 		return
 	}
@@ -179,4 +183,67 @@ func (o *Organizer) addToOrder(c types.Cursor) {
 	}
 
 	o.orderSet[c] = true
+}
+
+func (o *Organizer) StartOrderProcessor(fetchFn func(types.Cursor) (types.Chunk, bool)) chan struct{} {
+	stop := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				var toProcess []types.Cursor
+				o.mu.Lock()
+				toProcess = append(toProcess, o.OrderList...)
+				o.mu.Unlock()
+
+				for _, c := range toProcess {
+					chunk, ok := fetchFn(c)
+					if !ok {
+						continue
+					}
+
+					o.Buf.Add(chunk)
+					o.mu.Lock()
+
+					idx := -1
+					for i, existing := range o.OrderList {
+						if existing == c {
+							idx = i
+							break
+						}
+					}
+					if idx >= 0 {
+						o.OrderList = append(o.OrderList[:idx], o.OrderList[idx+1:]...)
+						delete(o.orderSet, c)
+					}
+					o.cond.Broadcast()
+					o.mu.Unlock()
+				}
+			}
+		}
+	}()
+
+	return stop
+}
+
+//test heplers:
+
+func (o *Organizer) AddToOrderForTest(c types.Cursor) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.orderSet[c] && !o.Buf.Has(c) {
+		o.OrderList = append(o.OrderList, c)
+		o.orderSet[c] = true
+	}
+}
+
+func (o *Organizer) MuLockTest() {
+	o.mu.Lock()
+}
+
+func (o *Organizer) MuUnlockTest() {
+	o.mu.Unlock()
 }
