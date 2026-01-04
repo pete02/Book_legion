@@ -1,22 +1,20 @@
-package types_test
+package types
 
 import (
 	"testing"
-
-	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
 func TestCursorNext(t *testing.T) {
 	cases := []struct {
 		name       string
-		start      types.Cursor
+		start      Cursor
 		maxChunk   int
 		maxChapter int
-		want       types.Cursor
+		want       Cursor
 	}{
-		{"increment chunk", types.Cursor{Chapter: 1, Chunk: 0}, 3, 5, types.Cursor{Chapter: 1, Chunk: 1}},
-		{"rollover chapter", types.Cursor{Chapter: 1, Chunk: 3}, 3, 5, types.Cursor{Chapter: 2, Chunk: 0}},
-		{"max chapter limit", types.Cursor{Chapter: 5, Chunk: 3}, 3, 5, types.Cursor{Chapter: 5, Chunk: 3}},
+		{"increment chunk", Cursor{Chapter: 1, Chunk: 0}, 3, 5, Cursor{Chapter: 1, Chunk: 1}},
+		{"rollover chapter", Cursor{Chapter: 1, Chunk: 3}, 3, 5, Cursor{Chapter: 2, Chunk: 0}},
+		{"max chapter limit", Cursor{Chapter: 5, Chunk: 3}, 3, 5, Cursor{Chapter: 5, Chunk: 3}},
 	}
 
 	for _, tc := range cases {
@@ -33,14 +31,14 @@ func TestCursorNext(t *testing.T) {
 func TestCursorPrev(t *testing.T) {
 	cases := []struct {
 		name       string
-		start      types.Cursor
+		start      Cursor
 		maxChunk   int
 		minChapter int
-		want       types.Cursor
+		want       Cursor
 	}{
-		{"decrement chunk", types.Cursor{Chapter: 1, Chunk: 2}, 3, 0, types.Cursor{Chapter: 1, Chunk: 1}},
-		{"rollover chapter", types.Cursor{Chapter: 2, Chunk: 0}, 3, 0, types.Cursor{Chapter: 1, Chunk: 3}},
-		{"min chapter limit", types.Cursor{Chapter: 0, Chunk: 0}, 3, 0, types.Cursor{Chapter: 0, Chunk: 0}},
+		{"decrement chunk", Cursor{Chapter: 1, Chunk: 2}, 3, 0, Cursor{Chapter: 1, Chunk: 1}},
+		{"rollover chapter", Cursor{Chapter: 2, Chunk: 0}, 3, 0, Cursor{Chapter: 1, Chunk: 3}},
+		{"min chapter limit", Cursor{Chapter: 0, Chunk: 0}, 3, 0, Cursor{Chapter: 0, Chunk: 0}},
 	}
 
 	for _, tc := range cases {
@@ -63,14 +61,14 @@ func TestCursorStepBack(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		start      types.Cursor
+		start      Cursor
 		steps      int
 		minChapter int
-		want       types.Cursor
+		want       Cursor
 	}{
-		{"single chapter", types.Cursor{0, 2}, 2, 0, types.Cursor{0, 0}},
-		{"multi chapter", types.Cursor{2, 1}, 4, 0, types.Cursor{1, 1}},
-		{"past min chapter", types.Cursor{0, 1}, 5, 0, types.Cursor{0, 0}},
+		{"single chapter", Cursor{0, 2}, 2, 0, Cursor{0, 0}},
+		{"multi chapter", Cursor{2, 1}, 4, 0, Cursor{1, 1}},
+		{"past min chapter", Cursor{0, 1}, 5, 0, Cursor{0, 0}},
 	}
 
 	for _, tc := range cases {
