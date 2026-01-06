@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 func createTestEpub(t *testing.T, files map[string]string) string {
@@ -323,6 +325,38 @@ func TestEpub_ExtractCSS(t *testing.T) {
 		_, err := epubNoCSS.ExtractCSS()
 		if err == nil {
 			t.Errorf("ExtractCSS() expected error, got nil")
+		}
+	})
+}
+
+func TestEpub_MaxChunkIndex(t *testing.T) {
+	files := map[string]string{
+		"chapter1.xhtml": "<html><body>Hello world. This is a test chapter. It has multiple sentences.</body></html>",
+	}
+	data := createMinimalEPUB(t, files)
+
+	epub := Epub{
+		Path: data,
+		Spine: []SpineItem{
+			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
+		},
+	}
+
+	policy := ChunkPolicy{TargetSize: 20, MaxSize: 25}
+
+	t.Run("last chunk index is correct", func(t *testing.T) {
+		maxIdx, err := epub.MaxChunkIndex(0, policy)
+		if err != nil {
+			t.Fatalf("MaxChunkIndex() error = %v", err)
+		}
+
+		chapterBytes, _ := epub.ExtractChapter(0)
+		doc, _ := html.Parse(bytes.NewReader(chapterBytes))
+		linear := LinearizeChapter(doc)
+		chunks := ChunkText(linear, policy)
+
+		if maxIdx != chunks[len(chunks)-1].Index {
+			t.Errorf("MaxChunkIndex() = %d, want last chunk index %d", maxIdx, chunks[len(chunks)-1].Index)
 		}
 	})
 }

@@ -35,6 +35,27 @@ func New(path string) (Epub, error) {
 	return epub, nil
 }
 
+func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
+	chapterBytes, err := e.ExtractChapter(spineIndex)
+	if err != nil {
+		return 0, err
+	}
+
+	doc, err := html.Parse(bytes.NewReader(chapterBytes))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse chapter HTML: %w", err)
+	}
+
+	linear := LinearizeChapter(doc)
+	chunks := ChunkText(linear, policy)
+
+	if len(chunks) == 0 {
+		return 0, fmt.Errorf("no chunks generated for chapter %d", spineIndex)
+	}
+
+	return chunks[len(chunks)-1].Index, nil
+}
+
 func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {
 	if spineIndex < 0 || spineIndex >= len(e.Spine) {
 		return nil, fmt.Errorf("spine index %d out of range", spineIndex)
@@ -64,25 +85,18 @@ func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {
 }
 
 func (e *Epub) ExtractChunk(spineIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
-	// 1. Get raw chapter bytes
 	chapterBytes, err := e.ExtractChapter(spineIndex)
 	if err != nil {
 		return "", err
 	}
 
-	// 2. Parse HTML
 	doc, err := html.Parse(bytes.NewReader(chapterBytes))
 	if err != nil {
 		return "", err
 	}
-
-	// 3. Linearize chapter (body content only)
 	linear := LinearizeChapter(doc)
-
-	// 4. Generate chunks
 	chunks := ChunkText(linear, policy)
 
-	// 5. Check chunkIndex bounds
 	if chunkIndex < 0 || chunkIndex >= len(chunks) {
 		return "", fmt.Errorf("chunk index %d out of range (0-%d)", chunkIndex, len(chunks)-1)
 	}
