@@ -21,10 +21,7 @@ func main() {
 	}
 
 	fmt.Printf("Loaded nav with %d items:\n", len(epub.Nav))
-	for _, item := range epub.Nav {
-		fmt.Printf(
-			"Spine Index=%d, Title=%q, Chapter no.= %d\n",
-			item.Index, item.Title, item.Number,
-		)
+	for _, item := range epub.Spine {
+		fmt.Printf("%v", item)
 	}
 }
