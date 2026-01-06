@@ -119,3 +119,38 @@ func (e *Epub) ExtractCover() ([]byte, string, error) {
 
 	return nil, "", fmt.Errorf("cover image not found")
 }
+
+func (e *Epub) ExtractCSS() ([]byte, error) {
+	zr, err := zip.OpenReader(e.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	var allCSS bytes.Buffer
+
+	for _, f := range zr.File {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".css") {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open %s: %w", f.Name, err)
+			}
+
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read %s: %w", f.Name, err)
+			}
+
+			// Append with newline separator to avoid accidental concatenation issues
+			allCSS.Write(data)
+			allCSS.WriteString("\n")
+		}
+	}
+
+	if allCSS.Len() == 0 {
+		return nil, fmt.Errorf("no CSS files found in EPUB")
+	}
+
+	return allCSS.Bytes(), nil
+}

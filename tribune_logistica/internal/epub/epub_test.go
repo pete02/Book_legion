@@ -284,3 +284,45 @@ func TestEpub_ExtractCover(t *testing.T) {
 		}
 	})
 }
+
+func TestEpub_ExtractCSS(t *testing.T) {
+	// in-memory EPUB with multiple CSS files
+	files := map[string]string{
+		"OEBPS/style1.css":     "body { color: red; }",
+		"OEBPS/style2.CSS":     "p { margin: 0; }",
+		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
+	}
+
+	data := createMinimalEPUB(t, files)
+
+	epub := Epub{
+		Path: data,
+		Spine: []SpineItem{
+			{Index: 0, ID: "c1", Href: "OEBPS/chapter1.xhtml"},
+		},
+	}
+
+	t.Run("concatenate all CSS files", func(t *testing.T) {
+		got, err := epub.ExtractCSS()
+		if err != nil {
+			t.Fatalf("ExtractCSS() error = %v", err)
+		}
+		want := "body { color: red; }\n" + "p { margin: 0; }\n"
+		if string(got) != want {
+			t.Errorf("ExtractCSS() = %q, want %q", string(got), want)
+		}
+	})
+
+	t.Run("no CSS files present", func(t *testing.T) {
+		filesNoCSS := map[string]string{
+			"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
+		}
+		dataNoCSS := createMinimalEPUB(t, filesNoCSS)
+		epubNoCSS := Epub{Path: dataNoCSS}
+
+		_, err := epubNoCSS.ExtractCSS()
+		if err == nil {
+			t.Errorf("ExtractCSS() expected error, got nil")
+		}
+	})
+}
