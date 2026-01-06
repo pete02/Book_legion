@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/book_legion-tribune_logistica/internal/epub" // replace with actual module path
@@ -16,16 +15,16 @@ func main() {
 
 	epubPath := os.Args[1]
 
-	spine, err := epub.LoadSpine(epubPath)
+	epub, err := epub.New(epubPath)
 	if err != nil {
-		log.Fatalf("Failed to load spine: %v", err)
+		fmt.Printf("Error in epub generation: %v \n", err)
 	}
 
-	fmt.Printf("Loaded spine with %d items:\n", len(spine))
-	for _, item := range spine {
+	fmt.Printf("Loaded nav with %d items:\n", len(epub.Nav))
+	for _, item := range epub.Nav {
 		fmt.Printf(
-			"Index=%d, ID=%q, Href=%q\n",
-			item.Index, item.ID, item.Href,
+			"Spine Index=%d, Title=%q, Chapter no.= %d\n",
+			item.Index, item.Title, item.Number,
 		)
 	}
 }
