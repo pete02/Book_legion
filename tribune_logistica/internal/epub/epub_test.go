@@ -151,3 +151,66 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestEpub_ExtractChunk(t *testing.T) {
+
+	// in-memory EPUB contents
+	files := map[string]string{
+		"chapter1.xhtml": "<html><body>Hello world. This is chapter 1.</body></html>",
+		"chapter2.xhtml": "<html><body>Second chapter content here!</body></html>",
+	}
+
+	path := createTestEpub(t, files)
+
+	epub := Epub{
+		Path: path,
+		Spine: []SpineItem{
+			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
+			{Index: 1, ID: "c2", Href: "chapter2.xhtml"},
+		},
+	}
+
+	policy := ChunkPolicy{TargetSize: 50, MaxSize: 60}
+
+	tests := []struct {
+		name       string
+		spineIndex int
+		chunkIndex int
+		want       string
+		wantErr    bool
+	}{
+		{
+			name:       "first chunk of chapter 1",
+			spineIndex: 0,
+			chunkIndex: 0,
+			want:       "Hello world. This is chapter 1.",
+			wantErr:    false,
+		},
+		{
+			name:       "first chunk of chapter 2",
+			spineIndex: 1,
+			chunkIndex: 0,
+			want:       "Second chapter content here!",
+			wantErr:    false,
+		},
+		{
+			name:       "spine index out of range",
+			spineIndex: 2,
+			chunkIndex: 0,
+			want:       "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := epub.ExtractChunk(tt.spineIndex, tt.chunkIndex, policy)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ExtractChunk() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ExtractChunk() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

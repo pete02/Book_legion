@@ -2,15 +2,12 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
-)
 
-type CoverImage struct {
-	Data     []byte
-	MimeType string
-	Href     string // resolved path inside epub (for debugging)
-}
+	"golang.org/x/net/html"
+)
 
 type Epub struct {
 	Path  string
@@ -63,4 +60,33 @@ func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("chapter href not found in epub: %s", item.Href)
+}
+
+func (e *Epub) ExtractChunk(spineIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
+	// 1. Get raw chapter bytes
+	chapterBytes, err := e.ExtractChapter(spineIndex)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. Parse HTML
+	doc, err := html.Parse(bytes.NewReader(chapterBytes))
+	if err != nil {
+		return "", err
+	}
+
+	// 3. Linearize chapter (body content only)
+	linear := LinearizeChapter(doc)
+
+	// 4. Generate chunks
+	chunks := ChunkText(linear, policy)
+
+	// 5. Check chunkIndex bounds
+	if chunkIndex < 0 || chunkIndex >= len(chunks) {
+		return "", fmt.Errorf("chunk index %d out of range (0-%d)", chunkIndex, len(chunks)-1)
+	}
+
+	chunkStrings := PrettyChunks(chunks, linear)
+
+	return chunkStrings[chunkIndex], nil
 }
