@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -89,4 +90,32 @@ func (e *Epub) ExtractChunk(spineIndex, chunkIndex int, policy ChunkPolicy) (str
 	chunkStrings := PrettyChunks(chunks, linear)
 
 	return chunkStrings[chunkIndex], nil
+}
+
+func (e *Epub) ExtractCover() ([]byte, string, error) {
+	zr, err := zip.OpenReader(e.Path)
+	if err != nil {
+		return nil, "", err
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		lower := strings.ToLower(f.Name)
+		if strings.Contains(lower, "cover") &&
+			(strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") ||
+				strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".gif")) {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, "", err
+			}
+			defer rc.Close()
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, "", err
+			}
+			return data, f.Name, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("cover image not found")
 }

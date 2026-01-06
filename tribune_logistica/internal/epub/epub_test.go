@@ -2,6 +2,7 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -213,4 +214,73 @@ func TestEpub_ExtractChunk(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEpub_ExtractCover(t *testing.T) {
+	// dummy image bytes
+	coverData := []byte{0x89, 0x50, 0x4E, 0x47} // just the PNG signature
+	otherData := []byte("not the cover")
+
+	// in-memory EPUB with a cover image
+	files := map[string]string{
+		"OEBPS/cover.png":      string(coverData),
+		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
+		"OEBPS/chapter2.xhtml": "<html><body>Chapter 2 content</body></html>",
+		"OEBPS/other.jpg":      string(otherData),
+	}
+
+	path := createTestEpub(t, files)
+
+	epub := Epub{
+		Path: path,
+		Spine: []SpineItem{
+			{Index: 0, ID: "c1", Href: "OEBPS/chapter1.xhtml"},
+			{Index: 1, ID: "c2", Href: "OEBPS/chapter2.xhtml"},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		wantData []byte
+		wantName string
+		wantErr  bool
+	}{
+		{
+			name:     "find PNG cover",
+			wantData: coverData,
+			wantName: "OEBPS/cover.png",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotData, gotName, err := epub.ExtractCover()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ExtractCover() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !bytes.Equal(gotData, tt.wantData) {
+				t.Errorf("ExtractCover() data mismatch, got %v, want %v", gotData, tt.wantData)
+			}
+			if gotName != tt.wantName {
+				t.Errorf("ExtractCover() name = %v, want %v", gotName, tt.wantName)
+			}
+		})
+	}
+
+	// Test missing cover
+	filesNoCover := map[string]string{
+		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
+	}
+	noCoverPath := createTestEpub(t, filesNoCover)
+
+	epubNoCover := Epub{
+		Path: noCoverPath,
+	}
+	t.Run("no cover present", func(t *testing.T) {
+		_, _, err := epubNoCover.ExtractCover()
+		if err == nil {
+			t.Errorf("ExtractCover() expected error, got nil")
+		}
+	})
 }
