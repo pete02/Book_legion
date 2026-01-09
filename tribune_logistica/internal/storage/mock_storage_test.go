@@ -66,10 +66,11 @@ func TestJSONStorage_SaveAndLoad(t *testing.T) {
 
 	js := &JSONStorage{
 		data: make(map[string][]map[string]interface{}),
+		path: tmpFile,
 	}
 
 	js.Insert("books", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
-	err := js.Save(tmpFile)
+	err := js.Save()
 	if err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}

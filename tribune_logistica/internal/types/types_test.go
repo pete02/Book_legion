@@ -1,7 +1,10 @@
 package types
 
 import (
+	"os"
 	"testing"
+
+	"github.com/book_legion-tribune_logistica/internal/storage"
 )
 
 func TestCursorNext(t *testing.T) {
@@ -78,5 +81,78 @@ func TestCursorStepBack(t *testing.T) {
 				t.Errorf(" %v, StepBack() = %+v; want %+v", tc.name, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUserUserCursorSaveAndLoad(t *testing.T) {
+	tmpFile := "test_UserCursors.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+	UserCursor2 := UserCursor{UserID: "u2", BookID: "b1", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+	UserCursor3 := UserCursor{UserID: "u1", BookID: "b2", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+
+	UserCursors := []UserCursor{UserCursor1, UserCursor2, UserCursor3}
+
+	// Save all UserCursors
+	for _, c := range UserCursors {
+		if err := SaveUserCursor(store, c); err != nil {
+			t.Fatalf("SaveUserUserCursor failed: %v", err)
+		}
+	}
+
+	for _, c := range UserCursors {
+		loaded, err := LoadUserCursor(store, c.UserID, c.BookID)
+		if err != nil {
+			t.Fatalf("LoadUserUserCursor failed: %v", err)
+		}
+		if loaded.Cursor.Chapter != c.Cursor.Chapter || loaded.Cursor.Chunk != c.Cursor.Chunk || loaded.UserID != c.UserID || loaded.BookID != c.BookID {
+			t.Errorf("Loaded UserCursor %+v; want %+v", loaded, c)
+		}
+	}
+}
+
+func TestUserUserCursorPersistence(t *testing.T) {
+	tmpFile := "test_UserCursors.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+	UserCursor2 := UserCursor{UserID: "u2", BookID: "b1", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+	UserCursor3 := UserCursor{UserID: "u1", BookID: "b2", Cursor: Cursor{Chapter: 2, Chunk: 1}}
+
+	UserCursors := []UserCursor{UserCursor1, UserCursor2, UserCursor3}
+	// Save all UserCursors
+	for _, c := range UserCursors {
+		if err := SaveUserCursor(store, c); err != nil {
+			t.Fatalf("SaveUserUserCursor failed: %v", err)
+		}
+	}
+
+	store.Save()
+
+	// Reload store from file
+	storeReloaded, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to reload JSONStorage: %v", err)
+	}
+
+	for _, c := range UserCursors {
+		loaded, err := LoadUserCursor(storeReloaded, c.UserID, c.BookID)
+		if err != nil {
+			t.Fatalf("LoadUserUserCursor failed: %v", err)
+		}
+		if loaded.Cursor.Chapter != c.Cursor.Chapter || loaded.Cursor.Chunk != c.Cursor.Chunk || loaded.UserID != c.UserID || loaded.BookID != c.BookID {
+			t.Errorf("Loaded UserCursor %+v; want %+v", loaded, c)
+		}
 	}
 }

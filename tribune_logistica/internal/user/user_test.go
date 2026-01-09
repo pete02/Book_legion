@@ -2,6 +2,7 @@ package login
 
 import (
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -171,7 +172,7 @@ func TestRefreshTokenPersistence(t *testing.T) {
 	}
 
 	// 4️⃣ Save the store to disk
-	if err := store1.Save(tmpFile); err != nil {
+	if err := store1.Save(); err != nil {
 		t.Fatalf("Failed to save store: %v", err)
 	}
 
@@ -205,5 +206,155 @@ func TestRefreshTokenPersistence(t *testing.T) {
 	}
 	if refreshToken2 == "" {
 		t.Fatal("Expected refresh token after reload, got empty string")
+	}
+}
+
+func setupMultipleUsers(t *testing.T, usernames []string) (*storage.JSONStorage, map[string]string) {
+	t.Helper() // marks this as a helper for nicer test output
+
+	// Create temporary JSONStorage
+	tmpFile := "test_data.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	passwords := make(map[string]string)
+
+	for _, u := range usernames {
+		password := "password_" + u
+		hash, err := argon2id.CreateHash(password, argon2id.DefaultParams)
+		if err != nil {
+			t.Fatalf("failed to hash password for %s: %v", u, err)
+		}
+
+		user := User{
+			Username:     u,
+			PasswordHash: hash,
+		}
+		if err := InsertUser(store, user); err != nil {
+			t.Fatalf("InsertUser failed for %s: %v", u, err)
+		}
+
+		passwords[u] = password
+	}
+
+	return store, passwords
+}
+
+// Test multi-user login and token isolation
+func TestMultiUserLogin(t *testing.T) {
+	usernames := []string{"alice", "bob", "carol"}
+	store, passwords := setupMultipleUsers(t, usernames)
+
+	refreshTokens := make(map[string]string)
+	authTokens := make(map[string]string)
+
+	for _, u := range usernames {
+		// VerifyUser
+		rt, err := VerifyUser(store, u, passwords[u])
+		if err != nil {
+			t.Fatalf("VerifyUser failed for %s: %v", u, err)
+		}
+		refreshTokens[u] = rt
+
+		// GenerateAuthToken
+		at, err := GenerateAuthToken(store, rt)
+		if err != nil {
+			t.Fatalf("GenerateAuthToken failed for %s: %v", u, err)
+		}
+		authTokens[u] = at
+	}
+
+	// Check that auth tokens map correctly
+	for u, at := range authTokens {
+		username, ok := VerifyAuthToken(at)
+		if !ok {
+			t.Fatalf("Auth token for %s is invalid", u)
+		}
+		if username != u {
+			t.Fatalf("Auth token returned wrong username: expected %s, got %s", u, username)
+		}
+	}
+}
+
+// Test concurrent logins for thread safety
+func TestConcurrentLogins(t *testing.T) {
+	usernames := []string{"alice", "bob", "carol", "dave", "eve"}
+	store, passwords := setupMultipleUsers(t, usernames)
+
+	var wg sync.WaitGroup
+	authTokens := sync.Map{} // thread-safe map
+
+	for _, u := range usernames {
+		for i := 0; i < 10; i++ { // 10 concurrent logins per user
+			wg.Add(1)
+			go func(user string) {
+				defer wg.Done()
+
+				rt, err := VerifyUser(store, user, passwords[user])
+				if err != nil {
+					t.Errorf("VerifyUser failed for %s: %v", user, err)
+					return
+				}
+
+				at, err := GenerateAuthToken(store, rt)
+				if err != nil {
+					t.Errorf("GenerateAuthToken failed for %s: %v", user, err)
+					return
+				}
+
+				authTokens.Store(at, user)
+
+				// Verify immediately
+				uName, ok := VerifyAuthToken(at)
+				if !ok || uName != user {
+					t.Errorf("Auth token verification failed for %s", user)
+				}
+			}(u)
+		}
+	}
+
+	wg.Wait()
+
+	// Verify all stored auth tokens
+	authTokens.Range(func(key, value interface{}) bool {
+		at := key.(string)
+		u := value.(string)
+
+		uName, ok := VerifyAuthToken(at)
+		if !ok || uName != u {
+			t.Errorf("Final auth token verification failed for %s", u)
+		}
+		return true
+	})
+}
+
+// Test token expiry under multi-user load
+func TestMultiUserTokenExpiry(t *testing.T) {
+	usernames := []string{"alice", "bob"}
+	store, passwords := setupMultipleUsers(t, usernames)
+
+	SetAuthTokenTTL(5 * time.Millisecond) // very short TTL
+	defer SetAuthTokenTTL(15 * time.Minute)
+
+	for _, u := range usernames {
+		rt, err := VerifyUser(store, u, passwords[u])
+		if err != nil {
+			t.Fatalf("VerifyUser failed for %s: %v", u, err)
+		}
+
+		at, err := GenerateAuthToken(store, rt)
+		if err != nil {
+			t.Fatalf("GenerateAuthToken failed for %s: %v", u, err)
+		}
+
+		time.Sleep(10 * time.Millisecond) // wait for expiry
+
+		_, ok := VerifyAuthToken(at)
+		if ok {
+			t.Fatalf("Expired auth token for %s should not be valid", u)
+		}
 	}
 }

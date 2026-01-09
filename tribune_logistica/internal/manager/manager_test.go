@@ -54,6 +54,41 @@ func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
 	}
 }
 
+func TestOrganizerGetuserChunks_AllAvailable(t *testing.T) {
+	curs := types.Cursor{0, 0}
+	start := types.UserCursor{"u1", "b1", curs}
+
+	buf := buffer.NewBuffer(start.BookID + start.UserID)
+	maxChunks := map[int]int{
+		0: 2,
+		1: 1,
+	}
+
+	for ch := 0; ch <= 1; ch++ {
+		for c := 0; c <= maxChunks[ch]; c++ {
+			buf.Add(buffer.Chunk{
+				ID:   types.Cursor{Chapter: ch, Chunk: c},
+				Data: []byte{byte(ch*10 + c)},
+			})
+		}
+	}
+
+	org := NewOrganizer(buf, 2)
+
+	chunks, err := org.GetUserChunks(start, 4, maxChunks)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(chunks) != 4 {
+		t.Fatalf("expected 4 chunks, got %d", len(chunks))
+	}
+
+	if len(org.OrderList) != 0 {
+		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	}
+}
+
 func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
 	buf := buffer.NewBuffer("t")
 	maxChunks := map[int]int{

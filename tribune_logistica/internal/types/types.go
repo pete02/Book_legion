@@ -1,6 +1,12 @@
 // internal/buffer/types.go
 package types
 
+import (
+	"fmt"
+
+	"github.com/book_legion-tribune_logistica/internal/storage"
+)
+
 // Cursor represents a location in the audiobook
 type Cursor struct {
 	Chapter int
@@ -61,4 +67,71 @@ func (a Cursor) CompareCursor(b Cursor) int {
 type Chunk struct {
 	ID   Cursor
 	Data []byte
+}
+
+type UserCursor struct {
+	UserID string // user identifier
+	BookID string // book identifier
+	Cursor Cursor
+}
+
+// SaveUserCursor saves a user's UserCursor position for a specific book
+func SaveUserCursor(store storage.Storage, c UserCursor) error {
+	row := map[string]interface{}{
+		"user_id": c.UserID,
+		"book_id": c.BookID,
+		"chapter": c.Cursor.Chapter,
+		"chunk":   c.Cursor.Chunk,
+	}
+	return store.Insert("UserCursors", row)
+}
+
+// LoadUserCursor loads a user's UserCursor for a book
+func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, error) {
+	rows, err := store.Query("UserCursors", map[string]interface{}{
+		"user_id": userID,
+		"book_id": bookID,
+	})
+	if err != nil {
+		return UserCursor{}, err
+	}
+
+	if len(rows) == 0 {
+		return UserCursor{UserID: userID, BookID: bookID}, nil
+	}
+
+	row := rows[0]
+
+	// Parse chapter
+	var chapter int
+	switch v := row["chapter"].(type) {
+	case float64:
+		chapter = int(v)
+	case int:
+		chapter = v
+	default:
+		return UserCursor{}, fmt.Errorf("unexpected type for chapter: %T", row["chapter"])
+	}
+
+	// Parse chunk
+	var chunk int
+	switch v := row["chunk"].(type) {
+	case float64:
+		chunk = int(v)
+	case int:
+		chunk = v
+	default:
+		return UserCursor{}, fmt.Errorf("unexpected type for chunk: %T", row["chunk"])
+	}
+
+	cursr := Cursor{
+		Chapter: chapter,
+		Chunk:   chunk,
+	}
+
+	return UserCursor{
+		UserID: row["user_id"].(string),
+		BookID: row["book_id"].(string),
+		Cursor: cursr,
+	}, nil
 }

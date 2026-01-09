@@ -9,6 +9,7 @@ import (
 
 type JSONStorage struct {
 	data map[string][]map[string]interface{}
+	path string
 	mu   sync.RWMutex
 }
 
@@ -16,6 +17,7 @@ type JSONStorage struct {
 func NewJSONStorage(path string) (*JSONStorage, error) {
 	js := &JSONStorage{
 		data: make(map[string][]map[string]interface{}),
+		path: path,
 	}
 
 	file, err := os.Open(path)
@@ -36,11 +38,11 @@ func NewJSONStorage(path string) (*JSONStorage, error) {
 }
 
 // Save writes current data back to JSON file
-func (js *JSONStorage) Save(path string) error {
+func (js *JSONStorage) Save() error {
 	js.mu.RLock()
 	defer js.mu.RUnlock()
 
-	file, err := os.Create(path)
+	file, err := os.Create(js.path)
 	if err != nil {
 		return err
 	}

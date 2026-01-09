@@ -36,9 +36,12 @@ func (o *Organizer) Clear() {
 	o.orderSet = make(map[types.Cursor]bool)
 }
 
+func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
+	return o.GetChunks(start.BookID+start.UserID, start.Cursor, count, maxChunks)
+}
+
 func (o *Organizer) GetChunks(id string, start types.Cursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
 	o.handleNewId(id)
-
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if !o.ensureStartExists(start, maxChunks) {
