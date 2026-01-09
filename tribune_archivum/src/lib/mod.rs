@@ -23,7 +23,7 @@ pub fn check_epub(path:&str, book_id:&str, name:&str)->Result<(),Box<dyn std::er
     },
      Err(_)=>{
         generate_toc(path, book_id)?;
-        let index=verify_epub(path)?;
+        let index=1;
         generate_book_instance(path, index,name)?;
         println!("book patched");
         }
@@ -43,6 +43,7 @@ fn generate_toc(path:&str, book_id:&str)->Result<(),Box<dyn std::error::Error>>{
 
 fn verify_epub(path:&str)->Result<u32,Box< dyn std::error::Error>>{
     let mut epub=EpubDoc::new(path)?;
+    println!("verify epub");
     verify_toc(&mut epub)?;
     get_first_chapter(&mut epub)
 }
@@ -64,6 +65,7 @@ fn generate_book_instance(path:&str, init:u32, name:&str)->Result<(),Box< dyn st
     for i in init..max{
         epub.set_current_chapter(i as usize);
         let txt=get_clean_chapter(&mut epub)?;
+        println!("txt:  {:?}", txt);
         let vec:Vec<&str>=txt.split('\n').collect();
         book.chapter_to_chunk.insert(i, vec.len() as u32);
     }

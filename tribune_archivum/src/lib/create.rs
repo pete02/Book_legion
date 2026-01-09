@@ -18,6 +18,7 @@ pub fn scan_spine_for_headings(epub: &mut EpubDoc<BufReader<File>>) -> Vec<TocEn
 
     for (i, idref) in spine.clone().iter().enumerate() {
         epub.set_current_chapter(i);
+        println!("idref: {:?}", idref);
 
         let text = match epub.get_current_str() {
             Some((txt, _)) => txt,
@@ -25,6 +26,7 @@ pub fn scan_spine_for_headings(epub: &mut EpubDoc<BufReader<File>>) -> Vec<TocEn
         };
 
         if let Some(title) = extract_heading(&text) {
+            println!("title: {:?}", title);
             if title.len() > 0{
                 out.push(TocEntry {title, file: "OEBPS/".to_owned()+&idref.clone().idref, anchor:None});
             }
@@ -36,6 +38,7 @@ pub fn scan_spine_for_headings(epub: &mut EpubDoc<BufReader<File>>) -> Vec<TocEn
 
 
 pub fn patch_epub(path:String, input:Vec<TocEntry>, book_id: &str)->Result<(),Box<dyn std::error::Error>>{
+    println!("inpout: {:?}",input);
     let ncx=make_ncx(&input, book_id);
     replace_file_in_epub(&path, "toc.ncx", &ncx)?;
 
@@ -114,7 +117,7 @@ pub fn replace_file_in_epub(
     let mut writer = ZipWriter::new(&mut out);
 
     let mut replaced = false;
-
+    
     for i in 0..zip.len() {
         let mut file = zip.by_index(i)?;
         let name = file.name().to_string();
@@ -134,6 +137,7 @@ pub fn replace_file_in_epub(
             writer.write_all(&contents)?;
         }
     }
+        println!("hjere");
 
     // If the file did not exist, create it
     if !replaced {

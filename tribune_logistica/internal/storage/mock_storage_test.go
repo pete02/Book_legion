@@ -161,3 +161,121 @@ func TestJSONStorage_QueryWithFilters(t *testing.T) {
 		t.Errorf("Expected all books, got %v", allBooks)
 	}
 }
+
+func TestJSONStorageDelete_SingleRow(t *testing.T) {
+	tmp := "test_delete_single.json"
+	defer os.Remove(tmp)
+
+	store, err := NewJSONStorage(tmp)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+
+	store.Insert("books", map[string]interface{}{
+		"id":    "b1",
+		"title": "Book 1",
+	})
+	store.Insert("books", map[string]interface{}{
+		"id":    "b2",
+		"title": "Book 2",
+	})
+
+	err = store.Delete("books", map[string]interface{}{"id": "b1"})
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	rows, _ := store.Query("books", nil)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row remaining, got %d", len(rows))
+	}
+
+	if rows[0]["id"] != "b2" {
+		t.Fatalf("unexpected remaining row: %+v", rows[0])
+	}
+}
+
+func TestJSONStorageDelete_MultipleRows(t *testing.T) {
+	tmp := "test_delete_multi.json"
+	defer os.Remove(tmp)
+
+	store, _ := NewJSONStorage(tmp)
+
+	store.Insert("cursors", map[string]interface{}{
+		"user_id": "u1",
+		"book_id": "b1",
+	})
+	store.Insert("cursors", map[string]interface{}{
+		"user_id": "u1",
+		"book_id": "b2",
+	})
+	store.Insert("cursors", map[string]interface{}{
+		"user_id": "u2",
+		"book_id": "b1",
+	})
+
+	err := store.Delete("cursors", map[string]interface{}{"user_id": "u1"})
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	rows, _ := store.Query("cursors", nil)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row remaining, got %d", len(rows))
+	}
+
+	if rows[0]["user_id"] != "u2" {
+		t.Fatalf("unexpected remaining row: %+v", rows[0])
+	}
+}
+
+func TestJSONStorageDelete_NoMatch(t *testing.T) {
+	tmp := "test_delete_nomatch.json"
+	defer os.Remove(tmp)
+
+	store, _ := NewJSONStorage(tmp)
+
+	store.Insert("books", map[string]interface{}{"id": "b1"})
+
+	err := store.Delete("books", map[string]interface{}{"id": "does-not-exist"})
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	rows, _ := store.Query("books", nil)
+	if len(rows) != 1 {
+		t.Fatalf("expected row to remain untouched")
+	}
+}
+
+func TestJSONStorageDelete_EmptyFilterRejected(t *testing.T) {
+	tmp := "test_delete_empty.json"
+	defer os.Remove(tmp)
+
+	store, _ := NewJSONStorage(tmp)
+
+	err := store.Delete("books", map[string]interface{}{})
+	if err == nil {
+		t.Fatal("expected error when deleting with empty filter")
+	}
+}
+
+func TestJSONStorageDelete_Persistence(t *testing.T) {
+	tmp := "test_delete_persist.json"
+	defer os.Remove(tmp)
+
+	store, _ := NewJSONStorage(tmp)
+	store.Insert("books", map[string]interface{}{"id": "b1"})
+	store.Insert("books", map[string]interface{}{"id": "b2"})
+	store.Save()
+
+	store.Delete("books", map[string]interface{}{"id": "b1"})
+
+	store.Save()
+	reloaded, _ := NewJSONStorage(tmp)
+	rows, _ := reloaded.Query("books", nil)
+
+	if len(rows) != 1 || rows[0]["id"] != "b2" {
+		t.Fatalf("delete was not persisted: %+v", rows)
+	}
+}

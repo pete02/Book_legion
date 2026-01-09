@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 )
@@ -110,4 +111,35 @@ func (js *JSONStorage) GetAll(table string) ([]map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+func (s *JSONStorage) Delete(table string, filter map[string]interface{}) error {
+	if len(filter) == 0 {
+		return fmt.Errorf("refusing to delete without filter")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows, ok := s.data[table]
+	if !ok {
+		return nil // nothing to delete
+	}
+
+	var kept []map[string]interface{}
+
+rowLoop:
+	for _, row := range rows {
+		for k, v := range filter {
+			if row[k] != v {
+				kept = append(kept, row)
+				continue rowLoop
+			}
+		}
+		// row matches filter → drop it
+	}
+
+	s.data[table] = kept
+
+	return nil
 }

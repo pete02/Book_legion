@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type SQLStorage struct {
@@ -73,6 +74,31 @@ func (s *SQLStorage) GetAll(table string) ([]map[string]interface{}, error) {
 	defer rows.Close()
 
 	return rowsToMap(rows)
+}
+
+func (s *SQLStorage) Delete(table string, filter map[string]interface{}) error {
+	if len(filter) == 0 {
+		return fmt.Errorf("refusing to delete without filter")
+	}
+
+	var (
+		conds []string
+		args  []interface{}
+	)
+
+	for k, v := range filter {
+		conds = append(conds, fmt.Sprintf("%s = ?", k))
+		args = append(args, v)
+	}
+
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE %s",
+		table,
+		strings.Join(conds, " AND "),
+	)
+
+	_, err := s.db.Exec(query, args...)
+	return err
 }
 
 // helper: convert sql.Rows to []map[string]interface{}

@@ -90,7 +90,6 @@ pub fn extract_heading(xhtml: &str) -> Option<String> {
         }
         let text = extract_clean_text(el);
         if text.is_empty() { continue; }
-
         let lw = text.to_lowercase();
         if (lw.contains("chapter")
             || lw.starts_with("prologue"))
