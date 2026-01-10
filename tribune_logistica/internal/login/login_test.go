@@ -21,19 +21,9 @@ func setupTestUser(t *testing.T) (*storage.JSONStorage, User, string) {
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
-
-	// Create a test user
 	password := "mysecretpassword"
-	passwordHash, err := argon2id.CreateHash(password, argon2id.DefaultParams)
-	if err != nil {
-		t.Fatalf("failed to hash password: %v", err)
-	}
 
-	user := User{
-		Username:     "pete",
-		PasswordHash: passwordHash,
-	}
-
+	user, err := NewUser("pete", password)
 	// Insert user
 	if err := InsertUser(store, user); err != nil {
 		t.Fatalf("InsertUser failed: %v", err)

@@ -1,0 +1,143 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/book_legion-tribune_logistica/internal/login"
+)
+
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	AuthToken    string `json:"auth_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+type RegisterResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshResponse struct {
+	AuthToken string `json:"auth_token"`
+	ExpiresIn int    `json:"expires_in"` // seconds
+}
+
+func (api *API) Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "Username and password required", http.StatusBadRequest)
+		return
+	}
+
+	user, err := login.NewUser(req.Username, req.Password)
+
+	if err != nil {
+		http.Error(w, "Could not create a user", http.StatusInternalServerError)
+		return
+	}
+
+	err = login.InsertUser(api.dp, user)
+
+	if err != nil {
+		http.Error(w, "Could not save user", http.StatusInternalServerError)
+		return
+	}
+
+	resp := RegisterResponse{
+		Success: true,
+		Message: "User created successfully",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (api *API) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	refresh_token, err := login.VerifyUser(api.dp, req.Username, req.Password)
+	if err != nil {
+		http.Error(w, "Wrong credentials", http.StatusForbidden)
+		return
+	}
+
+	auth_token, err := login.GenerateAuthToken(api.dp, refresh_token)
+	if err != nil {
+		http.Error(w, "Could not generate auth token", http.StatusInternalServerError)
+	}
+
+	resp := LoginResponse{
+		AuthToken:    auth_token,
+		RefreshToken: refresh_token,
+		ExpiresIn:    int(login.GetAuthTokenTTL().Seconds()),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (api *API) Refresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.RefreshToken == "" {
+		http.Error(w, "refresh_token required", http.StatusBadRequest)
+		return
+	}
+
+	newAuthToken, err := login.GenerateAuthToken(api.dp, req.RefreshToken)
+	if err != nil {
+		http.Error(w, "Could not generate auth token", http.StatusForbidden)
+
+	}
+
+	expiresIn := login.GetAuthTokenTTL().Seconds()
+
+	resp := RefreshResponse{
+		AuthToken: newAuthToken,
+		ExpiresIn: int(expiresIn),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}

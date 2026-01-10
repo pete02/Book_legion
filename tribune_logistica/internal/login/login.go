@@ -16,11 +16,30 @@ type User struct {
 	RefreshToken string
 }
 
+func NewUser(username string, password string) (User, error) {
+	passwordHash, err := argon2id.CreateHash(password, argon2id.DefaultParams)
+	if err != nil {
+		return User{}, err
+	}
+
+	user := User{
+		Username:     username,
+		PasswordHash: passwordHash,
+		RefreshToken: "",
+	}
+
+	return user, nil
+}
+
 var authTokens = make(map[string]string) // authToken → username
 
 // Session expiry
 var authTokenTTL = 15 * time.Minute
 var authTokenExpiry = make(map[string]time.Time)
+
+func GetAuthTokenTTL() time.Duration {
+	return authTokenTTL
+}
 
 func SetAuthTokenTTL(ttl time.Duration) {
 	authTokenTTL = ttl
@@ -35,6 +54,7 @@ func InsertUser(store storage.Storage, user User) error {
 	return store.Insert("users", row)
 }
 
+// Verifies user and returns Refresh Token
 func VerifyUser(store storage.Storage, username, password string) (string, error) {
 	rows, err := store.Query("users", map[string]interface{}{"username": username})
 	if err != nil {
@@ -50,11 +70,9 @@ func VerifyUser(store storage.Storage, username, password string) (string, error
 		return "", errors.New("invalid password")
 	}
 
-	// If no refresh token exists, generate one
 	refreshToken, ok := userRow["refresh_token"].(string)
 	if !ok || refreshToken == "" {
 		refreshToken = generateRandomToken(32)
-		// Update the user with new refresh token
 		userRow["refresh_token"] = refreshToken
 		store.Insert("users", userRow)
 	}
