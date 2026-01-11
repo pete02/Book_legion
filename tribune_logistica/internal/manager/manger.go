@@ -12,18 +12,19 @@ import (
 type Organizer struct {
 	Buf        *buffer.Buffer
 	BufferSize int
-	OrderList  []types.Cursor
-	orderSet   map[types.Cursor]bool
+	OrderList  []types.UserCursor
+	orderSet   map[types.UserCursor]bool
 	mu         sync.Mutex
 	cond       *sync.Cond
 }
 
+// buffer size determines the minimum amount to keep in buffer. Max amount generated is 2*buffer size
 func NewOrganizer(buf *buffer.Buffer, bufferSize int) *Organizer {
 	o := &Organizer{
 		Buf:        buf,
 		BufferSize: bufferSize,
-		OrderList:  make([]types.Cursor, 0),
-		orderSet:   make(map[types.Cursor]bool, bufferSize*2),
+		OrderList:  make([]types.UserCursor, 0),
+		orderSet:   make(map[types.UserCursor]bool, bufferSize*2),
 	}
 	o.cond = sync.NewCond(&o.mu)
 	return o
@@ -34,14 +35,14 @@ func (o *Organizer) Clear() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.OrderList = o.OrderList[:0]
-	o.orderSet = make(map[types.Cursor]bool)
+	o.orderSet = make(map[types.UserCursor]bool)
 }
 
 func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
-	return o.GetChunks(start.BookID+start.UserID, start.Cursor, count, maxChunks)
+	return o.GetChunks(start.BookID+start.UserID, start, count, maxChunks)
 }
 
-func (o *Organizer) GetChunks(id string, start types.Cursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
+func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -72,11 +73,11 @@ func (o *Organizer) idCheck(id string) {
 		// instead of Clear(), initialize a new buffer instance
 		o.Buf = buffer.NewBuffer(id)
 		o.OrderList = nil
-		o.orderSet = make(map[types.Cursor]bool, o.BufferSize*2)
+		o.orderSet = make(map[types.UserCursor]bool, o.BufferSize*2)
 	}
 }
 
-func (o *Organizer) ensureStartExists(start types.Cursor, maxChunks map[int]int) bool {
+func (o *Organizer) ensureStartExists(start types.UserCursor, maxChunks map[int]int) bool {
 
 	if !o.Buf.Has(start) {
 
@@ -91,7 +92,7 @@ func (o *Organizer) ensureStartExists(start types.Cursor, maxChunks map[int]int)
 	}
 }
 
-func (o *Organizer) collectContiguousChunks(start types.Cursor, count int, maxChunks map[int]int) ([]types.Chunk, types.Cursor) {
+func (o *Organizer) collectContiguousChunks(start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, types.UserCursor) {
 	var result []types.Chunk
 	cur := start
 
@@ -102,11 +103,11 @@ func (o *Organizer) collectContiguousChunks(start types.Cursor, count int, maxCh
 		}
 		result = append(result, types.Chunk{ID: cur, Data: data})
 
-		maxChunk := maxChunks[cur.Chapter]
-		cur.Next(maxChunk, len(maxChunks)-1)
+		maxChunk := maxChunks[cur.Cursor.Chapter]
+		cur.Cursor.Next(maxChunk, len(maxChunks)-1)
 	}
 
-	var last types.Cursor
+	var last types.UserCursor
 	if len(result) > 0 {
 		last = result[len(result)-1].ID
 	} else {
@@ -117,23 +118,23 @@ func (o *Organizer) collectContiguousChunks(start types.Cursor, count int, maxCh
 }
 
 // computeMissingCursors returns up to BufferSize cursors that are missing after `start`
-func (o *Organizer) computeMissingCursors(start types.Cursor, maxChunks map[int]int) []types.Cursor {
-	var missing []types.Cursor
+func (o *Organizer) computeMissingCursors(start types.UserCursor, maxChunks map[int]int) []types.UserCursor {
+	var missing []types.UserCursor
 	cur := start
 	for i := 0; i < o.BufferSize; i++ {
 		if !o.Buf.Has(cur) {
 			missing = append(missing, cur)
 		}
-		maxChunk, ok := maxChunks[cur.Chapter]
+		maxChunk, ok := maxChunks[cur.Cursor.Chapter]
 		if !ok {
 			maxChunk = 0
 		}
-		cur.Next(maxChunk, len(maxChunks)-1)
+		cur.Cursor.Next(maxChunk, len(maxChunks)-1)
 	}
 	return missing
 }
 
-func (o *Organizer) updateOrderList(missing []types.Cursor, maxChunks map[int]int) {
+func (o *Organizer) updateOrderList(missing []types.UserCursor, maxChunks map[int]int) {
 
 	if len(missing) > 0 {
 		lastMissing := missing[len(missing)-1]
@@ -145,7 +146,7 @@ func (o *Organizer) updateOrderList(missing []types.Cursor, maxChunks map[int]in
 	}
 }
 
-func (o *Organizer) TrimBuffer(c types.Cursor, maxChunks map[int]int) {
+func (o *Organizer) TrimBuffer(c types.UserCursor, maxChunks map[int]int) {
 	backwards := o.BufferSize / 2
 	min := minChapter(maxChunks)
 	o.Buf.Trim(c, backwards, min, maxChunks)
@@ -164,18 +165,18 @@ func minChapter(maxChunks map[int]int) int {
 	return min
 }
 
-func nextCursors(start types.Cursor, n int, maxChunks map[int]int) []types.Cursor {
-	cursors := make([]types.Cursor, 0, n)
+func nextCursors(start types.UserCursor, n int, maxChunks map[int]int) []types.UserCursor {
+	cursors := make([]types.UserCursor, 0, n)
 	cur := start
 	for range n {
 		cursors = append(cursors, cur)
-		maxChunk := maxChunks[cur.Chapter]
-		cur.Next(maxChunk, len(maxChunks)-1) // assume last chapter is len(maxChunks)-1
+		maxChunk := maxChunks[cur.Cursor.Chapter]
+		cur.Cursor.Next(maxChunk, len(maxChunks)-1) // assume last chapter is len(maxChunks)-1
 	}
 	return cursors
 }
 
-func (o *Organizer) addToOrderLocked(c types.Cursor) {
+func (o *Organizer) addToOrderLocked(c types.UserCursor) {
 	if o.orderSet[c] || o.Buf.Has(c) {
 		return
 	}
@@ -192,7 +193,7 @@ func (o *Organizer) addToOrderLocked(c types.Cursor) {
 	if idx == len(o.OrderList) {
 		o.OrderList = append(o.OrderList, c)
 	} else {
-		o.OrderList = append(o.OrderList, types.Cursor{}) // expand slice
+		o.OrderList = append(o.OrderList, types.UserCursor{}) // expand slice
 		copy(o.OrderList[idx+1:], o.OrderList[idx:])
 		o.OrderList[idx] = c
 	}
@@ -200,7 +201,8 @@ func (o *Organizer) addToOrderLocked(c types.Cursor) {
 	o.orderSet[c] = true
 }
 
-func (o *Organizer) StartOrderProcessor(fetchFn func(types.Cursor) (types.Chunk, bool)) chan struct{} {
+// expected return from fetchFn is chunk, ok
+func (o *Organizer) StartOrderProcessor(fetchFn func(types.UserCursor) (types.Chunk, bool)) chan struct{} {
 	stop := make(chan struct{})
 
 	go func() {
@@ -209,7 +211,7 @@ func (o *Organizer) StartOrderProcessor(fetchFn func(types.Cursor) (types.Chunk,
 			case <-stop:
 				return
 			default:
-				var toProcess []types.Cursor
+				var toProcess []types.UserCursor
 				o.mu.Lock()
 				toProcess = append(toProcess, o.OrderList...)
 				o.mu.Unlock()
@@ -246,7 +248,7 @@ func (o *Organizer) StartOrderProcessor(fetchFn func(types.Cursor) (types.Chunk,
 
 //test heplers:
 
-func (o *Organizer) AddToOrderForTest(c types.Cursor) {
+func (o *Organizer) AddToOrderForTest(c types.UserCursor) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if !o.orderSet[c] && !o.Buf.Has(c) {

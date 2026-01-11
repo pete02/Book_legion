@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/book_legion-tribune_logistica/internal/epub"
+	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/types"
 )
 
@@ -89,7 +90,7 @@ func (api *API) GetChapter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	numChunks, err := epub.MaxChunkIndex(chapterIndex, api.policy)
+	numChunks, err := epub.MaxChunkIndex(chapterIndex, api.Policy)
 	if err != nil {
 		http.Error(w, "Error in extracting max chunk", http.StatusInternalServerError)
 		return
@@ -147,7 +148,7 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	maxchunks := epub.MaxChunkMap(api.policy)
+	maxchunks := epub.MaxChunkMap(api.Policy)
 
 	chunks, err := api.Manager.GetUserChunks(req.UserCursor, req.RequestSize, maxchunks)
 
@@ -191,42 +192,6 @@ func (api *API) GetNav(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(navItems)
-}
-
-func (api *API) SaveCursor(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// ---- AUTH CHECK ----
-	userID, ok := api.AuthCheck(w, r)
-	if !ok {
-		return
-	}
-
-	// ---- PARSE REQUEST BODY ----
-	var req types.UserCursor
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-		return
-	}
-
-	// Optional: ensure the userID in body matches token
-	if req.UserID != userID {
-		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
-		return
-	}
-
-	err := types.SaveUserCursor(api.DB, req)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-
-	}
-	// Placeholder: always success
-	w.WriteHeader(http.StatusOK)
 }
 
 func (api *API) GetCover(w http.ResponseWriter, r *http.Request) {
@@ -307,4 +272,68 @@ func (api *API) GetCSSFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(cssData)
+}
+
+func (api *API) SaveCursor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// ---- AUTH CHECK ----
+	userID, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	// ---- PARSE REQUEST BODY ----
+	var req types.UserCursor
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	// Optional: ensure the userID in body matches token
+	if req.UserID != userID {
+		fmt.Printf("Wrong userID, expected: %v", userID)
+		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
+		return
+	}
+
+	fmt.Printf("saving cursor: %v\n", req)
+	err := types.SaveUserCursor(api.DB, req)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	_, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	var req library.Book
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	err := library.SaveBook(api.DB, req)
+
+	if err != nil {
+		http.Error(w, "Failed to save book", http.StatusInternalServerError)
+		return
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 }

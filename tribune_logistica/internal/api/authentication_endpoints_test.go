@@ -5,12 +5,28 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/login"
 )
 
 // ------------------ TESTS ------------------
+
+func TestFailRegisterUserWithoutCorrectToken(t *testing.T) {
+	token := "Long Token"
+	os.Setenv("ADMIN_TOKEN", token)
+	api := setupAPI(t)
+	registerBody := map[string]string{"username": "username", "password": "password"}
+	buf, _ := json.Marshal(registerBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewBuffer(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+"bla bla")
+	w := httptest.NewRecorder()
+	api.RegisterUser(w, req)
+
+}
 
 func TestRegisterAndLogin(t *testing.T) {
 	// setup API with dummy user store

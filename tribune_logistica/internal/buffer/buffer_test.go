@@ -11,7 +11,7 @@ import (
 func TestBufferAddGet(t *testing.T) {
 	buf := NewBuffer("")
 
-	c1 := Cursor{Chapter: 0, Chunk: 0}
+	c1 := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}
 	data1 := []byte("chunk1")
 	buf.Add(Chunk{ID: c1, Data: data1})
 
@@ -27,24 +27,24 @@ func TestBufferAddGet(t *testing.T) {
 func TestBufferHas(t *testing.T) {
 	buf := NewBuffer("")
 
-	c1 := Cursor{Chapter: 0, Chunk: 0}
-	c2 := Cursor{Chapter: 0, Chunk: 1}
+	c1 := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}
+	c2 := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 1}}
 	data1 := []byte("chunk1")
 	buf.Add(Chunk{ID: c1, Data: data1})
 
 	if !buf.Has(c1) {
-		t.Fatalf("Buf does not contain cursor %v", c1)
+		t.Fatalf("Buf does not contain: %v", c1)
 	}
 
 	if buf.Has(c2) {
-		t.Fatalf("Buf contains incorrectly cursor %v", c2)
+		t.Fatalf("Buf contains incorrectly  %v", c2)
 	}
 }
 
 func TestBufferClear(t *testing.T) {
 	buf := NewBuffer("")
 
-	buf.Add(Chunk{ID: Cursor{Chapter: 0, Chunk: 0}, Data: []byte("a")})
+	buf.Add(Chunk{ID: types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}, Data: []byte("a")})
 	buf.Clear()
 
 	if len(buf.Store) != 0 {
@@ -59,28 +59,28 @@ func TestBufferTrimSingleChapter(t *testing.T) {
 
 	// add 5 chunks
 	for i := 0; i <= 5; i++ {
-		c := Cursor{Chapter: 0, Chunk: i}
+		c := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: i}}
 		buf.Add(Chunk{ID: c, Data: []byte{byte(i)}})
 	}
 
 	// trim last 3 steps from chunk 4
-	buf.Trim(Cursor{Chapter: 0, Chunk: 4}, 2, 0, maxChunks)
+	buf.Trim(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 4}}, 2, 0, maxChunks)
 
-	expected := []Cursor{
-		{Chapter: 0, Chunk: 2},
-		{Chapter: 0, Chunk: 3},
-		{Chapter: 0, Chunk: 4},
-		{Chapter: 0, Chunk: 5},
+	expected := []types.UserCursor{
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 2}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 3}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 4}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 5}},
 	}
 
 	for _, c := range expected {
 		if _, ok := buf.Get(c); !ok {
-			t.Errorf("expected cursor %v to exist after trim", c)
+			t.Errorf("expected  %v to exist after trim", c)
 		}
 	}
 
-	if _, ok := buf.Get(Cursor{Chapter: 0, Chunk: 0}); ok {
-		t.Errorf("cursor {0,1} should have been trimmed")
+	if _, ok := buf.Get(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}); ok {
+		t.Errorf("should have been trimmed")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestBufferTrimMultipleChapters(t *testing.T) {
 	// add chunks across chapters
 	addChunk := func(chapter, chunk int) {
 		buf.Add(Chunk{
-			ID:   Cursor{Chapter: chapter, Chunk: chunk},
+			ID:   types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: chapter, Chunk: chunk}},
 			Data: []byte{byte(chapter*10 + chunk)},
 		})
 	}
@@ -112,36 +112,36 @@ func TestBufferTrimMultipleChapters(t *testing.T) {
 	addChunk(2, 0)
 	addChunk(2, 1)
 
-	// trim last 4 steps from cursor {2,1}
-	buf.Trim(Cursor{Chapter: 2, Chunk: 1}, 4, 0, maxChunks)
+	// trim last 4 steps from types.UserCursor{ UserID: "u1", BookID: "b1", Cursor: types.Cursor {2,1}
+	buf.Trim(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 2, Chunk: 1}}, 4, 0, maxChunks)
 
 	// expected to keep last 5 chunks:
-	expected := []Cursor{
-		{Chapter: 1, Chunk: 1},
-		{Chapter: 1, Chunk: 2},
-		{Chapter: 1, Chunk: 3},
-		{Chapter: 2, Chunk: 0},
-		{Chapter: 2, Chunk: 1},
+	expected := []types.UserCursor{
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 1}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 2}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 3}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 2, Chunk: 0}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 2, Chunk: 1}},
 	}
 
 	// check that expected exist
 	for _, c := range expected {
 		if _, ok := buf.Get(c); !ok {
-			t.Errorf("expected cursor %v to exist after trim", c)
+			t.Errorf("expected Cursor %v to exist after trim", c)
 		}
 	}
 
 	// check that older chunks are gone
-	removed := []Cursor{
-		{Chapter: 0, Chunk: 0},
-		{Chapter: 0, Chunk: 1},
-		{Chapter: 0, Chunk: 2},
-		{Chapter: 1, Chunk: 0},
+	removed := []types.UserCursor{
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 1}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 2}},
+		{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 0}},
 	}
 
 	for _, c := range removed {
 		if _, ok := buf.Get(c); ok {
-			t.Errorf("expected cursor %v to be trimmed", c)
+			t.Errorf("expected Cursor %v to be trimmed", c)
 		}
 	}
 }
@@ -151,12 +151,12 @@ func TestTrimEmptyBuffer(t *testing.T) {
 
 	// Should not panic or fail
 	maxChunks := map[int]int{0: 2}
-	buf.Trim(Cursor{Chapter: 0, Chunk: 0}, 3, 0, maxChunks)
+	buf.Trim(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}, 3, 0, maxChunks)
 }
 
 func TestTrimStepsZero(t *testing.T) {
 	buf := NewBuffer("")
-	c := Cursor{Chapter: 0, Chunk: 0}
+	c := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}
 	buf.Add(Chunk{ID: c, Data: []byte("data")})
 
 	maxChunks := map[int]int{0: 0}
@@ -169,7 +169,7 @@ func TestTrimStepsZero(t *testing.T) {
 
 func TestTrimStepsNegative(t *testing.T) {
 	buf := NewBuffer("")
-	c := Cursor{Chapter: 0, Chunk: 0}
+	c := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}
 	buf.Add(Chunk{ID: c, Data: []byte("data")})
 
 	maxChunks := map[int]int{0: 0}
@@ -185,36 +185,36 @@ func TestTrimPastMinChapter(t *testing.T) {
 	buf := NewBuffer("")
 
 	// Add first chapter
-	buf.Add(Chunk{ID: Cursor{Chapter: 0, Chunk: 0}, Data: []byte("a")})
+	buf.Add(Chunk{ID: types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}, Data: []byte("a")})
 
 	maxChunks := map[int]int{
 		0: 0,
 	}
 
 	// Step back past minChapter should keep it at minChapter
-	buf.Trim(Cursor{Chapter: 0, Chunk: 0}, 5, 0, maxChunks)
+	buf.Trim(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}, 5, 0, maxChunks)
 
-	if _, ok := buf.Get(Cursor{Chapter: 0, Chunk: 0}); !ok {
+	if _, ok := buf.Get(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}); !ok {
 		t.Errorf("expected chunk at minChapter to survive trim")
 	}
 }
 
 func TestTrimUnknownChapterInMaxChunks(t *testing.T) {
 	buf := NewBuffer("")
-	buf.Add(Chunk{ID: Cursor{Chapter: 1, Chunk: 0}, Data: []byte("b")})
+	buf.Add(Chunk{ID: types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 0}}, Data: []byte("b")})
 
 	// maxChunks does not contain chapter 0 or 1
 	maxChunks := map[int]int{}
 
 	// Should default unknown chapters to 0 and not panic
-	buf.Trim(Cursor{Chapter: 1, Chunk: 0}, 1, 0, maxChunks)
+	buf.Trim(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 1, Chunk: 0}}, 1, 0, maxChunks)
 
 	// Chunk may be removed depending on logic, but must not panic
 }
 
 func TestAddOverwriteChunk(t *testing.T) {
 	buf := NewBuffer("")
-	c := Cursor{Chapter: 0, Chunk: 0}
+	c := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: 0}}
 
 	buf.Add(Chunk{ID: c, Data: []byte("first")})
 	buf.Add(Chunk{ID: c, Data: []byte("second")})
@@ -228,7 +228,7 @@ func TestAddOverwriteChunk(t *testing.T) {
 	}
 }
 
-func makeChunk(id types.Cursor, data string) types.Chunk {
+func makeChunk(id types.UserCursor, data string) types.Chunk {
 	return types.Chunk{ID: id, Data: []byte(data)}
 }
 
@@ -245,7 +245,7 @@ func TestBufferConcurrentAddGet(t *testing.T) {
 		go func(base int) {
 			defer wg.Done()
 			for j := range numChunks {
-				id := types.Cursor{Chapter: base, Chunk: j}
+				id := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: base, Chunk: j}}
 				buf.Add(makeChunk(id, "data"))
 			}
 		}(i)
@@ -257,7 +257,7 @@ func TestBufferConcurrentAddGet(t *testing.T) {
 		go func(base int) {
 			defer wg.Done()
 			for j := range numChunks {
-				id := types.Cursor{Chapter: base, Chunk: j}
+				id := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: base, Chunk: j}}
 				buf.Get(id)
 				buf.Has(id)
 			}
@@ -273,7 +273,7 @@ func TestBufferConcurrentTrim(t *testing.T) {
 
 	// Populate buffer
 	for i := range numChunks {
-		id := types.Cursor{Chapter: 0, Chunk: i}
+		id := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: i}}
 		buf.Add(makeChunk(id, "data"))
 	}
 
@@ -284,7 +284,7 @@ func TestBufferConcurrentTrim(t *testing.T) {
 		wg.Add(1)
 		go func(offset int) {
 			defer wg.Done()
-			anchor := types.Cursor{Chapter: 0, Chunk: numChunks - 1 - offset}
+			anchor := types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: numChunks - 1 - offset}}
 			maxChunks := map[int]int{0: numChunks}
 			buf.Trim(anchor, 10, 0, maxChunks)
 		}(i)
@@ -298,7 +298,7 @@ func TestBufferConcurrentClear(t *testing.T) {
 	numChunks := 10
 
 	for i := range numChunks {
-		buf.Add(makeChunk(types.Cursor{Chapter: 0, Chunk: i}, "data"))
+		buf.Add(makeChunk(types.UserCursor{UserID: "u1", BookID: "b1", Cursor: types.Cursor{Chapter: 0, Chunk: i}}, "data"))
 	}
 
 	var wg sync.WaitGroup

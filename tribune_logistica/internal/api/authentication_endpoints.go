@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/book_legion-tribune_logistica/internal/login"
 )
@@ -37,7 +39,21 @@ func (api *API) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	authHeader := r.Header.Get("Authorization")
+	expectedToken := os.Getenv("ADMIN_TOKEN")
 
+	if !strings.HasPrefix(authHeader, "Bearer ") || len(authHeader) <= 7 {
+		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	token := authHeader[7:] // skip "Bearer "
+	if token != expectedToken {
+		http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Decode request body
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
@@ -49,20 +65,21 @@ func (api *API) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create user object
 	user, err := login.NewUser(req.Username, req.Password)
-
 	if err != nil {
 		http.Error(w, "Could not create a user", http.StatusInternalServerError)
 		return
 	}
 
+	// Save user in DB
 	err = login.InsertUser(api.DB, user)
-
 	if err != nil {
 		http.Error(w, "Could not save user", http.StatusInternalServerError)
 		return
 	}
 
+	// Respond
 	resp := RegisterResponse{
 		Success: true,
 		Message: "User created successfully",

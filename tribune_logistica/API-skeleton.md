@@ -274,8 +274,8 @@ Return as list of filename + content
 
 
 
-### 3.0 Save Cursors
-GET /api/v1/cursors/save
+### 5.3 Save Cursors
+POST /api/v1/cursors/save
 ```
 {
   "UserID": "u1",
@@ -287,6 +287,22 @@ GET /api/v1/cursors/save
 }
 ```
 **Response**: 200/404
+
+
+### 5.4 Save Book
+POST /api/v1/savebook
+```
+{
+  "id": "b1",
+  "title": "Book One",
+  "author_id": "a1",
+  "series_id": "s1",
+  "series_order": 1,
+  "file_path": "/path/to/book.epub"
+}
+```
+**Response**: 200/500
+
 #### Handler Responsibilities
 Save the posted cursor
 

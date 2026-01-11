@@ -36,23 +36,33 @@ func setupAPI(t *testing.T) api.API {
 	manager := manager.NewOrganizer(buf, 3)
 	policy := epub.ChunkPolicy{TargetSize: 50, MaxSize: 60}
 
-	api := api.New(*manager, store, policy)
+	api := api.New(manager, store, policy)
 
 	return api
 }
 
-func setupRegister(t *testing.T, api api.API, username string, password string) *http.Response {
+func setupRegister(t *testing.T, api api.API, username, password string) *http.Response {
+	t.Helper()
+	token := "Long Token"
+	os.Setenv("ADMIN_TOKEN", token)
+
+	// Prepare request body
 	registerBody := map[string]string{"username": username, "password": password}
 	buf, _ := json.Marshal(registerBody)
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewBuffer(buf))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.RegisterUser(w, req)
+
 	resp := w.Result()
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Register failed: %d", resp.StatusCode)
 	}
+
 	return resp
 }
 
@@ -294,10 +304,10 @@ func TestGetChunks(t *testing.T) {
 	createTestEpub(t, api)
 	bookID := "b1"
 
-	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
 		// Simulate chunk content based on chapter/chunk
 		data := []byte(
-			fmt.Sprintf("Chapter %d, Chunk %d", c.Chapter, c.Chunk),
+			fmt.Sprintf("Chapter %d, Chunk %d", c.Cursor.Chapter, c.Cursor.Chunk),
 		)
 		chunk := types.Chunk{
 			ID:   c,
@@ -477,4 +487,125 @@ func TestGetCSS(t *testing.T) {
 		t.Fatalf("Wrong string: %v", string(data))
 	}
 
+}
+
+func TestSaveCursors(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+
+	payload := map[string]interface{}{
+		"UserID": "pete",
+		"BookID": "b1",
+		"Cursor": map[string]int{"Chapter": 10, "Chunk": 1},
+	}
+
+	data, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cursors/save", bytes.NewBuffer(data))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	api.SaveCursor(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	cur, err := types.LoadUserCursor(api.DB, "pete", "b1")
+	if err != nil {
+		t.Fatal("Failed to load Cursor")
+	}
+
+	curs := types.Cursor{Chapter: 10, Chunk: 1}
+
+	if cur.Cursor.CompareCursor(curs) != 0 {
+		fmt.Printf("Saved: %v", cur)
+
+		t.Fatal("Wrong cursor")
+	}
+}
+
+func TestSaveBook(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+
+	payload := map[string]interface{}{
+		"id":           "b10",
+		"title":        "Book One",
+		"author_id":    "a1",
+		"series_id":    "s1",
+		"series_order": 1,
+		"file_path":    "/path/to/book.epub",
+	}
+
+	data, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/savebook", bytes.NewBuffer(data))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	api.SaveBook(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 OK, got %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	book, err := library.LoadBook(api.DB, "b10")
+	if err != nil {
+		t.Fatal("Could not load book")
+	}
+	if book.FilePath != "/path/to/book.epub" {
+		t.Fatalf("Got wrong book: %v", book)
+	}
+}
+
+func TestSaveCursors_Unauthorized(t *testing.T) {
+	api, _ := setupAPIWithAuth(t)
+
+	payload := map[string]interface{}{
+		"UserID": "u1",
+		"BookID": "b1",
+		"Cursor": map[string]int{"Chapter": 1, "Chunk": 1},
+	}
+
+	data, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cursors/save", bytes.NewBuffer(data))
+	req.Header.Set("Authorization", "Bearer "+"")
+
+	w := httptest.NewRecorder()
+	api.SaveCursor(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
+	}
+}
+
+func TestSaveBook_Unauthorized(t *testing.T) {
+	api, _ := setupAPIWithAuth(t)
+
+	payload := map[string]interface{}{
+		"id":           "b1",
+		"title":        "Book One",
+		"author_id":    "a1",
+		"series_id":    "s1",
+		"series_order": 1,
+		"file_path":    "/path/to/book.epub",
+	}
+
+	data, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/savebook", bytes.NewBuffer(data))
+	req.Header.Set("Authorization", "Bearer "+"")
+	w := httptest.NewRecorder()
+	api.SaveBook(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
+	}
 }

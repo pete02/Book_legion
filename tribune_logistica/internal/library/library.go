@@ -14,7 +14,6 @@ type Book struct {
 	SeriesID    string `json:"series_id"`
 	SeriesOrder int    `json:"series_order"`
 	FilePath    string `json:"file_path"`
-	CoverPath   string `json:"cover_path"`
 }
 
 func SaveBook(store storage.Storage, b Book) error {

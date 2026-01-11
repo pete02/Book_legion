@@ -11,16 +11,16 @@ import (
 )
 
 type API struct {
-	Manager manager.Organizer
+	Manager *manager.Organizer
 	DB      storage.Storage
-	policy  epub.ChunkPolicy
+	Policy  epub.ChunkPolicy
 }
 
-func New(manager manager.Organizer, db storage.Storage, policy epub.ChunkPolicy) API {
+func New(manager *manager.Organizer, db storage.Storage, policy epub.ChunkPolicy) API {
 	return API{
 		Manager: manager,
 		DB:      db,
-		policy:  policy,
+		Policy:  policy,
 	}
 }
 

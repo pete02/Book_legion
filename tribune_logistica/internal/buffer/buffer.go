@@ -7,7 +7,7 @@ import (
 	"github.com/book_legion-tribune_logistica/internal/types"
 )
 
-type Cursor = types.Cursor
+type Cursor = types.UserCursor
 type Chunk = types.Chunk
 
 type Buffer struct {
@@ -75,8 +75,8 @@ func (b *Buffer) Trim(anchor Cursor, steps int, minChapter int, maxChunks map[in
 	}
 
 	// Compute cutoff outside lock to minimize blocking
-	cutoff := anchor.StepBack(steps, minChapter, maxChunks)
-	if cutoff == anchor {
+	cutoff := anchor.Cursor.StepBack(steps, minChapter, maxChunks)
+	if cutoff == anchor.Cursor {
 		return
 	}
 
@@ -84,7 +84,7 @@ func (b *Buffer) Trim(anchor Cursor, steps int, minChapter int, maxChunks map[in
 	b.mu.RLock()
 	var toDelete []Cursor
 	for k := range b.Store {
-		if k.CompareCursor(cutoff) < 0 {
+		if k.Cursor.CompareCursor(cutoff) < 0 {
 			toDelete = append(toDelete, k)
 		}
 	}
