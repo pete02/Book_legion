@@ -8,13 +8,13 @@ import (
 )
 
 type Book struct {
-	ID          string
-	Title       string
-	AuthorID    string
-	SeriesID    string
-	SeriesOrder int
-	FilePath    string
-	CoverPath   string
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	AuthorID    string `json:"author_id"`
+	SeriesID    string `json:"series_id"`
+	SeriesOrder int    `json:"series_order"`
+	FilePath    string `json:"file_path"`
+	CoverPath   string `json:"cover_path"`
 }
 
 func SaveBook(store storage.Storage, b Book) error {
@@ -93,11 +93,11 @@ func ValidateBooks(store storage.Storage) error {
 }
 
 type ManifestEntry struct {
-	SeriesID    string
-	FirstBookID string
+	SeriesID    string `json:"series_id"`
+	FirstBookID string `json:"first_book_id"`
 }
 type Manifest struct {
-	Series []ManifestEntry
+	Series []ManifestEntry `json:"series"`
 }
 
 func SaveManifest(store storage.Storage, m Manifest) error {

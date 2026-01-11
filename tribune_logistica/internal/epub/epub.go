@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/book_legion-tribune_logistica/internal/library"
+	"github.com/book_legion-tribune_logistica/internal/storage"
 	"golang.org/x/net/html"
 )
 
@@ -35,6 +37,14 @@ func New(path string) (Epub, error) {
 	return epub, nil
 }
 
+func Load(db storage.Storage, bookID string) (Epub, error) {
+	book, err := library.LoadBook(db, bookID)
+	if err != nil {
+		return Epub{}, err
+	}
+	return New(book.FilePath)
+}
+
 func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
 	chapterBytes, err := e.ExtractChapter(spineIndex)
 	if err != nil {
@@ -54,6 +64,19 @@ func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
 	}
 
 	return chunks[len(chunks)-1].Index, nil
+}
+
+func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
+	chunkmap := map[int]int{}
+	for _, item := range e.Nav {
+		i, err := e.MaxChunkIndex(item.Index, policy)
+
+		if err == nil {
+			chunkmap[item.Index] = i
+		}
+	}
+
+	return chunkmap
 }
 
 func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {

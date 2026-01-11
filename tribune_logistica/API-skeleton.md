@@ -72,7 +72,7 @@ Set TTL for auth token
 Return tokens and expiry
 
 ### 1.3 Refresh Auth Token
-POST /api/v1/refresh
+POST /api/v1/refreshtoken
 
 **Request Body**
 

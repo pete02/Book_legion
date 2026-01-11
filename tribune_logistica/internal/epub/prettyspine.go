@@ -11,11 +11,10 @@ import (
 )
 
 type PrettySpineItem struct {
-	Index  int    // 0-based, stable
-	Number int    // 1-based "chapter number"
-	Title  string // human-readable chapter title
+	Index  int    `json:"Index"`
+	Number int    `json:"Number"`
+	Title  string `json:"Title"`
 }
-
 type NavToc struct {
 	NavPoints []NavPoint `xml:"navMap>navPoint"`
 }

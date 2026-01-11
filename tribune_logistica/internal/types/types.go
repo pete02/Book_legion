@@ -9,8 +9,8 @@ import (
 
 // Cursor represents a location in the audiobook
 type Cursor struct {
-	Chapter int
-	Chunk   int
+	Chapter int `json:"chapter"`
+	Chunk   int `json:"chunk"`
 }
 
 func (c *Cursor) Next(maxChunk int, maxChapter int) {
@@ -65,14 +65,14 @@ func (a Cursor) CompareCursor(b Cursor) int {
 
 // Chunk represents an audio Chunk
 type Chunk struct {
-	ID   Cursor
-	Data []byte
+	ID   Cursor `json:"Cursor"`
+	Data []byte `json:"data"`
 }
 
 type UserCursor struct {
-	UserID string // user identifier
-	BookID string // book identifier
-	Cursor Cursor
+	UserID string `json:"UserID"`
+	BookID string `json:"BookID"`
+	Cursor Cursor `json:"Cursor"`
 }
 
 // SaveUserCursor saves a user's UserCursor position for a specific book
@@ -93,11 +93,13 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		"book_id": bookID,
 	})
 	if err != nil {
-		return UserCursor{}, err
+		user := UserCursor{UserID: userID, BookID: bookID, Cursor: Cursor{Chapter: 0, Chunk: 0}}
+		SaveUserCursor(store, user)
+		return user, nil
 	}
 
 	if len(rows) == 0 {
-		return UserCursor{UserID: userID, BookID: bookID}, nil
+		return UserCursor{UserID: userID, BookID: bookID, Cursor: Cursor{Chapter: 0, Chunk: 0}}, nil
 	}
 
 	row := rows[0]

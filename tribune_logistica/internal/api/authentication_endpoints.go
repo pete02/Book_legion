@@ -32,7 +32,7 @@ type RefreshResponse struct {
 	ExpiresIn int    `json:"expires_in"` // seconds
 }
 
-func (api *API) Register(w http.ResponseWriter, r *http.Request) {
+func (api *API) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -56,7 +56,7 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = login.InsertUser(api.dp, user)
+	err = login.InsertUser(api.DB, user)
 
 	if err != nil {
 		http.Error(w, "Could not save user", http.StatusInternalServerError)
@@ -73,7 +73,7 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (api *API) Login(w http.ResponseWriter, r *http.Request) {
+func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -85,13 +85,13 @@ func (api *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refresh_token, err := login.VerifyUser(api.dp, req.Username, req.Password)
+	refresh_token, err := login.VerifyUser(api.DB, req.Username, req.Password)
 	if err != nil {
-		http.Error(w, "Wrong credentials", http.StatusForbidden)
+		http.Error(w, "Wrong credentials", http.StatusUnauthorized)
 		return
 	}
 
-	auth_token, err := login.GenerateAuthToken(api.dp, refresh_token)
+	auth_token, err := login.GenerateAuthToken(api.DB, refresh_token)
 	if err != nil {
 		http.Error(w, "Could not generate auth token", http.StatusInternalServerError)
 	}
@@ -107,7 +107,7 @@ func (api *API) Login(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (api *API) Refresh(w http.ResponseWriter, r *http.Request) {
+func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -124,9 +124,9 @@ func (api *API) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newAuthToken, err := login.GenerateAuthToken(api.dp, req.RefreshToken)
+	newAuthToken, err := login.GenerateAuthToken(api.DB, req.RefreshToken)
 	if err != nil {
-		http.Error(w, "Could not generate auth token", http.StatusForbidden)
+		http.Error(w, "Could not generate auth token", http.StatusUnauthorized)
 
 	}
 

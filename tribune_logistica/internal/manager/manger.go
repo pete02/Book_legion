@@ -2,6 +2,7 @@ package manager
 
 import (
 	"sync"
+	"time"
 
 	"github.com/book_legion-tribune_logistica/internal/buffer"
 	types "github.com/book_legion-tribune_logistica/internal/types"
@@ -41,12 +42,20 @@ func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks m
 }
 
 func (o *Organizer) GetChunks(id string, start types.Cursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
-	o.handleNewId(id)
 	o.mu.Lock()
 	defer o.mu.Unlock()
+
+	o.idCheck(id)
+
+	// Ensure the start cursor exists
 	if !o.ensureStartExists(start, maxChunks) {
-		for !o.Buf.Has(start) {
-			o.cond.Wait()
+		for {
+			o.mu.Unlock()
+			time.Sleep(10 * time.Millisecond)
+			o.mu.Lock()
+			if o.Buf.Has(start) {
+				break
+			}
 		}
 	}
 
@@ -58,9 +67,12 @@ func (o *Organizer) GetChunks(id string, start types.Cursor, count int, maxChunk
 	return result, nil
 }
 
-func (o *Organizer) handleNewId(id string) {
+func (o *Organizer) idCheck(id string) {
 	if id != o.Buf.Id {
-		o.Clear()
+		// instead of Clear(), initialize a new buffer instance
+		o.Buf = buffer.NewBuffer(id)
+		o.OrderList = nil
+		o.orderSet = make(map[types.Cursor]bool, o.BufferSize*2)
 	}
 }
 

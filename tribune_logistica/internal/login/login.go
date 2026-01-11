@@ -100,7 +100,7 @@ func GenerateAuthToken(store storage.Storage, refreshToken string) (string, erro
 	return authToken, nil
 }
 
-// --------------------
+// returns true for correct token
 func VerifyAuthToken(authToken string) (string, bool) {
 	username, ok := authTokens[authToken]
 	if !ok {

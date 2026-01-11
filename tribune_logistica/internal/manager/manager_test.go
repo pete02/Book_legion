@@ -1,4 +1,4 @@
-package manager
+package manager_test
 
 import (
 	"sync"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/book_legion-tribune_logistica/internal/buffer"
+	"github.com/book_legion-tribune_logistica/internal/manager"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
@@ -37,7 +38,7 @@ func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
 		}
 	}
 
-	org := NewOrganizer(buf, 2)
+	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
 	chunks, err := org.GetChunks("t", start, 4, maxChunks)
@@ -73,7 +74,7 @@ func TestOrganizerGetuserChunks_AllAvailable(t *testing.T) {
 		}
 	}
 
-	org := NewOrganizer(buf, 2)
+	org := manager.NewOrganizer(buf, 2)
 
 	chunks, err := org.GetUserChunks(start, 4, maxChunks)
 	if err != nil {
@@ -98,7 +99,7 @@ func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 0}, Data: []byte{0}})
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 2}, Data: []byte{2}})
 
-	org := NewOrganizer(buf, 2)
+	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
 	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
@@ -126,7 +127,7 @@ func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 1}, Data: []byte{1}})
 	buf.Add(buffer.Chunk{ID: types.Cursor{1, 0}, Data: []byte{10}})
 
-	org := NewOrganizer(buf, 2)
+	org := manager.NewOrganizer(buf, 2)
 
 	start := types.Cursor{0, 0}
 	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
@@ -154,7 +155,7 @@ func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
 		})
 	}
 
-	org := NewOrganizer(buf, 6) // half = 3
+	org := manager.NewOrganizer(buf, 6) // half = 3
 
 	start := types.Cursor{0, 0}
 	_, _ = org.GetChunks("t", start, 3, maxChunks)
@@ -177,7 +178,7 @@ func TestManagerTrimsBackwardBeyondHalfBuffer(t *testing.T) {
 		})
 	}
 
-	org := NewOrganizer(buf, 6) // half = 3
+	org := manager.NewOrganizer(buf, 6) // half = 3
 
 	start := types.Cursor{0, 3}
 	chunks, _ := org.GetChunks("t", start, 3, maxChunks)
@@ -228,7 +229,7 @@ func TestManagerTrimRespectsChapterBoundaries(t *testing.T) {
 	buf.Add(buffer.Chunk{ID: types.Cursor{1, 0}, Data: []byte{10}})
 	buf.Add(buffer.Chunk{ID: types.Cursor{1, 1}, Data: []byte{11}})
 
-	org := NewOrganizer(buf, 4) // half = 2
+	org := manager.NewOrganizer(buf, 4) // half = 2
 
 	start := types.Cursor{0, 1}
 	org.GetChunks("t", start, 3, maxChunks)
@@ -264,7 +265,7 @@ func makeChunk(id types.Cursor, data string) types.Chunk {
 
 func TestStartOrderProcessor_HappyPath(t *testing.T) {
 	buf := buffer.NewBuffer("buf-happy")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	// Add several cursors to order list
 	cursors := []types.Cursor{
@@ -310,7 +311,7 @@ func TestStartOrderProcessor_HappyPath(t *testing.T) {
 
 func TestProcessor_PartialSuccess(t *testing.T) {
 	buf := buffer.NewBuffer("buf-partial")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	cursors := []types.Cursor{
 		{Chapter: 0, Chunk: 0},
@@ -365,7 +366,7 @@ func TestProcessor_PartialSuccess(t *testing.T) {
 
 func TestProcessor_ConcurrentClear(t *testing.T) {
 	buf := buffer.NewBuffer("buf-clear")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	cursors := []types.Cursor{
 		{Chapter: 0, Chunk: 0},
@@ -396,7 +397,7 @@ func TestProcessor_ConcurrentClear(t *testing.T) {
 
 func TestProcessor_EmptyOrderListThenAdd(t *testing.T) {
 	buf := buffer.NewBuffer("buf-empty")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	// Start processor with empty list
 	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
@@ -427,7 +428,7 @@ func TestProcessor_EmptyOrderListThenAdd(t *testing.T) {
 
 func TestProcessor_DuplicateCursors(t *testing.T) {
 	buf := buffer.NewBuffer("buf-dup")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	c := types.Cursor{Chapter: 0, Chunk: 0}
 
@@ -459,7 +460,7 @@ func TestProcessor_DuplicateCursors(t *testing.T) {
 
 func TestProcessor_StopChannel(t *testing.T) {
 	buf := buffer.NewBuffer("buf-stop")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 
 	c := types.Cursor{Chapter: 0, Chunk: 0}
 	org.AddToOrderForTest(c)
@@ -485,13 +486,7 @@ func TestProcessor_StopChannel(t *testing.T) {
 
 func TestProcessor_HighConcurrencyStress(t *testing.T) {
 	buf := buffer.NewBuffer("buf-stress")
-	org := NewOrganizer(buf, 10)
-
-	// Add 50 cursors
-	for i := range 50 {
-		c := types.Cursor{Chapter: 0, Chunk: i}
-		org.AddToOrderForTest(c)
-	}
+	org := manager.NewOrganizer(buf, 10)
 
 	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
 		return makeChunk(c, "ok"), true
@@ -499,6 +494,12 @@ func TestProcessor_HighConcurrencyStress(t *testing.T) {
 
 	stop := org.StartOrderProcessor(fetchFn)
 	defer close(stop)
+
+	// Add 50 cursors
+	for i := range 50 {
+		c := types.Cursor{Chapter: 0, Chunk: i}
+		org.AddToOrderForTest(c)
+	}
 
 	// Concurrently add/remove orders
 	var wg sync.WaitGroup
@@ -538,7 +539,7 @@ func TestOrganizerOrderList_Invariants(t *testing.T) {
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 0}, Data: []byte{0}})
 	buf.Add(buffer.Chunk{ID: types.Cursor{0, 1}, Data: []byte{1}})
 
-	org := NewOrganizer(buf, 10)
+	org := manager.NewOrganizer(buf, 10)
 	org.GetChunks("t", types.Cursor{0, 0}, 4, maxChunks)
 
 	seen := make(map[types.Cursor]bool)
@@ -563,7 +564,7 @@ func TestOrganizerOrderList_Invariants(t *testing.T) {
 
 func TestGetChunks_BlocksUntilOneChunkThenProcessorFillsRest(t *testing.T) {
 	buf := buffer.NewBuffer("buf-block")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 	maxChunks := map[int]int{0: 4} // 5 chunks total: 0..4
 
 	// Simulate fetchFn with delay per chunk
@@ -622,7 +623,7 @@ func TestGetChunks_BlocksUntilOneChunkThenProcessorFillsRest(t *testing.T) {
 
 func TestFetchReordering_LaterChunkArrivesFirst(t *testing.T) {
 	buf := buffer.NewBuffer("buf-reorder-1")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 	maxChunks := map[int]int{0: 2} // chunks 0,1,2
 
 	start := types.Cursor{Chapter: 0, Chunk: 0}
@@ -668,7 +669,7 @@ func TestFetchReordering_LaterChunkArrivesFirst(t *testing.T) {
 
 func TestFetchReordering_GapPreservedDespiteLaterArrival(t *testing.T) {
 	buf := buffer.NewBuffer("buf-reorder-2")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 	maxChunks := map[int]int{0: 3}
 
 	// Seed chunk 0 so GetChunks can start
@@ -723,7 +724,7 @@ func TestFetchReordering_GapPreservedDespiteLaterArrival(t *testing.T) {
 
 func TestFetchReordering_AllChunksArriveInReverseOrder(t *testing.T) {
 	buf := buffer.NewBuffer("buf-reorder-3")
-	org := NewOrganizer(buf, 5)
+	org := manager.NewOrganizer(buf, 5)
 	maxChunks := map[int]int{0: 4}
 
 	start := types.Cursor{0, 0}
@@ -759,4 +760,36 @@ func TestFetchReordering_AllChunksArriveInReverseOrder(t *testing.T) {
 			t.Fatalf("expected chunk %v in buffer", c)
 		}
 	}
+}
+
+func TestGetChunkWithStartOrderProcessor(t *testing.T) {
+	buf := buffer.NewBuffer("t")
+	org := manager.NewOrganizer(buf, 5)
+	maxChunks := map[int]int{
+		0: 2,
+		1: 1,
+	}
+
+	fetchFn := func(c types.Cursor) (types.Chunk, bool) {
+		time.Sleep(200 * time.Millisecond)
+		return makeChunk(c, "data"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	start := types.Cursor{0, 0}
+	chunks, err := org.GetChunks("b", start, 4, maxChunks)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(chunks) != 1 {
+		t.Fatalf("expected 4 chunks, got %d", len(chunks))
+	}
+
+	if len(org.OrderList) != 4 {
+		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	}
+
 }
