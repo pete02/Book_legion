@@ -51,7 +51,7 @@ func InsertUser(store storage.Storage, user User) error {
 		"password_hash": user.PasswordHash,
 		"refresh_token": user.RefreshToken,
 	}
-	return store.Insert("users", row)
+	return store.Insert("users", "username", row)
 }
 
 // Verifies user and returns Refresh Token
@@ -74,7 +74,7 @@ func VerifyUser(store storage.Storage, username, password string) (string, error
 	if !ok || refreshToken == "" {
 		refreshToken = generateRandomToken(32)
 		userRow["refresh_token"] = refreshToken
-		store.Insert("users", userRow)
+		store.Insert("users", "username", userRow)
 	}
 
 	return refreshToken, nil

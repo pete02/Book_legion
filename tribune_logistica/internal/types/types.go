@@ -82,28 +82,39 @@ func (a UserCursor) CompareCursor(b UserCursor) int {
 // SaveUserCursor saves a user's UserCursor position for a specific book
 func SaveUserCursor(store storage.Storage, c UserCursor) error {
 	row := map[string]interface{}{
+		"id":      c.UserID + ":" + c.BookID,
 		"user_id": c.UserID,
 		"book_id": c.BookID,
 		"chapter": c.Cursor.Chapter,
 		"chunk":   c.Cursor.Chunk,
 	}
-	return store.Insert("UserCursors", row)
+	return store.Insert("UserCursors", "id", row)
 }
 
 // LoadUserCursor loads a user's UserCursor for a book
 func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, error) {
+	// synthetic id matches how we stored it
+	synthID := userID + ":" + bookID
+
 	rows, err := store.Query("UserCursors", map[string]interface{}{
-		"user_id": userID,
-		"book_id": bookID,
+		"id": synthID,
 	})
 	if err != nil {
-		user := UserCursor{UserID: userID, BookID: bookID, Cursor: Cursor{Chapter: 0, Chunk: 0}}
+		user := UserCursor{
+			UserID: userID,
+			BookID: bookID,
+			Cursor: Cursor{Chapter: 0, Chunk: 0},
+		}
 		SaveUserCursor(store, user)
 		return user, nil
 	}
 
 	if len(rows) == 0 {
-		return UserCursor{UserID: userID, BookID: bookID, Cursor: Cursor{Chapter: 0, Chunk: 0}}, nil
+		return UserCursor{
+			UserID: userID,
+			BookID: bookID,
+			Cursor: Cursor{Chapter: 0, Chunk: 0},
+		}, nil
 	}
 
 	row := rows[0]

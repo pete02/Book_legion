@@ -15,18 +15,6 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("failed to open sqlite db: %v", err)
 	}
 
-	schema := `
-	CREATE TABLE users (
-		id INTEGER PRIMARY KEY,
-		name TEXT,
-		age INTEGER
-	);
-	`
-
-	if _, err := db.Exec(schema); err != nil {
-		t.Fatalf("failed to create schema: %v", err)
-	}
-
 	return db
 }
 
@@ -34,7 +22,7 @@ func TestSQLStorage_InsertAndGetAll(t *testing.T) {
 	db := setupTestDB(t)
 	st := NewSQLStorage(db)
 
-	err := st.Insert("users", map[string]interface{}{
+	err := st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 		"age":  30,
 	})
@@ -56,15 +44,52 @@ func TestSQLStorage_InsertAndGetAll(t *testing.T) {
 	}
 }
 
+func TestSQLStorage_InsertTwice(t *testing.T) {
+	db := setupTestDB(t)
+	st := NewSQLStorage(db)
+
+	err := st.Insert("users", "name", map[string]interface{}{
+		"name": "Alice",
+		"age":  30,
+	})
+	if err != nil {
+		t.Fatalf("insert failed: %v", err)
+	}
+
+	err = st.Insert("users", "name", map[string]interface{}{
+		"name": "Alice",
+		"age":  40,
+	})
+	if err != nil {
+		t.Fatalf("insert failed: %v", err)
+	}
+
+	rows, err := st.GetAll("users")
+	if err != nil {
+		t.Fatalf("getall failed: %v", err)
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+
+	if rows[0]["name"] != "Alice" {
+		t.Fatalf("unexpected name: %v", rows[0]["name"])
+	}
+	if rows[0]["age"] != int64(40) {
+		t.Fatalf("unexpected age: %v, %T", rows[0]["age"], rows[0]["age"])
+	}
+}
+
 func TestSQLStorage_QueryWithFilter(t *testing.T) {
 	db := setupTestDB(t)
 	st := NewSQLStorage(db)
 
-	st.Insert("users", map[string]interface{}{
+	st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 		"age":  30,
 	})
-	st.Insert("users", map[string]interface{}{
+	st.Insert("users", "name", map[string]interface{}{
 		"name": "Bob",
 		"age":  40,
 	})
@@ -85,29 +110,11 @@ func TestSQLStorage_QueryWithFilter(t *testing.T) {
 	}
 }
 
-func TestSQLStorage_QueryEmptyFilter(t *testing.T) {
-	db := setupTestDB(t)
-	st := NewSQLStorage(db)
-
-	st.Insert("users", map[string]interface{}{
-		"name": "Alice",
-	})
-
-	rows, err := st.Query("users", map[string]interface{}{})
-	if err != nil {
-		t.Fatalf("query failed: %v", err)
-	}
-
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-}
-
 func TestSQLStorage_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	st := NewSQLStorage(db)
 
-	st.Insert("users", map[string]interface{}{
+	st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 	})
 

@@ -54,14 +54,31 @@ func (js *JSONStorage) Save() error {
 	return encoder.Encode(js.data)
 }
 
-func (js *JSONStorage) Insert(table string, row map[string]interface{}) error {
+func (js *JSONStorage) Insert(table string, pk string, row map[string]interface{}) error {
 	js.mu.Lock()
 	defer js.mu.Unlock()
 
+	// Initialize table if it doesn't exist
+	if js.data[table] == nil {
+		js.data[table] = []map[string]interface{}{}
+	}
+
+	// Assume "id" is the primary key
+	newID, ok := row["id"]
+	if ok {
+		for i, existing := range js.data[table] {
+			if existingID, exists := existing["id"]; exists && existingID == newID {
+				// Replace existing row
+				js.data[table][i] = row
+				return nil
+			}
+		}
+	}
+
+	// Otherwise, insert as new row
 	js.data[table] = append(js.data[table], row)
 	return nil
 }
-
 func (js *JSONStorage) Query(table string, filter map[string]interface{}) ([]map[string]interface{}, error) {
 	js.mu.RLock()
 	defer js.mu.RUnlock()

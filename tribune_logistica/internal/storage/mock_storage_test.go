@@ -13,11 +13,11 @@ func TestJSONStorage_InsertAndQuery(t *testing.T) {
 	}
 
 	// Insert some rows
-	err := js.Insert("books", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
+	err := js.Insert("books", "id", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
-	err = js.Insert("books", map[string]interface{}{"id": 2, "title": "Brave New World", "author": "Huxley"})
+	err = js.Insert("books", "id", map[string]interface{}{"id": 2, "title": "Brave New World", "author": "Huxley"})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestJSONStorage_SaveAndLoad(t *testing.T) {
 		path: tmpFile,
 	}
 
-	js.Insert("books", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
+	js.Insert("books", "id", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
 	err := js.Save()
 	if err != nil {
 		t.Fatalf("Save failed: %v", err)
@@ -82,6 +82,38 @@ func TestJSONStorage_SaveAndLoad(t *testing.T) {
 	}
 
 	rows, err := js2.GetAll("books")
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(rows) != 1 || rows[0]["title"] != "1984" {
+		t.Errorf("Data mismatch after load: %v", rows)
+	}
+}
+
+func TestJSONStorage_InsertTwice(t *testing.T) {
+	// Temporary file
+	tmpFile := "test_data.json"
+	defer os.Remove(tmpFile)
+
+	js := &JSONStorage{
+		data: make(map[string][]map[string]interface{}),
+		path: tmpFile,
+	}
+
+	js.Insert("books", "id", map[string]interface{}{"id": 1, "title": "1983", "author": "Orwell"})
+	err := js.Save()
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	js.Insert("books", "id", map[string]interface{}{"id": 1, "title": "1984", "author": "Orwell"})
+	err = js.Save()
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	rows, err := js.GetAll("books")
 	if err != nil {
 		t.Fatalf("GetAll failed: %v", err)
 	}
@@ -106,7 +138,7 @@ func TestJSONStorage_QueryWithFilters(t *testing.T) {
 	}
 
 	for _, book := range books {
-		if err := js.Insert("books", book); err != nil {
+		if err := js.Insert("books", "id", book); err != nil {
 			t.Fatalf("Insert failed: %v", err)
 		}
 	}
@@ -171,11 +203,11 @@ func TestJSONStorageDelete_SingleRow(t *testing.T) {
 		t.Fatalf("failed to create storage: %v", err)
 	}
 
-	store.Insert("books", map[string]interface{}{
+	store.Insert("books", "id", map[string]interface{}{
 		"id":    "b1",
 		"title": "Book 1",
 	})
-	store.Insert("books", map[string]interface{}{
+	store.Insert("books", "id", map[string]interface{}{
 		"id":    "b2",
 		"title": "Book 2",
 	})
@@ -201,15 +233,15 @@ func TestJSONStorageDelete_MultipleRows(t *testing.T) {
 
 	store, _ := NewJSONStorage(tmp)
 
-	store.Insert("cursors", map[string]interface{}{
+	store.Insert("cursors", "user_id", map[string]interface{}{
 		"user_id": "u1",
 		"book_id": "b1",
 	})
-	store.Insert("cursors", map[string]interface{}{
+	store.Insert("cursors", "user_id", map[string]interface{}{
 		"user_id": "u1",
 		"book_id": "b2",
 	})
-	store.Insert("cursors", map[string]interface{}{
+	store.Insert("cursors", "user_id", map[string]interface{}{
 		"user_id": "u2",
 		"book_id": "b1",
 	})
@@ -235,7 +267,7 @@ func TestJSONStorageDelete_NoMatch(t *testing.T) {
 
 	store, _ := NewJSONStorage(tmp)
 
-	store.Insert("books", map[string]interface{}{"id": "b1"})
+	store.Insert("books", "user_id", map[string]interface{}{"id": "b1"})
 
 	err := store.Delete("books", map[string]interface{}{"id": "does-not-exist"})
 	if err != nil {
@@ -265,8 +297,8 @@ func TestJSONStorageDelete_Persistence(t *testing.T) {
 	defer os.Remove(tmp)
 
 	store, _ := NewJSONStorage(tmp)
-	store.Insert("books", map[string]interface{}{"id": "b1"})
-	store.Insert("books", map[string]interface{}{"id": "b2"})
+	store.Insert("books", "user_id", map[string]interface{}{"id": "b1"})
+	store.Insert("books", "user_id", map[string]interface{}{"id": "b2"})
 	store.Save()
 
 	store.Delete("books", map[string]interface{}{"id": "b1"})

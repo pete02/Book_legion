@@ -39,6 +39,43 @@ func TestSaveAndLoadBook(t *testing.T) {
 	}
 }
 
+func TestSaveAndChangeBook(t *testing.T) {
+	tmpFile := "test_books.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	book := Book{
+		ID:          "b1",
+		Title:       "Book One",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesOrder: 1,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	book.FilePath = "/tmp/changed.epub"
+	if err = SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	loaded, err := LoadBook(store, "b1")
+	if err != nil {
+		t.Fatalf("LoadBook failed: %v", err)
+	}
+
+	if loaded.ID != book.ID || loaded.Title != book.Title || loaded.SeriesOrder != book.SeriesOrder || loaded.FilePath != book.FilePath {
+		t.Errorf("Loaded book %+v; want %+v", loaded, book)
+	}
+}
+
 func TestLoadBookNotFound(t *testing.T) {
 	tmpFile := "test_books.json"
 	defer os.Remove(tmpFile)

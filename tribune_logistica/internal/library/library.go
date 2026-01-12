@@ -25,7 +25,7 @@ func SaveBook(store storage.Storage, b Book) error {
 		"series_order": b.SeriesOrder,
 		"file_path":    b.FilePath,
 	}
-	return store.Insert("books", row)
+	return store.Insert("books", "id", row)
 }
 
 func LoadBook(store storage.Storage, id string) (Book, error) {
@@ -105,7 +105,7 @@ func SaveManifest(store storage.Storage, m Manifest) error {
 			"series_id":     entry.SeriesID,
 			"first_book_id": entry.FirstBookID,
 		}
-		if err := store.Insert("manifest", row); err != nil {
+		if err := store.Insert("manifest", "series_id", row); err != nil {
 			return err
 		}
 	}
