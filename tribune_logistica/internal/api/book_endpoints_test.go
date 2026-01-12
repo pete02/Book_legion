@@ -129,18 +129,14 @@ func setupBook(t *testing.T, api api.API, fp string) {
 
 func setupManifest(t *testing.T, api api.API) {
 	manifest := library.Manifest{
-		Series: []library.ManifestEntry{
-			{
-				SeriesID:    "s1",
-				FirstBookID: "b1",
-			},
+		Series: map[string]string{
+			"s1": "b1", // SeriesID -> FirstBookID
 		},
 	}
 
 	err := library.SaveManifest(api.DB, manifest)
-
 	if err != nil {
-		t.Fatal("Could not save manifest")
+		t.Fatalf("Could not save manifest: %v", err)
 	}
 }
 
@@ -331,7 +327,7 @@ func TestGetChunks(t *testing.T) {
 	buf, _ := json.Marshal(reqBody)
 
 	t.Run("GetChunks_Success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 
@@ -354,7 +350,7 @@ func TestGetChunks(t *testing.T) {
 	})
 
 	t.Run("GetChunks_Unauthorized", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
 		req.Header.Set("Authorization", "Bearer badtoken")
 		w := httptest.NewRecorder()
 

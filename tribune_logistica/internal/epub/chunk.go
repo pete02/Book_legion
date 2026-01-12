@@ -16,6 +16,14 @@ type ChunkPolicy struct {
 	MaxSize    int
 }
 
+func NewPolicy(target int, min int, max int) ChunkPolicy {
+	return ChunkPolicy{
+		TargetSize: target,
+		MinSize:    min,
+		MaxSize:    max,
+	}
+}
+
 func ChunkText(linear LinearText, p ChunkPolicy) []Chunk {
 	var chunks []Chunk
 	text := linear.FullText

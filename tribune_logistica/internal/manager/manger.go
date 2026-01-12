@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -45,10 +46,10 @@ func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks m
 func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-
+	fmt.Printf("Asked: %v", start)
 	o.idCheck(id)
+	fmt.Printf("ID ok")
 
-	// Ensure the start cursor exists
 	if !o.ensureStartExists(start, maxChunks) {
 		for {
 			o.mu.Unlock()
@@ -59,8 +60,9 @@ func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxC
 			}
 		}
 	}
-
+	fmt.Printf("start ok ok")
 	result, lastReturned := o.collectContiguousChunks(start, count, maxChunks)
+	fmt.Printf("Result gotten")
 	missing := o.computeMissingCursors(lastReturned, maxChunks)
 	o.updateOrderList(missing, maxChunks)
 	o.TrimBuffer(lastReturned, maxChunks)

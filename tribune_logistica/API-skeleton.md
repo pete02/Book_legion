@@ -12,7 +12,7 @@ This document outlines the API endpoints for the Book Legion system. It is desig
 ## 1. Authentication Endpoints
 
 ### 1.1 Register User
-**POST** `/api/v1/register`  
+**POST** `/api/v1/register`   //works
 
 **Request Body**
 
@@ -41,7 +41,7 @@ Return success/failure
 
 
 ### 1.2 Login User
-POST /api/v1/login
+POST /api/v1/login   //works
 
 **Request Body**
 
@@ -72,7 +72,7 @@ Set TTL for auth token
 Return tokens and expiry
 
 ### 1.3 Refresh Auth Token
-POST /api/v1/refreshtoken
+POST /api/v1/refreshtoken //works
 
 **Request Body**
 
@@ -104,7 +104,7 @@ Return token & TTL
 ## 2. Library Endpoints
 
 ### 2.1 Get Single Book
-GET /api/v1/books/{book_id}
+GET /api/v1/books/{book_id} // works
 
 **Response**
 
@@ -127,7 +127,7 @@ Load book by ID
 Return 404 if not found
 
 ### 2.2 Get Library Manifest
-GET /api/v1/manifest
+GET /api/v1/manifest   //works
 
 **Response**
 
@@ -151,7 +151,7 @@ Return all series entries
 
 ## 3. Book Reading / Audiobook Streaming
 ### 3.0 Request Cursor
-GET /api/v1/cursors/{book_id}
+GET /api/v1/cursors/{book_id}   //works.
 **Response**
 ```
 {
@@ -169,7 +169,7 @@ Creates and returns a new cursor for the book, if one does not exists
 
 
 ### 3.1 Get Chapter
-GET /api/v1/books/{book_id}/chapters/{chapter_index}
+GET /api/v1/books/{book_id}/chapters/{chapter_index} // works
 
 **Response**
 ```
@@ -186,7 +186,7 @@ Load epub
 Extract chapter and number of chunks
 
 ### 3.2 Get Chunks
-GET /api/v1/books/{book_id}/chunks
+GET /api/v1/books/{book_id}/chunks // does not work, needs further investigation
 ```
 {
   "UserCursor":{
@@ -216,7 +216,7 @@ GET /api/v1/books/{book_id}/chunks
 
 
 ### 3.3 Get Nav:
-GET /api/v1/books/{book_id}/nav
+GET /api/v1/books/{book_id}/nav // works
 
 **Response**
 ```
@@ -241,7 +241,7 @@ Serve chunk as raw bytes or base64-encoded
 
 ## 5. Miscellaneous Endpoints
 ### 5.1 Get Cover Image
-GET /api/v1/books/{book_id}/cover
+GET /api/v1/books/{book_id}/cover  //does not work?
 
 **Response**
 
@@ -254,17 +254,11 @@ Extract cover from epub
 Return binary stream directly
 
 ### 5.2 Get CSS Files
-GET /api/v1/books/{book_id}/css
+GET /api/v1/books/{book_id}/css   //works
 
 **Response**
 
-
-```
-[
-{"filename": "style.css", "data": "..."},
-{"filename": "theme.css", "data": "..."}
-]
-```
+CSS text
 
 #### Handler Responsibilities
 
@@ -275,7 +269,7 @@ Return as list of filename + content
 
 
 ### 5.3 Save Cursors
-POST /api/v1/cursors/save
+POST /api/v1/cursors/save // works
 ```
 {
   "UserID": "u1",
@@ -290,7 +284,7 @@ POST /api/v1/cursors/save
 
 
 ### 5.4 Save Book
-POST /api/v1/savebook
+POST /api/v1/savebook   //works
 ```
 {
   "id": "b1",

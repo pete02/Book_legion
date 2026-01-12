@@ -1,9 +1,10 @@
-package library
+package library_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
 
@@ -16,7 +17,7 @@ func TestSaveAndLoadBook(t *testing.T) {
 		t.Fatalf("failed to create JSONStorage: %v", err)
 	}
 
-	book := Book{
+	book := library.Book{
 		ID:          "b1",
 		Title:       "Book One",
 		AuthorID:    "a1",
@@ -25,11 +26,11 @@ func TestSaveAndLoadBook(t *testing.T) {
 		FilePath:    "/tmp/fakefile1.epub",
 	}
 
-	if err := SaveBook(store, book); err != nil {
+	if err := library.SaveBook(store, book); err != nil {
 		t.Fatalf("SaveBook failed: %v", err)
 	}
 
-	loaded, err := LoadBook(store, "b1")
+	loaded, err := library.LoadBook(store, "b1")
 	if err != nil {
 		t.Fatalf("LoadBook failed: %v", err)
 	}
@@ -48,7 +49,7 @@ func TestSaveAndChangeBook(t *testing.T) {
 		t.Fatalf("failed to create JSONStorage: %v", err)
 	}
 
-	book := Book{
+	book := library.Book{
 		ID:          "b1",
 		Title:       "Book One",
 		AuthorID:    "a1",
@@ -57,16 +58,16 @@ func TestSaveAndChangeBook(t *testing.T) {
 		FilePath:    "/tmp/fakefile1.epub",
 	}
 
-	if err := SaveBook(store, book); err != nil {
+	if err := library.SaveBook(store, book); err != nil {
 		t.Fatalf("SaveBook failed: %v", err)
 	}
 
 	book.FilePath = "/tmp/changed.epub"
-	if err = SaveBook(store, book); err != nil {
+	if err = library.SaveBook(store, book); err != nil {
 		t.Fatalf("SaveBook failed: %v", err)
 	}
 
-	loaded, err := LoadBook(store, "b1")
+	loaded, err := library.LoadBook(store, "b1")
 	if err != nil {
 		t.Fatalf("LoadBook failed: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestLoadBookNotFound(t *testing.T) {
 	defer os.Remove(tmpFile)
 
 	store, _ := storage.NewJSONStorage(tmpFile)
-	_, err := LoadBook(store, "nonexistent")
+	_, err := library.LoadBook(store, "nonexistent")
 	if err == nil {
 		t.Fatal("expected error loading nonexistent book")
 	}
@@ -101,18 +102,18 @@ func TestValidateBooksDeletesOrphan(t *testing.T) {
 		f.Close()
 	}
 
-	books := []Book{
+	books := []library.Book{
 		{ID: "b1", FilePath: existingPath},
 		{ID: "b2", FilePath: "/tmp/nonexistent.epub"},
 	}
 
 	for _, b := range books {
-		if err := SaveBook(store, b); err != nil {
+		if err := library.SaveBook(store, b); err != nil {
 			t.Fatalf("SaveBook failed: %v", err)
 		}
 	}
 
-	if err := ValidateBooks(store); err != nil {
+	if err := library.ValidateBooks(store); err != nil {
 		t.Fatalf("ValidateBooks failed: %v", err)
 	}
 
@@ -134,18 +135,18 @@ func TestSaveAndLoadManifest(t *testing.T) {
 
 	store, _ := storage.NewJSONStorage(tmpFile)
 
-	manifest := Manifest{
-		Series: []ManifestEntry{
-			{SeriesID: "s1", FirstBookID: "b1"},
-			{SeriesID: "s2", FirstBookID: "b2"},
+	manifest := library.Manifest{
+		Series: map[string]string{
+			"s1": "b1",
+			"s2": "b2",
 		},
 	}
 
-	if err := SaveManifest(store, manifest); err != nil {
+	if err := library.SaveManifest(store, manifest); err != nil {
 		t.Fatalf("SaveManifest failed: %v", err)
 	}
 
-	loaded, err := LoadManifest(store)
+	loaded, err := library.LoadManifest(store)
 	if err != nil {
 		t.Fatalf("LoadManifest failed: %v", err)
 	}
@@ -156,7 +157,92 @@ func TestSaveAndLoadManifest(t *testing.T) {
 
 	for i, entry := range loaded.Series {
 		if entry != manifest.Series[i] {
-			t.Errorf("entry %d mismatch: got %+v, want %+v", i, entry, manifest.Series[i])
+			t.Errorf("mismatch: %v, got %+v, want %+v", i, entry, manifest.Series)
 		}
+	}
+}
+
+func TestSaveBookAndLoadManifest(t *testing.T) {
+	tmpFile := "test_books.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	book := library.Book{
+		ID:          "b1",
+		Title:       "Book One",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesOrder: 1,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	loaded, err := library.LoadManifest(store)
+	if err != nil {
+		t.Fatalf("LoadBook failed: %v", err)
+	}
+
+	if len(loaded.Series) == 0 {
+		t.Fatalf("No seires inserted")
+	}
+
+	if loaded.Series[book.SeriesID] != book.ID {
+		t.Fatalf("Wrong book in series %v", loaded.Series)
+	}
+}
+
+func TestSaveTwoBooksAndLoadManifest(t *testing.T) {
+	tmpFile := "test_books.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	book := library.Book{
+		ID:          "b2",
+		Title:       "Book 2",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesOrder: 2,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	book = library.Book{
+		ID:          "b1",
+		Title:       "Book One",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesOrder: 1,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	loaded, err := library.LoadManifest(store)
+	if err != nil {
+		t.Fatalf("LoadBook failed: %v", err)
+	}
+
+	if len(loaded.Series) == 0 {
+		t.Fatalf("No seires inserted")
+	}
+
+	if loaded.Series[book.SeriesID] != book.ID {
+		t.Fatalf("Wrong book in series %v", loaded)
 	}
 }

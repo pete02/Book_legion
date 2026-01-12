@@ -25,6 +25,11 @@ func SaveBook(store storage.Storage, b Book) error {
 		"series_order": b.SeriesOrder,
 		"file_path":    b.FilePath,
 	}
+	err := AddBookToManifest(store, b)
+	if err != nil {
+		return err
+	}
+
 	return store.Insert("books", "id", row)
 }
 
@@ -91,19 +96,47 @@ func ValidateBooks(store storage.Storage) error {
 	return nil
 }
 
-type ManifestEntry struct {
-	SeriesID    string `json:"series_id"`
-	FirstBookID string `json:"first_book_id"`
-}
 type Manifest struct {
-	Series []ManifestEntry `json:"series"`
+	Series map[string]string `json:"series"`
+}
+
+func AddBookToManifest(store storage.Storage, book Book) error {
+	fmt.Printf("saving: %v\n", book)
+	manifest, err := LoadManifest(store)
+	if err != nil {
+		return fmt.Errorf("failed to load manifest: %w", err)
+	}
+
+	if manifest.Series == nil {
+		manifest.Series = make(map[string]string)
+	}
+
+	existingID, ok := manifest.Series[book.SeriesID]
+	if !ok || existingID == "" {
+		manifest.Series[book.SeriesID] = book.ID
+	} else {
+		saved, err := LoadBook(store, existingID)
+		if err != nil {
+			return err
+		}
+		savedOrder := saved.SeriesOrder
+		if savedOrder == 0 {
+			savedOrder = 0
+		}
+
+		if book.SeriesOrder < savedOrder {
+			manifest.Series[book.SeriesID] = book.ID
+		}
+	}
+
+	return SaveManifest(store, manifest)
 }
 
 func SaveManifest(store storage.Storage, m Manifest) error {
-	for _, entry := range m.Series {
+	for seriesID, firstBookID := range m.Series {
 		row := map[string]interface{}{
-			"series_id":     entry.SeriesID,
-			"first_book_id": entry.FirstBookID,
+			"series_id":     seriesID,
+			"first_book_id": firstBookID,
 		}
 		if err := store.Insert("manifest", "series_id", row); err != nil {
 			return err
@@ -115,18 +148,17 @@ func SaveManifest(store storage.Storage, m Manifest) error {
 func LoadManifest(store storage.Storage) (Manifest, error) {
 	rows, err := store.Query("manifest", nil)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{Series: map[string]string{}}, nil
 	}
 
-	entries := make([]ManifestEntry, 0, len(rows))
+	seriesMap := make(map[string]string, len(rows))
 	for _, row := range rows {
-		entries = append(entries, ManifestEntry{
-			SeriesID:    row["series_id"].(string),
-			FirstBookID: row["first_book_id"].(string),
-		})
+		seriesID, _ := row["series_id"].(string)
+		firstBookID, _ := row["first_book_id"].(string)
+		seriesMap[seriesID] = firstBookID
 	}
 
-	return Manifest{Series: entries}, nil
+	return Manifest{Series: seriesMap}, nil
 }
 
 func asInt(v interface{}) (int, error) {

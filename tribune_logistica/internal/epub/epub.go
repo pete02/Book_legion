@@ -45,8 +45,8 @@ func Load(db storage.Storage, bookID string) (Epub, error) {
 	return New(book.FilePath)
 }
 
-func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
-	chapterBytes, err := e.ExtractChapter(spineIndex)
+func (e *Epub) MaxChunkIndex(navIndex int, policy ChunkPolicy) (int, error) {
+	chapterBytes, err := e.ExtractChapter(navIndex)
 	if err != nil {
 		return 0, err
 	}
@@ -60,7 +60,7 @@ func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
 	chunks := ChunkText(linear, policy)
 
 	if len(chunks) == 0 {
-		return 0, fmt.Errorf("no chunks generated for chapter %d", spineIndex)
+		return 0, fmt.Errorf("no chunks generated for chapter %d", navIndex)
 	}
 
 	return chunks[len(chunks)-1].Index, nil
@@ -68,8 +68,8 @@ func (e *Epub) MaxChunkIndex(spineIndex int, policy ChunkPolicy) (int, error) {
 
 func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
 	chunkmap := map[int]int{}
-	for _, item := range e.Nav {
-		i, err := e.MaxChunkIndex(item.Index, policy)
+	for index, item := range e.Nav {
+		i, err := e.MaxChunkIndex(index, policy)
 
 		if err == nil {
 			chunkmap[item.Index] = i
@@ -79,13 +79,12 @@ func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
 	return chunkmap
 }
 
-func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {
-	if spineIndex < 0 || spineIndex >= len(e.Spine) {
-		return nil, fmt.Errorf("spine index %d out of range", spineIndex)
+func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
+	if navIndex < 0 || navIndex >= len(e.Spine) {
+		return nil, fmt.Errorf("spine index %d out of range", navIndex)
 	}
-
-	item := e.Spine[spineIndex]
-
+	nav := e.Nav[navIndex]
+	item := e.Spine[nav.Index]
 	zr, err := zip.OpenReader(e.Path)
 	if err != nil {
 		return nil, err
@@ -103,6 +102,7 @@ func (e *Epub) ExtractChapter(spineIndex int) ([]byte, error) {
 			return io.ReadAll(rc)
 		}
 	}
+	fmt.Printf("chapter href not found in epub: %s", item.Href)
 
 	return nil, fmt.Errorf("chapter href not found in epub: %s", item.Href)
 }

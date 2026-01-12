@@ -74,18 +74,20 @@ func TestLibraryEndpoints(t *testing.T) {
 			t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
 		}
 
-		var manifestResp map[string][]map[string]interface{}
+		var manifestResp struct {
+			Series map[string]string `json:"series"`
+		}
 		if err := json.NewDecoder(resp.Body).Decode(&manifestResp); err != nil {
 			t.Fatalf("Failed to decode manifest response: %v", err)
 		}
 
-		seriesList, ok := manifestResp["series"]
-		if !ok || len(seriesList) == 0 {
+		seriesList := manifestResp.Series
+		if len(seriesList) == 0 {
 			t.Fatal("Manifest: missing or empty series list")
 		}
 
-		if firstID, ok := seriesList[0]["first_book_id"].(string); !ok || firstID != "b1" {
-			t.Fatalf("Expected first_book_id b1, got %v", seriesList[0]["first_book_id"])
+		if firstID := seriesList["s1"]; firstID != "b1" {
+			t.Fatalf("Expected first_book_id b1, got %v", firstID)
 		}
 	})
 

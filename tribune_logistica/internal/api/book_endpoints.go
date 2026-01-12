@@ -118,7 +118,7 @@ type ChunkResponse struct {
 }
 
 func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -135,6 +135,7 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.UserCursor.UserID != userID {
+		fmt.Printf("Wrong userID: %v, expected: %v", req.UserCursor.UserID, userID)
 		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
 		return
 	}
@@ -331,6 +332,7 @@ func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
 	err := library.SaveBook(api.DB, req)
 
 	if err != nil {
+		fmt.Printf("Failed to save book: %v", err)
 		http.Error(w, "Failed to save book", http.StatusInternalServerError)
 		return
 	} else {

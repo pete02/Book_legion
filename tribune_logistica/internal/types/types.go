@@ -93,7 +93,6 @@ func SaveUserCursor(store storage.Storage, c UserCursor) error {
 
 // LoadUserCursor loads a user's UserCursor for a book
 func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, error) {
-	// synthetic id matches how we stored it
 	synthID := userID + ":" + bookID
 
 	rows, err := store.Query("UserCursors", map[string]interface{}{
@@ -126,6 +125,8 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		chapter = int(v)
 	case int:
 		chapter = v
+	case int64:
+		chapter = int(v)
 	default:
 		return UserCursor{}, fmt.Errorf("unexpected type for chapter: %T", row["chapter"])
 	}
@@ -137,6 +138,8 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		chunk = int(v)
 	case int:
 		chunk = v
+	case int64:
+		chunk = int(v)
 	default:
 		return UserCursor{}, fmt.Errorf("unexpected type for chunk: %T", row["chunk"])
 	}

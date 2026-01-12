@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/go-chi/chi/v5"
+	_ "modernc.org/sqlite"
 
 	"github.com/book_legion-tribune_logistica/internal/api"
 	"github.com/book_legion-tribune_logistica/internal/buffer"
@@ -40,13 +42,13 @@ type Config struct {
 func main() {
 	config, err := FromEnv()
 	if err != nil {
-		fmt.Errorf("Error in fetching Env values: %v", err)
+		fmt.Printf("Error in fetching Env values: %v", err)
 	}
 
 	buf := buffer.NewBuffer("id")
 	manager := manager.NewOrganizer(buf, 10)
 
-	pol := epub.ChunkPolicy{50, 40, 60}
+	pol := epub.NewPolicy(500, 400, 700)
 
 	storage, err := createStorage(*config)
 
@@ -64,20 +66,22 @@ func main() {
 	r.Post("/api/v1/login", api.LoginUser)
 	r.Post("/api/v1/refreshtoken", api.RefreshTokenHandler)
 
-	r.Get("/api/v1/books/{bookID}", api.GetBook)
 	r.Get("/api/v1/manifest", api.GetManifest)
-
 	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
-	r.Get("/api/b1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
+	r.Get("/api/v1/books/{bookID}", api.GetBook)
+	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
 	r.Get("/api/v1/books/{bookID}/chunks", api.GetChunks)
 	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)
-
 	r.Get("/api/v1/books/{bookID}/cover", api.GetCover)
 	r.Get("/api/v1/books/{bookID}/css", api.GetCSSFiles)
 
 	r.Post("/api/v1/cursors/save", api.SaveCursor)
 	r.Post("/api/v1/savebook", api.SaveBook)
 
+	fmt.Println("Server listening on http://localhost:8000")
+	if err := http.ListenAndServe(":8000", r); err != nil {
+		fmt.Printf("Server failed: %v\n", err)
+	}
 }
 
 func TTS_fetch_mock(c types.UserCursor, api api.API) (types.Chunk, bool) {
@@ -100,9 +104,8 @@ func extractChunk(c types.UserCursor, api api.API) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	prettySpineItem := epub.Nav[c.Cursor.Chapter]
-	return epub.ExtractChunk(prettySpineItem.Index, c.Cursor.Chunk, api.Policy)
+	fmt.Printf("Extract: %d, %d\n", c.Cursor.Chapter, c.Cursor.Chunk)
+	return epub.ExtractChunk(c.Cursor.Chapter, c.Cursor.Chunk, api.Policy)
 }
 
 func createStorage(cfg Config) (storage.Storage, error) {
@@ -111,7 +114,7 @@ func createStorage(cfg Config) (storage.Storage, error) {
 		return storage.NewJSONStorage(cfg.DBPath)
 	case DBSQLite:
 		{
-			db, err := sql.Open("sqlite3", cfg.DBPath)
+			db, err := sql.Open("sqlite", cfg.DBPath)
 			if err != nil {
 				log.Fatalf("failed to open sqlite db: %v", err)
 			}

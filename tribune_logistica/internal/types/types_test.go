@@ -152,6 +152,35 @@ func TestLoadNonExistingCursor(t *testing.T) {
 
 }
 
+func TestLoadNonExistingCursorAsNew(t *testing.T) {
+	tmpFile := "test_UserCursors.json"
+	defer os.Remove(tmpFile)
+
+	store, err := storage.NewJSONStorage(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to create JSONStorage: %v", err)
+	}
+
+	loaded, err := LoadUserCursor(store, "u1", "b2")
+
+	if err != nil {
+		t.Fatalf("LoadUserUserCursor failed: %v", err)
+	}
+
+	if loaded.BookID != "b2" {
+		t.Error("Loaded wrong book")
+	}
+
+	if loaded.UserID != "u1" {
+		t.Error("Loaded wrong user")
+	}
+
+	if loaded.Cursor.Chapter != 0 || loaded.Cursor.Chunk != 0 {
+		t.Error("problems in Cursor")
+	}
+
+}
+
 func TestUserUserCursorPersistence(t *testing.T) {
 	tmpFile := "test_UserCursors.json"
 	defer os.Remove(tmpFile)
