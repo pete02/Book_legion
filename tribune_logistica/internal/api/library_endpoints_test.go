@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/login"
 )
 
@@ -19,6 +20,7 @@ func TestLibraryEndpoints(t *testing.T) {
 	setupManifest(t, api)
 	// ----------------- 2.1 Get Single Book -----------------
 	bookID := "b1"
+	seriesID := "s1"
 
 	t.Run("GetSingleBook_Success", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/books/"+bookID, nil)
@@ -41,6 +43,42 @@ func TestLibraryEndpoints(t *testing.T) {
 
 		if id, ok := bookResp["id"].(string); !ok || id != bookID {
 			t.Fatalf("Expected book id %s, got %v", bookID, bookResp["id"])
+		}
+	})
+	t.Run("GetSeries_Success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/series/"+seriesID, nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		w := httptest.NewRecorder()
+
+		api.GetSeries(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
+		}
+
+		// Decode as a slice of books
+		var booksResp []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&booksResp); err != nil {
+			t.Fatalf("Failed to decode books response: %v", err)
+		}
+
+		if len(booksResp) == 0 {
+			t.Fatalf("Expected at least one book in series %s, got 0", seriesID)
+		}
+
+		// Optionally, check that a specific book is in the list
+		found := false
+		for _, b := range booksResp {
+			if id, ok := b["id"].(string); ok && id == bookID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Expected book id %s not found in series response: %+v", bookID, booksResp)
 		}
 	})
 
@@ -75,19 +113,32 @@ func TestLibraryEndpoints(t *testing.T) {
 		}
 
 		var manifestResp struct {
-			Series map[string]string `json:"series"`
+			Series []library.SeriesEntry `json:"series"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&manifestResp); err != nil {
 			t.Fatalf("Failed to decode manifest response: %v", err)
 		}
 
-		seriesList := manifestResp.Series
-		if len(seriesList) == 0 {
+		if len(manifestResp.Series) == 0 {
 			t.Fatal("Manifest: missing or empty series list")
 		}
 
-		if firstID := seriesList["s1"]; firstID != "b1" {
-			t.Fatalf("Expected first_book_id b1, got %v", firstID)
+		// Find series s1
+		var firstBookID string
+		found := false
+		for _, entry := range manifestResp.Series {
+			if entry.SeriesID == "s1" {
+				firstBookID = entry.FirstBookID
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("Manifest: series s1 not found")
+		}
+
+		if firstBookID != "b1" {
+			t.Fatalf("Expected first_book_id b1, got %v", firstBookID)
 		}
 	})
 

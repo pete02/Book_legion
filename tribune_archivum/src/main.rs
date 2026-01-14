@@ -1,7 +1,7 @@
 use tribune_archivum::check_epub;
 
 fn main()-> Result<(),Box<dyn std::error::Error>> {
-    let a= ["outbound"];
+    let a= ["homebound"];
     for book in a{
         let path=format!("./data/{book}/{book}.epub");
         match check_epub(&path, book,book) {

@@ -12,6 +12,7 @@ type Book struct {
 	Title       string `json:"title"`
 	AuthorID    string `json:"author_id"`
 	SeriesID    string `json:"series_id"`
+	SeriesName  string `json:"series_name"`
 	SeriesOrder int    `json:"series_order"`
 	FilePath    string `json:"file_path"`
 }
@@ -23,6 +24,7 @@ func SaveBook(store storage.Storage, b Book) error {
 		"author_id":    b.AuthorID,
 		"series_id":    b.SeriesID,
 		"series_order": b.SeriesOrder,
+		"series_name":  b.SeriesName,
 		"file_path":    b.FilePath,
 	}
 	err := AddBookToManifest(store, b)
@@ -31,6 +33,35 @@ func SaveBook(store storage.Storage, b Book) error {
 	}
 
 	return store.Insert("books", "id", row)
+}
+func LoadBooks(store storage.Storage, seriesID string) ([]Book, error) {
+	rows, err := store.Query("books", map[string]interface{}{
+		"series_id": seriesID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query books: %w", err)
+	}
+
+	books := make([]Book, 0, len(rows))
+	for _, row := range rows {
+		seriesOrder, err := asInt(row["series_order"])
+		if err != nil {
+			return nil, fmt.Errorf("invalid series_order for book %v: %w", row["id"], err)
+		}
+
+		book := Book{
+			ID:          row["id"].(string),
+			Title:       row["title"].(string),
+			AuthorID:    row["author_id"].(string),
+			SeriesID:    row["series_id"].(string),
+			SeriesName:  row["series_name"].(string),
+			SeriesOrder: seriesOrder,
+			FilePath:    row["file_path"].(string),
+		}
+		books = append(books, book)
+	}
+
+	return books, nil
 }
 
 func LoadBook(store storage.Storage, id string) (Book, error) {
@@ -56,6 +87,7 @@ func LoadBook(store storage.Storage, id string) (Book, error) {
 		Title:       row["title"].(string),
 		AuthorID:    row["author_id"].(string),
 		SeriesID:    row["series_id"].(string),
+		SeriesName:  row["series_name"].(string),
 		SeriesOrder: seriesOrder,
 		FilePath:    row["file_path"].(string),
 	}, nil
@@ -96,8 +128,14 @@ func ValidateBooks(store storage.Storage) error {
 	return nil
 }
 
+type SeriesEntry struct {
+	SeriesID    string `json:"series_id"`
+	SeriesName  string `json:"series_name,omitempty"`
+	FirstBookID string `json:"first_book_id"`
+}
+
 type Manifest struct {
-	Series map[string]string `json:"series"`
+	Series []SeriesEntry `json:"series"`
 }
 
 func AddBookToManifest(store storage.Storage, book Book) error {
@@ -107,25 +145,37 @@ func AddBookToManifest(store storage.Storage, book Book) error {
 		return fmt.Errorf("failed to load manifest: %w", err)
 	}
 
-	if manifest.Series == nil {
-		manifest.Series = make(map[string]string)
+	// Look for existing series entry
+	found := false
+	index := 0
+
+	for i, entry := range manifest.Series {
+		fmt.Printf("got: %v\n", entry.SeriesID)
+		if entry.SeriesID == book.SeriesID {
+			fmt.Printf("pk\n")
+			index = i
+			found = true
+			break
+		}
 	}
 
-	existingID, ok := manifest.Series[book.SeriesID]
-	if !ok || existingID == "" {
-		manifest.Series[book.SeriesID] = book.ID
-	} else {
-		saved, err := LoadBook(store, existingID)
-		if err != nil {
-			return err
+	// If series not found, add a new entry
+	if !found {
+		newEntry := SeriesEntry{
+			SeriesID:    book.SeriesID,
+			SeriesName:  book.SeriesName, // optional, you can fill if available
+			FirstBookID: book.ID,
 		}
-		savedOrder := saved.SeriesOrder
-		if savedOrder == 0 {
-			savedOrder = 0
+		manifest.Series = append(manifest.Series, newEntry)
+	} else {
+		bookID := manifest.Series[index].FirstBookID
+		firstBook, err := LoadBook(store, bookID)
+		if err != nil {
+			return fmt.Errorf("failed to load other book: %w", err)
 		}
 
-		if book.SeriesOrder < savedOrder {
-			manifest.Series[book.SeriesID] = book.ID
+		if book.SeriesOrder < firstBook.SeriesOrder {
+			manifest.Series[index].FirstBookID = book.ID
 		}
 	}
 
@@ -133,10 +183,11 @@ func AddBookToManifest(store storage.Storage, book Book) error {
 }
 
 func SaveManifest(store storage.Storage, m Manifest) error {
-	for seriesID, firstBookID := range m.Series {
+	for _, entry := range m.Series {
 		row := map[string]interface{}{
-			"series_id":     seriesID,
-			"first_book_id": firstBookID,
+			"series_id":     entry.SeriesID,
+			"series_name":   entry.SeriesName,
+			"first_book_id": entry.FirstBookID,
 		}
 		if err := store.Insert("manifest", "series_id", row); err != nil {
 			return err
@@ -148,17 +199,23 @@ func SaveManifest(store storage.Storage, m Manifest) error {
 func LoadManifest(store storage.Storage) (Manifest, error) {
 	rows, err := store.Query("manifest", nil)
 	if err != nil {
-		return Manifest{Series: map[string]string{}}, nil
+		return Manifest{Series: []SeriesEntry{}}, nil
 	}
 
-	seriesMap := make(map[string]string, len(rows))
+	seriesEntries := make([]SeriesEntry, 0, len(rows))
 	for _, row := range rows {
 		seriesID, _ := row["series_id"].(string)
+		seriesName, _ := row["series_name"].(string)
 		firstBookID, _ := row["first_book_id"].(string)
-		seriesMap[seriesID] = firstBookID
+
+		seriesEntries = append(seriesEntries, SeriesEntry{
+			SeriesID:    seriesID,
+			SeriesName:  seriesName,
+			FirstBookID: firstBookID,
+		})
 	}
 
-	return Manifest{Series: seriesMap}, nil
+	return Manifest{Series: seriesEntries}, nil
 }
 
 func asInt(v interface{}) (int, error) {

@@ -201,12 +201,6 @@ func (api *API) GetCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- AUTH CHECK ----
-	_, ok := api.AuthCheck(w, r)
-	if !ok {
-		return
-	}
-
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 6 || pathParts[4] == "" {
 		http.Error(w, "Book ID missing", http.StatusBadRequest)

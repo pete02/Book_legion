@@ -112,7 +112,7 @@ func setupAPIWithAuth(t *testing.T) (api.API, string) {
 }
 
 func setupBook(t *testing.T, api api.API, fp string) {
-	book := library.Book{
+	book1 := library.Book{
 		ID:          "b1",
 		Title:       "Book One",
 		AuthorID:    "a1",
@@ -120,17 +120,33 @@ func setupBook(t *testing.T, api api.API, fp string) {
 		SeriesOrder: 1,
 		FilePath:    fp,
 	}
-	err := library.SaveBook(api.DB, book)
+	book2 := library.Book{
+		ID:          "b1",
+		Title:       "Book One",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesOrder: 1,
+		FilePath:    fp,
+	}
+	err := library.SaveBook(api.DB, book1)
 
 	if err != nil {
 		t.Fatal("Could not save book")
 	}
-}
+	err = library.SaveBook(api.DB, book2)
+	if err != nil {
+		t.Fatal("Could not save book")
+	}
 
+}
 func setupManifest(t *testing.T, api api.API) {
 	manifest := library.Manifest{
-		Series: map[string]string{
-			"s1": "b1", // SeriesID -> FirstBookID
+		Series: []library.SeriesEntry{
+			{
+				SeriesID:    "s1",
+				SeriesName:  "Series one", // optional
+				FirstBookID: "b1",
+			},
 		},
 	}
 
@@ -139,7 +155,6 @@ func setupManifest(t *testing.T, api api.API) {
 		t.Fatalf("Could not save manifest: %v", err)
 	}
 }
-
 func createTestEpub(t *testing.T, api api.API) string {
 	coverData := []byte{0x89, 0x50, 0x4E, 0x47}
 	files := map[string]string{

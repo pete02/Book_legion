@@ -108,8 +108,6 @@ GET /api/v1/books/{book_id} // works
 
 **Response**
 
-
-
 ```
 {
   "id": "b1",
@@ -126,6 +124,32 @@ Load book by ID
 
 Return 404 if not found
 
+### 2.2.1 Get Books in Series
+GET /api/v1/series/{series_id} //works
+**Response**
+
+```
+[
+  {
+    "id": "b1",
+    "title": "Book One",
+    "author_id": "a1",
+    "series_id": "s1",
+    "series_name": "Series one",
+    "series_order": 1,
+    "file_path": "/path/to/book.epub"
+  },  
+  {
+    "id": "b2",
+    "title": "Book Two",
+    "author_id": "a1",
+    "series_id": "s1",
+    "series_order": 2,
+    "file_path": "/path/to/book.epub"
+  },
+]
+```
+
 ### 2.2 Get Library Manifest
 GET /api/v1/manifest   //works
 
@@ -138,6 +162,7 @@ GET /api/v1/manifest   //works
   "series": [
     {
       "series_id": "s1",
+      "series_name": "Series one",
       "first_book_id": "b1"
     }
   ]
@@ -186,7 +211,7 @@ Load epub
 Extract chapter and number of chunks
 
 ### 3.2 Get Chunks
-GET /api/v1/books/{book_id}/chunks // does not work, needs further investigation
+GET /api/v1/books/{book_id}/chunks // works
 ```
 {
   "UserCursor":{
@@ -241,7 +266,7 @@ Serve chunk as raw bytes or base64-encoded
 
 ## 5. Miscellaneous Endpoints
 ### 5.1 Get Cover Image
-GET /api/v1/books/{book_id}/cover  //does not work?
+GET /api/v1/books/{book_id}/cover  //works
 
 **Response**
 

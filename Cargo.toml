@@ -2,6 +2,5 @@
 members = [
     "lector",
     "tribune_porta",
-    "tribune_vox",
-    "tribune_archivum", "tribune_secreto", "playground",
+    "tribune_archivum"
 ]

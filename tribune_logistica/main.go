@@ -69,6 +69,7 @@ func main() {
 	r.Get("/api/v1/manifest", api.GetManifest)
 	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
 	r.Get("/api/v1/books/{bookID}", api.GetBook)
+	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
 	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
 	r.Get("/api/v1/books/{bookID}/chunks", api.GetChunks)
 	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)

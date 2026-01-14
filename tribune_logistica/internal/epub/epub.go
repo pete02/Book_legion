@@ -68,11 +68,11 @@ func (e *Epub) MaxChunkIndex(navIndex int, policy ChunkPolicy) (int, error) {
 
 func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
 	chunkmap := map[int]int{}
-	for index, item := range e.Nav {
+	for index, _ := range e.Nav {
 		i, err := e.MaxChunkIndex(index, policy)
 
 		if err == nil {
-			chunkmap[item.Index] = i
+			chunkmap[index] = i
 		}
 	}
 
@@ -83,8 +83,10 @@ func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
 	if navIndex < 0 || navIndex >= len(e.Spine) {
 		return nil, fmt.Errorf("spine index %d out of range", navIndex)
 	}
+
 	nav := e.Nav[navIndex]
 	item := e.Spine[nav.Index]
+
 	zr, err := zip.OpenReader(e.Path)
 	if err != nil {
 		return nil, err
@@ -92,23 +94,48 @@ func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
 	defer zr.Close()
 
 	for _, f := range zr.File {
-		if f.Name == item.Href {
-			rc, err := f.Open()
-			if err != nil {
+		if f.Name != item.Href {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err := html.Parse(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse chapter HTML: %w", err)
+		}
+
+		body := findBodyNode(doc)
+		if body == nil {
+			return nil, fmt.Errorf("no <body> found in chapter %s", item.Href)
+		}
+
+		removeWhitespaceTextNodes(body)
+
+		var buf bytes.Buffer
+		for c := body.FirstChild; c != nil; c = c.NextSibling {
+			if err := html.Render(&buf, c); err != nil {
 				return nil, err
 			}
-			defer rc.Close()
-
-			return io.ReadAll(rc)
 		}
+
+		return buf.Bytes(), nil
 	}
-	fmt.Printf("chapter href not found in epub: %s", item.Href)
 
 	return nil, fmt.Errorf("chapter href not found in epub: %s", item.Href)
 }
 
-func (e *Epub) ExtractChunk(spineIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
-	chapterBytes, err := e.ExtractChapter(spineIndex)
+func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
+	chapterBytes, err := e.ExtractChapter(navIndex)
 	if err != nil {
 		return "", err
 	}
@@ -190,4 +217,30 @@ func (e *Epub) ExtractCSS() ([]byte, error) {
 	}
 
 	return allCSS.Bytes(), nil
+}
+
+func findBodyNode(n *html.Node) *html.Node {
+	if n.Type == html.ElementNode && n.Data == "body" {
+		return n
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if found := findBodyNode(c); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func removeWhitespaceTextNodes(n *html.Node) {
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+
+		if c.Type == html.TextNode && strings.TrimSpace(c.Data) == "" {
+			n.RemoveChild(c)
+		} else {
+			removeWhitespaceTextNodes(c)
+		}
+
+		c = next
+	}
 }

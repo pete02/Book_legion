@@ -1,11 +1,14 @@
 package library_test
 
 import (
+	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	_ "modernc.org/sqlite"
 )
 
 func TestSaveAndLoadBook(t *testing.T) {
@@ -136,9 +139,9 @@ func TestSaveAndLoadManifest(t *testing.T) {
 	store, _ := storage.NewJSONStorage(tmpFile)
 
 	manifest := library.Manifest{
-		Series: map[string]string{
-			"s1": "b1",
-			"s2": "b2",
+		Series: []library.SeriesEntry{
+			{SeriesID: "s1", SeriesName: "Series 1", FirstBookID: "b1"},
+			{SeriesID: "s2", SeriesName: "Series 2", FirstBookID: "b2"},
 		},
 	}
 
@@ -156,8 +159,9 @@ func TestSaveAndLoadManifest(t *testing.T) {
 	}
 
 	for i, entry := range loaded.Series {
-		if entry != manifest.Series[i] {
-			t.Errorf("mismatch: %v, got %+v, want %+v", i, entry, manifest.Series)
+		want := manifest.Series[i]
+		if entry != want {
+			t.Errorf("mismatch at index %v: got %+v, want %+v", i, entry, want)
 		}
 	}
 }
@@ -186,19 +190,104 @@ func TestSaveBookAndLoadManifest(t *testing.T) {
 
 	loaded, err := library.LoadManifest(store)
 	if err != nil {
-		t.Fatalf("LoadBook failed: %v", err)
+		t.Fatalf("LoadManifest failed: %v", err)
 	}
 
 	if len(loaded.Series) == 0 {
-		t.Fatalf("No seires inserted")
+		t.Fatalf("No series inserted")
 	}
 
-	if loaded.Series[book.SeriesID] != book.ID {
-		t.Fatalf("Wrong book in series %v", loaded.Series)
+	// Search for the series entry
+	var found bool
+	for _, entry := range loaded.Series {
+		if entry.SeriesID == book.SeriesID {
+			found = true
+			if entry.FirstBookID != book.ID {
+				t.Fatalf("Wrong book in series: got %v, want %v", entry.FirstBookID, book.ID)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Series %v not found in manifest", book.SeriesID)
 	}
 }
 
+func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open sqlite db: %v", err)
+	}
+
+	return db
+}
+
 func TestSaveTwoBooksAndLoadManifest(t *testing.T) {
+	tmpFile := "test_books.json"
+	defer os.Remove(tmpFile)
+	db := setupTestDB(t)
+	store := storage.NewSQLStorage(db)
+
+	book2 := library.Book{
+		ID:          "b2",
+		Title:       "Book 2",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesName:  "series",
+		SeriesOrder: 2,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := library.SaveBook(store, book2); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	book1 := library.Book{
+		ID:          "b1",
+		Title:       "Book One",
+		AuthorID:    "a1",
+		SeriesID:    "s1",
+		SeriesName:  "series",
+		SeriesOrder: 1,
+		FilePath:    "/tmp/fakefile1.epub",
+	}
+
+	if err := library.SaveBook(store, book1); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	loaded, err := library.LoadManifest(store)
+	if err != nil {
+		t.Fatalf("LoadManifest failed: %v", err)
+	}
+	fmt.Printf("series: %v", loaded.Series)
+	if len(loaded.Series) == 0 {
+		t.Fatalf("No series inserted")
+	}
+
+	// Find the series entry
+	var entry library.SeriesEntry
+	var found bool
+	for _, e := range loaded.Series {
+		if e.SeriesID == book1.SeriesID {
+			entry = e
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Series %v not found in manifest", book1.SeriesID)
+	}
+
+	// FirstBookID should be the one with lowest SeriesOrder
+	if entry.FirstBookID != book1.ID {
+		t.Fatalf("Wrong first book in series: got %v, want %v", entry.FirstBookID, book1.ID)
+	}
+}
+
+func TestLoadBooks(t *testing.T) {
 	tmpFile := "test_books.json"
 	defer os.Remove(tmpFile)
 
@@ -207,42 +296,51 @@ func TestSaveTwoBooksAndLoadManifest(t *testing.T) {
 		t.Fatalf("failed to create JSONStorage: %v", err)
 	}
 
-	book := library.Book{
-		ID:          "b2",
-		Title:       "Book 2",
-		AuthorID:    "a1",
-		SeriesID:    "s1",
-		SeriesOrder: 2,
-		FilePath:    "/tmp/fakefile1.epub",
+	// Seed some books
+	books := []library.Book{
+		{ID: "b1", Title: "Book 1", AuthorID: "a1", SeriesID: "s1", SeriesName: "Series One", SeriesOrder: 1, FilePath: "/tmp/b1.epub"},
+		{ID: "b2", Title: "Book 2", AuthorID: "a1", SeriesID: "s1", SeriesName: "Series One", SeriesOrder: 2, FilePath: "/tmp/b2.epub"},
+		{ID: "b3", Title: "Book 3", AuthorID: "a2", SeriesID: "s2", SeriesName: "Series Two", SeriesOrder: 1, FilePath: "/tmp/b3.epub"},
 	}
 
-	if err := library.SaveBook(store, book); err != nil {
-		t.Fatalf("SaveBook failed: %v", err)
+	for _, b := range books {
+		if err := library.SaveBook(store, b); err != nil {
+			t.Fatalf("SaveBook failed: %v", err)
+		}
 	}
 
-	book = library.Book{
-		ID:          "b1",
-		Title:       "Book One",
-		AuthorID:    "a1",
-		SeriesID:    "s1",
-		SeriesOrder: 1,
-		FilePath:    "/tmp/fakefile1.epub",
+	tests := []struct {
+		name        string
+		seriesID    string
+		wantIDs     []string
+		expectError bool
+	}{
+		{"Load series s1", "s1", []string{"b1", "b2"}, false},
+		{"Load series s2", "s2", []string{"b3"}, false},
+		{"Load nonexistent series", "s3", []string{}, false},
 	}
 
-	if err := library.SaveBook(store, book); err != nil {
-		t.Fatalf("SaveBook failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := library.LoadBooks(store, tt.seriesID)
+			if (err != nil) != tt.expectError {
+				t.Fatalf("LoadBooks() error = %v, expectError %v", err, tt.expectError)
+			}
 
-	loaded, err := library.LoadManifest(store)
-	if err != nil {
-		t.Fatalf("LoadBook failed: %v", err)
-	}
+			if len(got) != len(tt.wantIDs) {
+				t.Fatalf("expected %d books, got %d", len(tt.wantIDs), len(got))
+			}
 
-	if len(loaded.Series) == 0 {
-		t.Fatalf("No seires inserted")
-	}
+			gotIDs := make([]string, len(got))
+			for i, b := range got {
+				gotIDs[i] = b.ID
+			}
 
-	if loaded.Series[book.SeriesID] != book.ID {
-		t.Fatalf("Wrong book in series %v", loaded)
+			for i, id := range tt.wantIDs {
+				if gotIDs[i] != id {
+					t.Errorf("book %d: got %v, want %v", i, gotIDs[i], id)
+				}
+			}
+		})
 	}
 }

@@ -44,7 +44,17 @@ func createTestEpub(t *testing.T, files map[string]string) string {
 
 func TestExtractChapter_HappyPath(t *testing.T) {
 	epubPath := createTestEpub(t, map[string]string{
-		"OEBPS/chapter1.xhtml": "<html>Chapter 1</html>",
+		"OEBPS/chapter1.xhtml": `
+		<?xml version="1.0" encoding="utf-8"?>
+		<html xmlns="http://www.w3.org/1999/xhtml">
+			<head>
+				<title>Chapter 1</title>
+			</head>
+			<body>
+				<p>Chapter 1</p>
+			</body>
+		</html>
+	`,
 	})
 
 	e := &Epub{
@@ -56,6 +66,13 @@ func TestExtractChapter_HappyPath(t *testing.T) {
 				Href:  "OEBPS/chapter1.xhtml",
 			},
 		},
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+			},
+		},
 	}
 
 	data, err := e.ExtractChapter(0)
@@ -64,7 +81,7 @@ func TestExtractChapter_HappyPath(t *testing.T) {
 	}
 
 	got := string(data)
-	want := "<html>Chapter 1</html>"
+	want := "<p>Chapter 1</p>"
 
 	if got != want {
 		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
@@ -88,6 +105,13 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 				Path: validEpubPath,
 				Spine: []SpineItem{
 					{Index: 0, Href: "OEBPS/chapter1.xhtml"},
+				},
+				Nav: []PrettySpineItem{
+					{
+						Index:  0,
+						Number: 1,
+						Title:  "test",
+					},
 				},
 			},
 			index:     -1,
@@ -120,6 +144,13 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 				Spine: []SpineItem{
 					{Index: 0, Href: "chapter.xhtml"},
 				},
+				Nav: []PrettySpineItem{
+					{
+						Index:  0,
+						Number: 1,
+						Title:  "test",
+					},
+				},
 			},
 			index:     0,
 			expectErr: true,
@@ -130,6 +161,13 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 				Path: validEpubPath,
 				Spine: []SpineItem{
 					{Index: 0, Href: "OEBPS/missing.xhtml"},
+				},
+				Nav: []PrettySpineItem{
+					{
+						Index:  0,
+						Number: 1,
+						Title:  "test",
+					},
 				},
 			},
 			index:     0,
@@ -170,6 +208,17 @@ func TestEpub_ExtractChunk(t *testing.T) {
 		Spine: []SpineItem{
 			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
 			{Index: 1, ID: "c2", Href: "chapter2.xhtml"},
+		},
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+			}, {
+				Index:  1,
+				Number: 2,
+				Title:  "test2",
+			},
 		},
 	}
 
@@ -239,6 +288,17 @@ func TestEpub_ExtractCover(t *testing.T) {
 			{Index: 0, ID: "c1", Href: "OEBPS/chapter1.xhtml"},
 			{Index: 1, ID: "c2", Href: "OEBPS/chapter2.xhtml"},
 		},
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+			}, {
+				Index:  1,
+				Number: 2,
+				Title:  "test2",
+			},
+		},
 	}
 
 	tests := []struct {
@@ -302,6 +362,13 @@ func TestEpub_ExtractCSS(t *testing.T) {
 		Spine: []SpineItem{
 			{Index: 0, ID: "c1", Href: "OEBPS/chapter1.xhtml"},
 		},
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+			},
+		},
 	}
 
 	t.Run("concatenate all CSS files", func(t *testing.T) {
@@ -339,6 +406,13 @@ func TestEpub_MaxChunkIndex(t *testing.T) {
 		Path: data,
 		Spine: []SpineItem{
 			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
+		},
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+			},
 		},
 	}
 
