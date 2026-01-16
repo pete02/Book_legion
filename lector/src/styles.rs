@@ -1,0 +1,127 @@
+pub const CARD_STYLE: &str = "
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.15s ease-in-out;
+";
+pub const CONTAINER_STYLE: &str = "
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    height: 100%;
+    box-sizing: border-box;
+";
+
+pub const HEADER_STYLE: &str = "
+    margin-bottom: 16px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.75rem;
+";
+
+pub const GRID_STYLE: &str = "
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 24px;
+    width: 100%;
+";
+pub const NAME_STYLE: &str = "margin-top: 8px; text-align: center; font-weight: bold;";
+
+pub const LOGIN_CONTAINER: &str = "
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 24px;
+";
+
+pub const LOGIN_FORM: &str = "
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 300px;
+";
+
+pub const LOGIN_ERROR: &str = "
+    color: red;
+    font-size: 0.9em;
+";
+
+pub const LOGIN_BUTTON: &str = "
+    bg-blue-600
+    hover:bg-blue-700
+    active:bg-blue-800
+    text-white
+    font-semibold
+    py-2
+    px-4
+    rounded-lg
+    transition-colors
+    duration-150
+    disabled:opacity-50
+    disabled:cursor-not-allowed
+";
+
+pub const TOPBAR: &str = "
+    display: flex;
+    justify-content: flex-start;
+    align-items: center; 
+    gap: 12px;
+    padding: 8px 16px;
+    background-color: #1d273eff;
+    width: 100%;          /* take the full width of the viewport */
+    position: sticky;     /* stay at the top when scrolling */
+    top: 0;               /* stick to top */
+    left: 0;
+    box-sizing: border-box;
+    z-index: 100;         /* ensure it stays above other content */
+";
+
+
+pub const CHAPTER_BUTTON: &str="
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    padding: 6px 8px 6px 16px;
+
+    cursor: pointer;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+";
+pub const CHAPTERLIST_CONTAINER: &str="
+    flex: 1 1 200px; 
+    max-width: 250px; 
+    min-width: 150px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 4px; 
+    overflow-y: auto;
+";
+
+pub const BOOK_CONTAINER: &str="
+    flex: 1; 
+    display: flex; 
+    flex-direction: row; 
+    padding: 16px; 
+    gap: 16px; 
+    flex-wrap: wrap; 
+    justify-content: center;
+";
+
+pub const BOOK_TEXT: &str="
+    flex: 1 1 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 250px;
+    max-width: 600px;
+";
+

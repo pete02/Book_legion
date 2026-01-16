@@ -18,11 +18,6 @@ pub use loginview::LoginView;
 
 use crate::components::AccessTokenHook;
 
-
-
-
-
-
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
 pub enum Route {

@@ -1,0 +1,41 @@
+use dioxus::{logger::tracing, prelude::*};
+
+use crate::infra::manifest;
+use crate::domain::cover::CardData;
+
+async fn load_library() -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
+    let mut books=Vec::new();
+
+    let manifest=manifest::fetch_manifest().await?;
+
+    for entry in manifest{
+        let b=CardData{
+            name: entry.series_name,
+            path: format!("/series/{}",entry.series_id),
+            pic_path: format!("/api/v1/books/{}/cover",entry.first_book_id)
+        };
+        books.push(b);
+    }
+
+    return Ok(books);
+
+}
+
+
+
+pub fn use_library() -> Signal<Vec<CardData>> {
+    let mut books = use_signal(Vec::new);
+    use_effect(move || {
+        spawn(async move {
+            match load_library().await {
+                Ok(data) => books.set(data),
+                Err(e) => {
+                    tracing::error!("Err in loading library: {}",e);
+                    books.set(Vec::new());
+                 }
+            }
+        });
+    });
+
+    books
+}

@@ -2837,6 +2837,7 @@ dependencies = [
  "futures-timer",
  "gloo-timers",
  "js-sys",
+ "once_cell",
  "regex",
  "reqwasm",
  "serde",
