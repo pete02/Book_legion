@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{Route, domain::series::use_series, styles, ui::components::{Card, TopBar, TopBarEntry}};
+use crate::{Route, domain, styles, ui::components::{Card, TopBar, TopBarEntry}};
 
 
 #[component]
@@ -13,7 +13,7 @@ pub fn Series(series_id:String) -> Element {
         },
     ];
 
-    let books=use_series(series_id.clone(),title);
+    let books=domain::series::use_series(series_id.clone(),title);
     return rsx! {
         div { style: styles::CONTAINER_STYLE,
             TopBar{ entries: top_entries }

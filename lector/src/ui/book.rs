@@ -1,6 +1,6 @@
 use dioxus::{ prelude::*};
 
-use crate::{Route, domain::book::{self, BookData, load_book}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+use crate::{Route, domain::{self, book::{BookData, load_book}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
 
 
 #[component]
@@ -82,7 +82,7 @@ fn ChapterList(book: Signal<BookData>) -> Element {
                         li {
                             button {
                                 onclick: move |_| {
-                                   book::select_chapter(book, idx);
+                                   domain::book::select_chapter(book, idx);
                                 },
                                 style: format!(
                                 "
