@@ -19,9 +19,9 @@ pub struct ManifestEntry {
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
-    let resp = Request::get("/api/v1/manifest")
-        .send()
-        .await?;
+    use crate::infra::auth;
+
+    let resp = auth::get_with_auth("/api/v1/manifest").await?;
 
     if !resp.ok() {
         return Err(format!("manifest request failed: {}", resp.status()).into());

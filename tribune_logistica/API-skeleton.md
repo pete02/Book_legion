@@ -118,6 +118,7 @@ GET /api/v1/books/{book_id} // works
   "file_path": "/path/to/book.epub"
 }
 ```
+
 #### Handler Responsibilities
 
 Load book by ID
@@ -254,7 +255,19 @@ GET /api/v1/books/{book_id}/nav // works
 ]
 
 ```
+### 3.4 Get Max:
+GET /api/v1/book/{book_id}/max/{chapter}
+**Response**
+```
+{
+  "ChunksInChapter": 1
+  "ChunksUntilChapter": 123
+	"Maxchapter":  0
+	"MaxChunks": 12
+}
 
+
+```
 
 #### Handler Responsibilities
 

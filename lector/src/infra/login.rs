@@ -25,10 +25,10 @@ static LOGIN_COUNTER: once_cell::sync::Lazy<Arc<AtomicUsize>> =
 
 #[cfg(not(feature = "mock"))]
 pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Box<dyn std::error::Error>> {
+    use crate::infra::auth::post_with_auth;
+
     let body = LoginRequest { username, password };
-    let resp = Request::post("/api/v1/login")
-        .body(serde_json::to_string(&body)?)
-        .send()
+    let resp = post_with_auth("/api/v1/login",serde_json::to_string(&body)?)
         .await
         .map_err(|e| e.to_string())?;
 

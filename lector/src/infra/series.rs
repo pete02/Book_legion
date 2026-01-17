@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use reqwasm::http::Request;
+use crate::infra::auth::get_with_auth;
 
 
 
@@ -17,8 +17,9 @@ pub struct BookEntry {
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std::error::Error>> {
+
     let url = format!("/api/v1/series/{}", series_id);
-    let resp = Request::get(&url).send().await?;
+    let resp = get_with_auth(&url).await?;
     
     if !resp.ok() {
         return Err(format!("series request failed: {}", resp.status()).into());

@@ -9,6 +9,38 @@ pub struct User {
     pub auth_token: Option<String>,
 }
 
+
+pub fn use_user()->Signal<User>{
+    use_context::<Signal<User>>()
+}
+
+pub fn current_name()->String{
+    let user: Signal<User> = use_context::<Signal<User>>();
+    user.read().username.clone()
+}
+
+pub fn current_auth()->Option<String>{
+    let user: Signal<User> = use_context::<Signal<User>>();
+    user.read().auth_token.clone()
+}
+
+pub fn set_auth(auth: Option<String>){
+    let mut user: Signal<User> = use_context::<Signal<User>>();
+    user.with_mut(|f|f.auth_token=auth);
+}
+
+
+pub fn current_refresh()->Option<String>{
+    let user: Signal<User> = use_context::<Signal<User>>();
+    user.read().refresh_token.clone()
+}
+
+
+pub fn set_refresh(refresh: Option<String>){
+    let mut user: Signal<User> = use_context::<Signal<User>>();
+    user.with_mut(|f|f.refresh_token=refresh);
+}
+
 pub fn restore_user_from_storage() -> User {
     let refresh_token = web_sys::window()
         .unwrap()

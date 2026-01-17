@@ -1,4 +1,6 @@
-use dioxus::prelude::*;
+use dioxus::{html::link::title, prelude::*};
+
+use crate::{domain, infra};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BookData{
@@ -7,20 +9,70 @@ pub struct BookData{
     pub title: String,
     pub author: String,
     pub series_id: String,
-    pub cover: String
+}
+fn error_book(err: String)->BookData{
+    BookData{
+        title: "error in getting book".to_string(),
+        author: err,
+        series_id: "".to_string(),
+        chapters: vec![],
+        current_chapter: 0,
+    }
+}
+
+pub async fn load_book(book_id: String,)->BookData{
+    let mut chs=Vec::new();
+    let cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
+    let chapters=infra::chapters::fetch_book_nav(&book_id).await;
+    let book=infra::book::fetch_book(&book_id).await;
+
+    match chapters{
+        Err(_)=>{},
+        Ok(vec)=>{
+            for entry in vec{
+                chs.push(entry.title);
+            }
+        }
+    }
+    let data=match book {
+        Err(e)=>error_book(e),
+        Ok(a)=>BookData { 
+            chapters: chs, 
+            current_chapter: cursor.cursor.chapter, 
+            title: a.title, 
+            author: a.author_id, 
+            series_id: a.series_id, 
+        }
+
+    };
+
+    return data;
+
+}
+
+pub fn use_book(book_id: String) -> Signal<BookData> {
+    let book = use_signal(|| error_book("test".to_string()));
+    use_effect(move ||{
+        let mut book=book.clone();
+        let book_id=book_id.clone();
+        spawn(async move{
+            book.set(load_book(book_id).await);
+        });
+    });
+    book
 }
 
 
-pub fn load_book(book_id: String)->Signal<BookData>{
-    use_signal(||BookData { 
-        chapters: vec!["test".to_owned(),"test2".to_owned()], 
-        title: "test".to_owned(), author: "test_author".to_owned(), 
-        series_id: "s1".to_owned(), 
-        cover: format!("/api/v1/books/{}/cover",book_id),
-        current_chapter:1 
-    })
-}
+pub fn select_chapter(book: Signal<BookData>, index: usize, book_id: String) {
+    let mut book=book.clone();
+    book.with_mut(|f| f.current_chapter = index);
 
-pub fn select_chapter(mut book: Signal<BookData>, index: usize){
-    book.with_mut(|f|f.current_chapter=index)
+    // 2. Persist cursor asynchronously
+    spawn(async move {
+        let mut cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
+        cursor.cursor.chapter = index;
+        cursor.cursor.chunk = 0;
+
+        let _ = domain::cursor::save_bookcursor(cursor).await;
+    });
 }

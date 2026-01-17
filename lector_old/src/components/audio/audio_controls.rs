@@ -87,7 +87,6 @@ pub fn ControlButtons(playing: Signal<bool>, reload:Signal<i32> )->Element{
             }
         }
     }
-    
 }
 
 fn create_current_time(current: Signal<f64>, cur_str: Signal<String>){

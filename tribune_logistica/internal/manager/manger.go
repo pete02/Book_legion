@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -49,6 +50,10 @@ func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxC
 	fmt.Printf("Asked: %v", start)
 	o.idCheck(id)
 	fmt.Printf("ID ok")
+	start, err := ValidateCursor(start, maxChunks)
+	if err != nil {
+		return nil, err
+	}
 
 	if !o.ensureStartExists(start, maxChunks) {
 		for {
@@ -68,6 +73,33 @@ func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxC
 	o.TrimBuffer(lastReturned, maxChunks)
 
 	return result, nil
+}
+
+func ValidateCursor(uc types.UserCursor, maxChunks map[int]int) (types.UserCursor, error) {
+	currentChapter := uc.Cursor.Chapter
+	currentChunk := uc.Cursor.Chunk
+
+	// Check if current chapter exists in maxChunks
+	maxChunk, ok := maxChunks[currentChapter]
+	if !ok {
+		return uc, errors.New("chapter does not exist")
+	}
+
+	// If chunk is within the valid range, return as is
+	if currentChunk <= maxChunk {
+		return uc, nil
+	}
+
+	// Move to next chapter
+	nextChapter := currentChapter + 1
+	if _, ok := maxChunks[nextChapter]; !ok {
+		return uc, errors.New("cursor is past the last chapter")
+	}
+
+	// Return cursor at next chapter, chunk 0
+	uc.Cursor.Chapter = nextChapter
+	uc.Cursor.Chunk = 0
+	return uc, nil
 }
 
 func (o *Organizer) idCheck(id string) {

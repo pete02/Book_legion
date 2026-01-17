@@ -797,3 +797,71 @@ func TestGetChunkWithStartOrderProcessor(t *testing.T) {
 	}
 
 }
+
+func TestGetChunksPastEnd(t *testing.T) {
+	buf := buffer.NewBuffer("t")
+	org := manager.NewOrganizer(buf, 5)
+	maxChunks := map[int]int{
+		0: 2,
+		1: 1,
+	}
+
+	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
+		time.Sleep(200 * time.Millisecond)
+		return makeChunk(c, "data"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	start := makeCursor(1, 2)
+	chunks, err := org.GetChunks("b", start, 4, maxChunks)
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+
+	if len(chunks) != 0 {
+		t.Fatalf("expected 0 chunks, got %d", len(chunks))
+	}
+
+	if len(org.OrderList) != 0 {
+		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	}
+
+}
+
+func TestGetChunksPastChapterEnd(t *testing.T) {
+	buf := buffer.NewBuffer("t")
+	org := manager.NewOrganizer(buf, 5)
+	maxChunks := map[int]int{
+		0: 2,
+		1: 1,
+	}
+
+	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
+		time.Sleep(200 * time.Millisecond)
+		return makeChunk(c, "data"), true
+	}
+
+	stop := org.StartOrderProcessor(fetchFn)
+	defer close(stop)
+
+	start := makeCursor(0, 3)
+	chunks, err := org.GetChunks("b", start, 4, maxChunks)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunks, got %d", len(chunks))
+	}
+
+	if chunks[0].ID.Cursor != makeCursor(1, 0).Cursor {
+		t.Fatalf("Expected cunk to be 1,0, it is :%v", chunks[0])
+	}
+
+	if len(org.OrderList) != 1 {
+		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	}
+
+}

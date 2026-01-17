@@ -3,7 +3,7 @@ use crate::{domain::cover::{CardData,use_cover}, styles};
 
 #[component]
 pub fn Cover(
-    cover_path: Signal<String>,
+    cover_path: String,
     #[props(default = "90%".to_string())] width: String,
     #[props(default = "400px".to_string())] max_width: String,
 ) -> Element {

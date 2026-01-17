@@ -10,3 +10,6 @@ pub use login::LoginGuard;
 
 mod book;
 pub use book::Book;
+
+mod audio;
+pub use audio::Audio;

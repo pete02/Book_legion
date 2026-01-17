@@ -1,14 +1,11 @@
 use reqwasm::http::Request;
 use web_sys::{Blob, Url};
-
+use crate::infra::auth;
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_cover(url: &str) -> Result<String, String> {
-    let resp = Request::get(&format!("/api/v1/{}",url ))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
 
+    let resp = auth::get_with_auth(&format!("/api/v1/{}",url )).await?;
     let bytes = resp.binary().await.map_err(|e| e.to_string())?;
 
     let array = js_sys::Uint8Array::from(bytes.as_slice());

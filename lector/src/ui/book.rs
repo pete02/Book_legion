@@ -1,12 +1,13 @@
-use dioxus::{ prelude::*};
+use dioxus::{ logger::tracing, prelude::*};
 
-use crate::{Route, domain::{self, book::{BookData, load_book}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
 
 
 #[component]
 pub fn Book(book_id:String)->Element{
-    let book=load_book(book_id);
-        let top_entries = vec![
+    let book=use_book(book_id.clone());
+    let cover_path=domain::cover::create_cover_path(book_id.clone());
+    let top_entries = vec![
         TopBarEntry {
             name: "Library".into(),
             path: Route::Library {  }
@@ -15,8 +16,12 @@ pub fn Book(book_id:String)->Element{
             name: "Series".into(),
             path: Route::Series { series_id: book().series_id }
         },
+        TopBarEntry {
+            name: "Audio".into(),
+            path: Route::Audio { book_id:book_id.clone() }
+        },
     ];
-
+    
     return rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",            
@@ -24,12 +29,16 @@ pub fn Book(book_id:String)->Element{
 
             div {
                 style: styles::BOOK_CONTAINER,
-
-                Cover  {
-                    cover_path: use_signal(||book.read().cover.clone()),
-                    width: "200px".to_string(),
-                    max_width: "300px".to_string(),
+                {
+                    rsx!{
+                        Cover  {
+                            cover_path: cover_path,
+                            width: "200px".to_string(),
+                            max_width: "300px".to_string(),
+                        }
+                    }
                 }
+
                 div {
                     style: styles::BOOK_TEXT,
 
@@ -49,7 +58,7 @@ pub fn Book(book_id:String)->Element{
 
                 div {
                     style: styles::CHAPTERLIST_CONTAINER,
-                    ChapterList { book }
+                    ChapterList { book, book_id:book_id }
 
                 }
             }
@@ -59,7 +68,7 @@ pub fn Book(book_id:String)->Element{
 
 
 #[component]
-fn ChapterList(book: Signal<BookData>) -> Element {
+fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
     let chapters = book().chapters.clone();
     let current = book().current_chapter;
 
@@ -77,12 +86,12 @@ fn ChapterList(book: Signal<BookData>) -> Element {
             {
                 chapters.iter().enumerate().map(|(idx, chapter)| {
                     let is_current = idx == current;
-
+                    let id=book_id.clone();
                     rsx! {
                         li {
                             button {
                                 onclick: move |_| {
-                                   domain::book::select_chapter(book, idx);
+                                   domain::book::select_chapter(book, idx, id.clone());
                                 },
                                 style: format!(
                                 "

@@ -1,7 +1,7 @@
 use dioxus::{logger::tracing, prelude::*};
 
 use crate::infra::series;
-use crate::domain::cover::CardData;
+use crate::domain::cover::{CardData, create_cover_path};
 
 async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
     let mut books=Vec::new();
@@ -20,7 +20,7 @@ async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardD
         let b=CardData{
             name: entry.title,
             path: format!("/books/{}",entry.id),
-            pic_path: format!("/api/v1/books/{}/cover",entry.id)
+            pic_path: create_cover_path(entry.id)
         };
         books.push(b);
     }
