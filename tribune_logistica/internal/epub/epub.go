@@ -9,13 +9,16 @@ import (
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	"github.com/book_legion-tribune_logistica/internal/types"
 	"golang.org/x/net/html"
 )
 
 type Epub struct {
-	Path  string
-	Spine []SpineItem
-	Nav   []PrettySpineItem
+	Path           string
+	Spine          []SpineItem
+	Nav            []PrettySpineItem
+	extractChapter func(navIndex int) ([]byte, error)
+	maxChunkMap    func(policy ChunkPolicy) map[int]int
 }
 
 func New(path string) (Epub, error) {
@@ -67,8 +70,16 @@ func (e *Epub) MaxChunkIndex(navIndex int, policy ChunkPolicy) (int, error) {
 }
 
 func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
+	if e.maxChunkMap != nil {
+		return e.maxChunkMap(policy)
+	} else {
+		return e.realMaxChunkMap(policy)
+	}
+}
+
+func (e *Epub) realMaxChunkMap(policy ChunkPolicy) map[int]int {
 	chunkmap := map[int]int{}
-	for index, _ := range e.Nav {
+	for index := range e.Nav {
 		i, err := e.MaxChunkIndex(index, policy)
 
 		if err == nil {
@@ -79,7 +90,63 @@ func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
 	return chunkmap
 }
 
+func (e *Epub) BookProgress(u types.UserCursor, policy ChunkPolicy) (float32, error) {
+	chunkMap := e.MaxChunkMap(policy)
+	if len(chunkMap) == 0 {
+		return 0.0, nil
+	}
+
+	totalChunks := 0
+	for _, maxChunk := range chunkMap {
+		totalChunks += maxChunk
+	}
+
+	if totalChunks == 0 {
+		return 0.0, nil
+	}
+
+	completedChunks := 0
+	for i := 0; i < u.Cursor.Chapter; i++ {
+		if max, ok := chunkMap[i]; ok {
+			completedChunks += max
+		}
+	}
+	completedChunks += u.Cursor.Chunk
+
+	progress := float32(completedChunks) / float32(totalChunks)
+	if progress > 1.0 {
+		return 1.0, nil
+	}
+
+	return progress, nil
+}
+
+func (e *Epub) ChapterProgress(u types.UserCursor, policy ChunkPolicy) (float32, error) {
+	max, err := e.MaxChunkIndex(u.Cursor.Chapter, policy)
+	if err != nil {
+		return 0.0, err
+	}
+
+	if max == 0 {
+		return 0.0, nil
+	}
+
+	progress := float32(u.Cursor.Chunk) / float32(max)
+	if progress > 1.0 {
+		return 1.0, nil
+	}
+
+	return progress, nil
+}
+
 func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
+	if e.extractChapter != nil {
+		return e.extractChapter(navIndex)
+	}
+	return e.extractChapterFromFile(navIndex)
+}
+
+func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 	if navIndex < 0 || navIndex >= len(e.Spine) {
 		return nil, fmt.Errorf("spine index %d out of range", navIndex)
 	}

@@ -255,27 +255,26 @@ GET /api/v1/books/{book_id}/nav // works
 ]
 
 ```
-### 3.4 Get Max:
-GET /api/v1/book/{book_id}/max/{chapter}
+### 3.4 Get Chapterprogress:
+GET /api/v1/book/{book_id}/chapterprogress
 **Response**
 ```
 {
-  "ChunksInChapter": 1
-  "ChunksUntilChapter": 123
-	"Maxchapter":  0
-	"MaxChunks": 12
+  "progress": 0.5
 }
 
+```
+### 3.4 Get BookProgress:
+GET /api/v1/book/{book_id}/progress
+**Response**
+```
+{
+  "progress": 0.5
+}
 
 ```
 
-#### Handler Responsibilities
 
-Retrieve specific chunks using buffer
-
-Validate against chapter boundaries
-
-Serve chunk as raw bytes or base64-encoded
 
 ## 5. Miscellaneous Endpoints
 ### 5.1 Get Cover Image

@@ -620,3 +620,75 @@ func TestSaveBook_Unauthorized(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
 	}
 }
+
+func TestChapterProgress(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+	createTestEpub(t, api)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/books/b1/chapterprogress", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	api.GetChapterProgress(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	type progressResponse struct {
+		Progress float32 `json:"progress"`
+	}
+
+	var body progressResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/books/b1/chapterprogress", nil)
+	req.Header.Set("Authorization", "Bearer "+"")
+	w = httptest.NewRecorder()
+	api.GetChapterProgress(w, req)
+	resp = w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
+	}
+}
+
+func TestBookProgress(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+	createTestEpub(t, api)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/books/b1/chapterprogress", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	api.GetBookProgress(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	type progressResponse struct {
+		Progress float32 `json:"progress"`
+	}
+
+	var body progressResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/books/b1/chapterprogress", nil)
+	req.Header.Set("Authorization", "Bearer "+"")
+	w = httptest.NewRecorder()
+	api.GetBookProgress(w, req)
+	resp = w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
+	}
+}

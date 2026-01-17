@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/book_legion-tribune_logistica/internal/types"
 	"golang.org/x/net/html"
 )
 
@@ -433,4 +434,157 @@ func TestEpub_MaxChunkIndex(t *testing.T) {
 			t.Errorf("MaxChunkIndex() = %d, want last chunk index %d", maxIdx, chunks[len(chunks)-1].Index)
 		}
 	})
+}
+
+func make_cursor(chapter int, chunk int) types.UserCursor {
+	return types.NewUserCursor("u1", "b1", chapter, chunk)
+}
+
+func TestChapterProgress(t *testing.T) {
+	policy := ChunkPolicy{TargetSize: 12, MaxSize: 20}
+
+	// HTML wrapper is important because MaxChunkIndex parses HTML
+	chapterHTML := []byte(`
+		<html>
+			<body>
+				<p>Hello world. This is a test. Split nicely.</p>
+			</body>
+		</html>
+	`)
+
+	epub := &Epub{
+		Nav: []PrettySpineItem{{}},
+		extractChapter: func(navIndex int) ([]byte, error) {
+			return chapterHTML, nil
+		},
+	}
+
+	tests := []struct {
+		name    string
+		cursor  types.UserCursor
+		want    float32
+		wantErr bool
+	}{
+		{
+			name:    "chunk 0 of 2",
+			cursor:  make_cursor(0, 0),
+			want:    0.0,
+			wantErr: false,
+		},
+		{
+			name:    "chunk 1 of 2",
+			cursor:  make_cursor(0, 1),
+			want:    0.5,
+			wantErr: false,
+		},
+		{
+			name:    "chunk 2 of 2",
+			cursor:  make_cursor(0, 2),
+			want:    1.0,
+			wantErr: false,
+		},
+		{
+			name:    "Too large",
+			cursor:  make_cursor(0, 3),
+			want:    1.0,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := epub.ChapterProgress(tt.cursor, policy)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got != tt.want {
+				t.Fatalf("got %f, want %f", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBookProgress(t *testing.T) {
+	policy := ChunkPolicy{TargetSize: 12, MaxSize: 20}
+
+	epub := &Epub{
+		Nav: []PrettySpineItem{{}, {}, {}}, // 3 chapters
+	}
+
+	epub.maxChunkMap = func(policy ChunkPolicy) map[int]int {
+		return map[int]int{
+			0: 2, // chapter 0 has 3 chunks (0,1,2)
+			1: 1, // chapter 1 has 2 chunks (0,1)
+			2: 3, // chapter 2 has 4 chunks (0,1,2,3)
+		}
+	}
+
+	tests := []struct {
+		name   string
+		cursor types.UserCursor
+		want   float32
+	}{
+		{
+			name: "start of book",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 0, Chunk: 0},
+			},
+			want: 0.0,
+		},
+		{
+			name: "middle of first chapter",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 0, Chunk: 1},
+			},
+			want: float32(1) / float32(2+1+3),
+		},
+		{
+			name: "end of first chapter",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 0, Chunk: 2},
+			},
+			want: float32(2) / float32(2+1+3),
+		},
+		{
+			name: "start of second chapter",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 1, Chunk: 0},
+			},
+			want: float32(2) / float32(2+1+3),
+		},
+		{
+			name: "middle of second chapter",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 1, Chunk: 1},
+			},
+			want: float32(2+1) / float32(2+1+3),
+		},
+		{
+			name: "last chunk of last chapter",
+			cursor: types.UserCursor{
+				Cursor: types.Cursor{Chapter: 2, Chunk: 4},
+			},
+			want: 1.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := epub.BookProgress(tt.cursor, policy)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("got %f, want %f", got, tt.want)
+			}
+		})
+	}
 }

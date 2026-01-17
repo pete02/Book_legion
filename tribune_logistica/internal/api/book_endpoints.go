@@ -107,6 +107,114 @@ func (api *API) GetChapter(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+type progressResponse struct {
+	progress float32
+}
+
+func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// ---- AUTH CHECK ----
+	userID, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 5 {
+		http.Error(w, "Invalid URL, missing book_id or chapter_index", http.StatusBadRequest)
+		return
+	}
+
+	bookID := pathParts[4]
+
+	epub, err := epub.Load(api.DB, bookID)
+
+	if err != nil {
+		fmt.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
+		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
+		return
+	}
+
+	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
+
+	if err != nil {
+		fmt.Printf("error with cursor: %v\n", err)
+		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
+		return
+	}
+
+	progress, err := epub.ChapterProgress(cursor, api.Policy)
+
+	if err != nil {
+		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
+		return
+	}
+
+	resp := progressResponse{
+		progress: progress,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// ---- AUTH CHECK ----
+	userID, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 5 {
+		http.Error(w, "Invalid URL, missing book_id or chapter_index", http.StatusBadRequest)
+		return
+	}
+
+	bookID := pathParts[4]
+
+	epub, err := epub.Load(api.DB, bookID)
+
+	if err != nil {
+		fmt.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
+		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
+		return
+	}
+
+	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
+
+	if err != nil {
+		fmt.Printf("error with cursor: %v\n", err)
+		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
+		return
+	}
+
+	progress, err := epub.BookProgress(cursor, api.Policy)
+
+	if err != nil {
+		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
+		return
+	}
+
+	resp := progressResponse{
+		progress: progress,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
 type ChunksRequest struct {
 	UserCursor  types.UserCursor `json:"UserCursor"`
 	RequestSize int              `json:"requestSize"`
