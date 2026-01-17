@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::domain::{self, cursor::BookCursor};
+use crate::domain;
 
 
 #[derive(Clone, PartialEq)]
@@ -18,7 +18,6 @@ pub struct AudioData{
     pub cover_path: Signal<String>,
     pub playing: Signal<bool>,
     pub audio_urls: Signal<Vec<AudioChunk>>,
-    pub bookCursor: Signal<domain::cursor::BookCursor>,
     pub max_chunk: Signal<usize>,
     pub max_chapter_chunk: Signal<usize>,
 }
@@ -32,13 +31,11 @@ fn error_audio(book_id: String)->AudioData{
         max_chapter_chunk: use_signal(||1), 
         playing: use_signal(||false),
         audio_urls: use_signal(||vec![]),
-        bookCursor: use_signal(||BookCursor::new("err".to_string(), "err".to_string(), 0,0)),
         cover_path: use_signal(||"".to_owned())
     }
 }
 
 pub async fn load_audio(book_id:String, mut audio: AudioData){
-    let cursor=domain::cursor::load_bookcursor(book_id.clone()).await;
     let book=domain::book::load_book(book_id.clone()).await;
     audio.book_id.set(book_id.clone());
     audio.name.set(book.title);
@@ -48,7 +45,6 @@ pub async fn load_audio(book_id:String, mut audio: AudioData){
     audio.max_chapter_chunk.set(10);
     audio.playing.set(false);
     audio.audio_urls.set(vec![]);
-    audio.bookCursor.set(cursor);
     audio.cover_path.set(domain::cover::create_cover_path(book_id));
 }
 
