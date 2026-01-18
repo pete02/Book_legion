@@ -71,6 +71,7 @@ pub fn Book(book_id:String)->Element{
 fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
     let chapters = book().chapters.clone();
     let current = book().current_chapter;
+    let progress=domain::book::get_chapter_progress(book_id.clone());
 
     return rsx! {
         h3 { "Chapters:" }
@@ -103,7 +104,14 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
                                     if is_current { "#3b82f6" } else { "transparent" },
                                     if is_current { "bold" } else { "normal" },
                                 ),
-                                "{chapter}"
+                                span { "{chapter}" }
+
+                                if is_current {
+                                    span {
+                                        style: "font-size: 0.85em; color: #6b7280;",
+                                        "    {(progress() * 100.0).round()}%"
+                                    }
+                                }
                             }
                         }
                     }

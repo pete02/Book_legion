@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::domain;
+use crate::domain::{self, book::get_book_progress};
 
 
 #[derive(Clone, PartialEq)]
@@ -18,6 +18,7 @@ pub struct AudioData{
     pub cover_path: Signal<String>,
     pub playing: Signal<bool>,
     pub audio_urls: Signal<Vec<AudioChunk>>,
+    pub progress: Signal<f64>,
     pub max_chunk: Signal<usize>,
     pub max_chapter_chunk: Signal<usize>,
 }
@@ -29,6 +30,7 @@ fn error_audio(book_id: String)->AudioData{
         current_chunk: use_signal(||0),
         max_chunk: use_signal(||1), 
         max_chapter_chunk: use_signal(||1), 
+        progress: use_signal(||0.0),
         playing: use_signal(||false),
         audio_urls: use_signal(||vec![]),
         cover_path: use_signal(||"".to_owned())
@@ -43,6 +45,7 @@ pub async fn load_audio(book_id:String, mut audio: AudioData){
     audio.current_chunk.set(9);
     audio.max_chunk.set(100);
     audio.max_chapter_chunk.set(10);
+    audio.progress.set(domain::book::get_book_progress(book_id.clone()).await);
     audio.playing.set(false);
     audio.audio_urls.set(vec![]);
     audio.cover_path.set(domain::cover::create_cover_path(book_id));
@@ -63,8 +66,9 @@ pub fn use_audio(book_id: String) -> AudioData {
 
 
 pub fn switch_audio(audio:AudioData){
-    let mut audio_url=audio.audio_url.clone();
+    let mut audio_url: Signal<String>=audio.audio_url.clone();
     let mut audio_urls=audio.audio_urls.clone();
+    let mut progress=audio.progress.clone();
     use_effect(move||{
         audio_url.set("".to_owned());
         let mut urls=audio_urls();
@@ -80,6 +84,7 @@ pub fn switch_audio(audio:AudioData){
                 curs.cursor.chunk=url.cursor.chapter;
 
                 let _= domain::cursor::save_bookcursor(curs).await;
+                progress.set(get_book_progress(book_id()).await);
             });
         }
     });

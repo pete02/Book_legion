@@ -76,3 +76,38 @@ pub fn select_chapter(book: Signal<BookData>, index: usize, book_id: String) {
         let _ = domain::cursor::save_bookcursor(cursor).await;
     });
 }
+
+
+pub async fn get_book_progress(book_id: String)->f64{
+    match infra::book::fetch_book_progress(&book_id).await{
+        Err(_)=>return 0.0,
+        Ok(p)=>return p.progress
+    }
+}
+
+pub fn get_book_progress_signal(book_id: String)->Signal<f64>{
+    let progress=use_signal(||0.0);
+    use_effect(move || {
+        let mut progress=progress.clone();
+        let book_id=book_id.clone();
+        spawn(async move{
+            progress.set(get_book_progress(book_id).await);
+        });
+    });
+    return progress
+}
+
+pub fn get_chapter_progress(book_id: String)->Signal<f64>{
+    let progress=use_signal(||0.0);
+    use_effect(move || {
+        let mut progress=progress.clone();
+        let book_id=book_id.clone();
+        spawn(async move{
+            match infra::book::fetch_chapter_progress(&book_id).await{
+                Err(_)=>progress.set(0.0),
+                Ok(p)=>progress.set(p.progress)
+            }
+        });
+    });
+    return progress
+}

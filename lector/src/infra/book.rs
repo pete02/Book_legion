@@ -1,6 +1,8 @@
 use crate::infra::auth::get_with_auth;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BookInfo {
     pub id: String,
     pub title: String,
@@ -9,6 +11,13 @@ pub struct BookInfo {
     pub series_order: usize,
     pub file_path: String,
 }
+
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProgressResponse {
+    pub progress: f64,
+}
+
 
 #[cfg(not(feature = "mock"))]
 
@@ -61,4 +70,78 @@ pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
     }
 
     Ok(mock_book)
+}
+
+#[cfg(not(feature = "mock"))]
+pub async fn fetch_chapter_progress(
+    book_id: &str,
+) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
+    let url = format!(
+        "/api/v1/book/{}/chapterprogress",
+        book_id
+    );
+
+    let resp = get_with_auth(&url).await?;
+    if !resp.ok(){
+        return Err(format!("Failed to fetch chapter progress {}: {}", book_id, resp.status()).into());
+
+    }
+    let chapter:ProgressResponse=resp.json().await.map_err(|e| e.to_string())?;
+
+    Ok(chapter)
+}
+
+#[cfg(not(feature = "mock"))]
+pub async fn fetch_book_progress(
+    book_id: &str,
+) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
+    let url = format!(
+        "/api/v1/book/{}/progress",
+        book_id
+    );
+
+    let resp = get_with_auth(&url).await?;
+    if !resp.ok(){
+        return Err(format!("Failed to fetch book progress {}: {}", book_id, resp.status()).into());
+
+    }
+    let bookprogress:ProgressResponse=resp.json().await.map_err(|e| e.to_string())?;
+
+    Ok(bookprogress)
+}
+
+#[cfg(feature = "mock")]
+pub async fn fetch_chapter_progress(
+    book_id: &str,
+) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
+    let progress = match book_id {
+        "b1" => ProgressResponse { progress: 0.25 },
+        "b2" => ProgressResponse { progress: 0.75 },
+        "b3" => ProgressResponse { progress: 1.0 },
+        _ => ProgressResponse { progress: -1.0 },
+    };
+
+    if progress.progress < 0.0 {
+        return Err("no chapter progress found".into());
+    }
+
+    Ok(progress)
+}
+
+#[cfg(feature = "mock")]
+pub async fn fetch_book_progress(
+    book_id: &str,
+) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
+    let progress = match book_id {
+        "b1" => ProgressResponse { progress: 0.4 },
+        "b2" => ProgressResponse { progress: 0.9 },
+        "b3" => ProgressResponse { progress: 1.0 },
+        _ => ProgressResponse { progress: -1.0 },
+    };
+
+    if progress.progress < 0.0 {
+        return Err("no book progress found".into());
+    }
+
+    Ok(progress)
 }

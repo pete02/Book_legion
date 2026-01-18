@@ -46,7 +46,7 @@ pub fn Audio(book_id: String)->Element{
 pub fn TimeBar(audio: AudioData) -> Element {
     let current = audio.current_chunk.clone();
     let max = audio.max_chunk.clone();
-
+    let progress=audio.progress.clone();
     rsx! {
         div {
             class: "w-full flex flex-col items-center",
@@ -56,12 +56,12 @@ pub fn TimeBar(audio: AudioData) -> Element {
                     class: "bg-gray-300 h-3 rounded-full overflow-hidden w-full",
                     div {
                         class: "h-full bg-blue-500 transition-all duration-300 rounded-full",
-                        style: "width: {current()/max()}%;",
+                        style: "width: {(progress() * 100.0).round()}%;",
                     }
                 }
                 p {
                     class: "absolute left-0 -bottom-6 text-sm",
-                    "{current} / {max}"
+                    "{(progress() * 100.0).round()}%"
                 }
             }
         }
