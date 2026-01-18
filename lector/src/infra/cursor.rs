@@ -49,7 +49,7 @@ static MOCK_CURSOR: Lazy<Mutex<Option<BookCursor>>> =
 pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
 
     let mut guard = MOCK_CURSOR.lock().unwrap();
-    tracing::debug!("const cursor");
+
     let cursor = guard.get_or_insert_with(|| BookCursor {
         user_id: "mock_user".into(),
         book_id: book_id.to_string(),
@@ -65,7 +65,7 @@ pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
 #[cfg(feature = "mock")]
 pub async fn save_cursor(cursor: &BookCursor) -> Result<(), String> {
     let mut guard = MOCK_CURSOR.lock().unwrap();
-    tracing::debug!("save cursor");
+    tracing::debug!("save cursor: {:?}", cursor);
     *guard = Some(cursor.clone());
     Ok(())
 }

@@ -89,7 +89,7 @@ pub fn ControlButtons(audio:AudioData )->Element{
 
             button {
                 class: "w-14 h-14 flex items-center justify-center transition active:scale-90",
-                onclick: move |_| { },
+                onclick: move |_| { domain::audio::playpause(audio.playing);},
                 img {
                     class: "w-full h-full object-contain",
                     src: if *audio.playing.read() { assets::PAUSE } else { assets::PLAY }
@@ -103,7 +103,7 @@ pub fn ControlButtons(audio:AudioData )->Element{
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| {},
+                onclick: move |_| { domain::audio::skip_forward_chunk(audio.clone());},
                 img {
                     class: "w-6 h-6 object-contain",
                     src: assets::FORWARD
@@ -124,7 +124,6 @@ fn AudioPlayer(mut audio:AudioData) -> Element {
                 autoplay: true,
                 src: "{audio.audio_url}",
                 onplay: move |_| audio.playing.set(true),
-                onpause: move |_| audio.playing.set(false),
                 onended: move |_| { domain::audio::switch_audio(audio.clone());},
             }
         }

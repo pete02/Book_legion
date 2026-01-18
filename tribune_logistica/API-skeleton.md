@@ -212,7 +212,7 @@ Load epub
 Extract chapter and number of chunks
 
 ### 3.2 Get Chunks
-GET /api/v1/books/{book_id}/chunks // works
+POST /api/v1/books/{book_id}/chunks // works
 ```
 {
   "UserCursor":{

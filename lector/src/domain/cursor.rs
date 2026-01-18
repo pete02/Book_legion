@@ -1,21 +1,21 @@
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy,Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Cursor {
     pub chapter: usize,
     pub chunk: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct BookCursor {
     pub user_id: String,
     pub book_id: String,
     pub cursor: Cursor,
 }
 impl BookCursor{
-    pub fn new(user_id: String,book_id: String,chapter:usize, chunk: usize)->BookCursor{
+    pub fn new(user_id: &str,book_id: &str,chapter:usize, chunk: usize)->BookCursor{
         BookCursor{
-            user_id: user_id,
-            book_id: book_id,
+            user_id: user_id.to_owned(),
+            book_id: book_id.to_owned(),
             cursor: Cursor { chapter, chunk }
         }
     }
@@ -26,7 +26,7 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
     let username=domain::login::current_name();
     match infra::fetch_cursor(&book_id).await{
         Ok(c) => return c,
-        Err(_) => return  BookCursor::new(username, book_id, 0, 0),
+        Err(_) => return  BookCursor::new(&username, &book_id, 0, 0),
     }
 }
 

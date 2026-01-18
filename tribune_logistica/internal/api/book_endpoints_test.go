@@ -342,7 +342,7 @@ func TestGetChunks(t *testing.T) {
 	buf, _ := json.Marshal(reqBody)
 
 	t.Run("GetChunks_Success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 
@@ -365,7 +365,7 @@ func TestGetChunks(t *testing.T) {
 	})
 
 	t.Run("GetChunks_Unauthorized", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/books/"+bookID+"/chunks", bytes.NewBuffer(buf))
 		req.Header.Set("Authorization", "Bearer badtoken")
 		w := httptest.NewRecorder()
 

@@ -1,4 +1,9 @@
+#[cfg(feature = "mock")]
+use std::sync::Mutex;
+
 use crate::infra::auth::get_with_auth;
+#[cfg(feature = "mock")]
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 
@@ -129,19 +134,23 @@ pub async fn fetch_chapter_progress(
 }
 
 #[cfg(feature = "mock")]
+static MOCK_PROGRESS: Lazy<Mutex<f64>> = Lazy::new(|| Mutex::new(0.1));
+
+#[cfg(feature = "mock")]
 pub async fn fetch_book_progress(
     book_id: &str,
 ) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
-    let progress = match book_id {
-        "b1" => ProgressResponse { progress: 0.4 },
-        "b2" => ProgressResponse { progress: 0.9 },
-        "b3" => ProgressResponse { progress: 1.0 },
-        _ => ProgressResponse { progress: -1.0 },
-    };
+    match book_id {
+        "b1" => {
+            let mut prog = MOCK_PROGRESS.lock().unwrap();
 
-    if progress.progress < 0.0 {
-        return Err("no book progress found".into());
+            // Increment by 10% on each call, max 1.0
+            *prog = (*prog + 0.1).min(1.0);
+
+            Ok(ProgressResponse { progress: *prog })
+        }
+        "b2" => Ok(ProgressResponse { progress: 0.9 }),
+        "b3" => Ok(ProgressResponse { progress: 1.0 }),
+        _ => Err("no book progress found".into()),
     }
-
-    Ok(progress)
 }
