@@ -1,6 +1,6 @@
 use dioxus::{ prelude::*};
 
-use crate::{Route, assets, domain::{self, audio::{AudioData, use_audio}, cover::create_cover_path}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+use crate::{Route, assets, domain::{self, audio::{AudioData, use_audio}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
 
 #[component]
 pub fn Audio(book_id: String)->Element{
@@ -44,8 +44,6 @@ pub fn Audio(book_id: String)->Element{
 
 #[component]
 pub fn TimeBar(audio: AudioData) -> Element {
-    let current = audio.current_chunk.clone();
-    let max = audio.max_chunk.clone();
     let progress=audio.progress.clone();
     rsx! {
         div {

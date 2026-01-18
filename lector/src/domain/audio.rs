@@ -14,26 +14,18 @@ pub struct AudioData{
     pub book_id:Signal<String>,
     pub name: Signal<String>,
     pub audio_url: Signal<String>,
-    pub current_chunk: Signal<usize>,
-    pub cover_path: Signal<String>,
     pub playing: Signal<bool>,
     pub audio_urls: Signal<Vec<AudioChunk>>,
     pub progress: Signal<f64>,
-    pub max_chunk: Signal<usize>,
-    pub max_chapter_chunk: Signal<usize>,
 }
 fn error_audio(book_id: String)->AudioData{
     AudioData { 
         book_id: use_signal(||book_id),
         name: use_signal(||"error in getting audio data".to_string()),
         audio_url: use_signal(||"".to_owned()),
-        current_chunk: use_signal(||0),
-        max_chunk: use_signal(||1), 
-        max_chapter_chunk: use_signal(||1), 
         progress: use_signal(||0.0),
         playing: use_signal(||false),
         audio_urls: use_signal(||vec![]),
-        cover_path: use_signal(||"".to_owned())
     }
 }
 
@@ -42,13 +34,9 @@ pub async fn load_audio(book_id:String, mut audio: AudioData){
     audio.book_id.set(book_id.clone());
     audio.name.set(book.title);
     audio.audio_url.set("".to_string());
-    audio.current_chunk.set(9);
-    audio.max_chunk.set(100);
-    audio.max_chapter_chunk.set(10);
     audio.progress.set(domain::book::get_book_progress(book_id.clone()).await);
     audio.playing.set(false);
     audio.audio_urls.set(vec![]);
-    audio.cover_path.set(domain::cover::create_cover_path(book_id));
 }
 
 pub fn use_audio(book_id: String) -> AudioData {
