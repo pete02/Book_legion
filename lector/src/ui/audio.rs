@@ -1,6 +1,6 @@
 use dioxus::{ prelude::*};
 
-use crate::{Route, assets, domain::{self, audio::{AudioData, use_audio}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+use crate::{Route, assets, domain::{self, audio::{AudioData, skip_backward, skip_forward, use_audio}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
 
 #[component]
 pub fn Audio(book_id: String)->Element{
@@ -80,7 +80,7 @@ pub fn ControlButtons(audio:AudioData )->Element{
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| {  },
+                onclick: move |_| { skip_backward(audio) },
                 img {
                     class: "w-6 h-6 object-contain transform -scale-x-100",
                     src: assets::FORWARD
@@ -103,7 +103,7 @@ pub fn ControlButtons(audio:AudioData )->Element{
                     shadow 
                     transition active:scale-90 hover:bg-gray-300 dark:hover:bg-gray-600
                 ",
-                onclick: move |_| { domain::audio::skip_forward_chunk(audio.clone());},
+                onclick: move |_| {skip_forward(audio);},
                 img {
                     class: "w-6 h-6 object-contain",
                     src: assets::FORWARD
