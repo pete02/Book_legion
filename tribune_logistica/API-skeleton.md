@@ -194,6 +194,44 @@ Load cursor for a specific book.
 Creates and returns a new cursor for the book, if one does not exists
 
 
+#### 3.x Reqeust cursor text:
+Get /api/v1/cursors/{book_id}/text
+
+**Response**
+```
+{
+  "cursor":{
+    "UserID": "u1",
+    "BookID": "b1",
+    "Cursor":{
+      "Chapter": 1
+      "Chunk": 1
+    }
+  }
+  "text": "..."
+}
+```
+
+### 3.x Get Cursor based on text
+POST /api/v1/books/{book_id}/chapters/{chapter_index}/cursor
+**Request**
+```
+{
+  "snippet_html": "<p>Frost licked over Tala’s already sensitive skin...</p>"
+}
+```
+**Response**
+```
+{
+  "BookID": "b1",
+  "UserID": u1,
+  "Cursor":{
+    "Chapter": 1,
+    "Chunk": 2
+  }
+}
+```
+
 ### 3.1 Get Chapter
 GET /api/v1/books/{book_id}/chapters/{chapter_index} // works
 
@@ -342,23 +380,3 @@ Save the posted cursor
 All endpoints require auth token except registration and login and cover
 
 User-specific endpoints (cursor, next chunks) validate that token belongs to user
-
-All file-related operations (ValidateBooks, chunks, cover) must ensure the file exists
-
-Manifest and series endpoints are read-only
-
-This skeleton maps directly to your existing system, so the handlers can reuse:
-
-library.LoadBook / SaveBook
-
-library.LoadManifest / SaveManifest
-
-cursor buffer logic
-
-login auth tokens and user session management
-
-epub extraction utilities
-
-You now have everything needed to implement a full REST API that serves books, audiobooks, and manages users.
-
-pgsql

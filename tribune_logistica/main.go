@@ -48,7 +48,7 @@ func main() {
 	buf := buffer.NewBuffer("id")
 	manager := manager.NewOrganizer(buf, 10)
 
-	pol := epub.NewPolicy(500, 400, 700)
+	pol := epub.NewPolicy(500, 400, 700, 50)
 
 	storage, err := createStorage(*config)
 
@@ -68,9 +68,11 @@ func main() {
 
 	r.Get("/api/v1/manifest", api.GetManifest)
 	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
+	r.Get("/api/v1/cursors/{bookID}/text", api.GetCursorText)
 	r.Get("/api/v1/books/{bookID}", api.GetBook)
 	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
 	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
+	r.Post("/api/v1/books/{book_id}/chapters/{chapter_index}/cursor", api.CalculateCursorFromText)
 	r.Get("/api/v1/books/{bookID}/chunks", api.GetChunks)
 	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)
 	r.Get("/api/v1/books/{bookID}/cover", api.GetCover)

@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -60,7 +61,7 @@ func (e *Epub) MaxChunkIndex(navIndex int, policy ChunkPolicy) (int, error) {
 	}
 
 	linear := LinearizeChapter(doc)
-	chunks := ChunkText(linear, policy)
+	chunks := TextChunk(linear, policy)
 
 	if len(chunks) == 0 {
 		return 0, fmt.Errorf("no chunks generated for chapter %d", navIndex)
@@ -212,7 +213,7 @@ func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (strin
 		return "", err
 	}
 	linear := LinearizeChapter(doc)
-	chunks := ChunkText(linear, policy)
+	chunks := TextChunk(linear, policy)
 
 	if chunkIndex < 0 || chunkIndex >= len(chunks) {
 		return "", fmt.Errorf("chunk index %d out of range (0-%d)", chunkIndex, len(chunks)-1)
@@ -221,6 +222,45 @@ func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (strin
 	chunkStrings := PrettyChunks(chunks, linear)
 
 	return chunkStrings[chunkIndex], nil
+}
+
+func (e *Epub) CalculateCursorPlace(navIndex int, examle string, policy ChunkPolicy) (types.Cursor, error) {
+	chapterBytes, err := e.ExtractChapter(navIndex)
+	if err != nil {
+		return types.Cursor{}, err
+	}
+
+	doc, err := html.Parse(bytes.NewReader(chapterBytes))
+	if err != nil {
+		return types.Cursor{}, err
+	}
+	linear := LinearizeChapter(doc)
+
+	doc, err = html.Parse(bytes.NewReader([]byte(examle)))
+	if err != nil {
+		return types.Cursor{}, err
+	}
+	linearExample := LinearizeChapter(doc)
+	linearExample.FullText = trimTrailingPunctuation(linearExample.FullText)
+
+	if len(linearExample.FullText) < policy.MinSnippetSize {
+		return types.Cursor{}, errors.New("snippet too short to uniquely locate cursor")
+	}
+
+	offset := strings.Index(linear.FullText, linearExample.FullText)
+	if offset == -1 {
+		return types.Cursor{}, errors.New("example text not found in chapter")
+	}
+	chunks := TextChunk(linear, policy)
+	var targetChunk Chunk
+	for _, c := range chunks {
+		if offset >= c.Start && offset < c.End {
+			targetChunk = c
+			break
+		}
+	}
+
+	return types.Cursor{Chapter: navIndex, Chunk: targetChunk.Index}, nil
 }
 
 func (e *Epub) ExtractCover() ([]byte, string, error) {
@@ -310,4 +350,10 @@ func removeWhitespaceTextNodes(n *html.Node) {
 
 		c = next
 	}
+}
+
+func trimTrailingPunctuation(s string) string {
+	return strings.TrimRightFunc(s, func(r rune) bool {
+		return r == ' ' || r == '.' || r == '!' || r == '?'
+	})
 }

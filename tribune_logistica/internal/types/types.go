@@ -69,6 +69,11 @@ type Chunk struct {
 	Data []byte     `json:"data"`
 }
 
+type TextCursor struct {
+	Cursor UserCursor `json:cursor`
+	Text   string     `json:cursor_text`
+}
+
 type UserCursor struct {
 	UserID string `json:"UserID"`
 	BookID string `json:"BookID"`
@@ -164,4 +169,8 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		BookID: row["book_id"].(string),
 		Cursor: cursr,
 	}, nil
+}
+
+type CursorLocateRequest struct {
+	SnippetHTML string `json:"snippet_html"`
 }

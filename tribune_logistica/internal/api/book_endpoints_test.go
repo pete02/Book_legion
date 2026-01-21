@@ -279,6 +279,127 @@ func TestGetCursor(t *testing.T) {
 	})
 }
 
+func TestGetCursorText(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+	createTestEpub(t, api)
+
+	bookID := "b1"
+
+	t.Run("GetCursor_Success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/cursors/"+bookID+"/text", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+
+		api.GetCursorText(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
+		}
+		var cursorResp types.TextCursor
+		if err := json.NewDecoder(resp.Body).Decode(&cursorResp); err != nil {
+			t.Fatal(err)
+		}
+
+		if cursorResp.Cursor.BookID != bookID {
+			t.Fatalf("Expected BookID %s, got %v: %v", bookID, cursorResp.Cursor.BookID, cursorResp)
+		}
+	})
+
+	t.Run("GetCursor_Unauthorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/cursors/"+bookID+"/text", nil)
+		req.Header.Set("Authorization", "Bearer badtoken")
+		w := httptest.NewRecorder()
+
+		api.GetCursorText(w, req)
+		resp := w.Result()
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestCalculateCursorFromText(t *testing.T) {
+	api, token := setupAPIWithAuth(t)
+	createTestEpub(t, api)
+
+	bookID := "b1"
+	chapterIndex := 0
+
+	t.Run("CalculateCursor_Success", func(t *testing.T) {
+		body := map[string]string{
+			"snippet_html": "<p>Chapter 1</p>",
+		}
+
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/api/v1/books/%s/chapters/%d/cursor", bookID, chapterIndex),
+			bytes.NewReader(b),
+		)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+
+		api.CalculateCursorFromText(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
+		}
+
+		var cursorResp types.UserCursor
+		if err := json.NewDecoder(resp.Body).Decode(&cursorResp); err != nil {
+			t.Fatal(err)
+		}
+
+		if cursorResp.BookID != bookID {
+			t.Fatalf(
+				"Expected BookID %s, got %v: %+v",
+				bookID,
+				cursorResp.BookID,
+				cursorResp,
+			)
+		}
+	})
+
+	t.Run("CalculateCursor_Unauthorized", func(t *testing.T) {
+		body := map[string]string{
+			"snippet_html": "<p>Chapter 1</p>",
+		}
+
+		b, _ := json.Marshal(body)
+
+		req := httptest.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/api/v1/books/%s/chapters/%d/cursor", bookID, chapterIndex),
+			bytes.NewReader(b),
+		)
+		req.Header.Set("Authorization", "Bearer badtoken")
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+
+		api.CalculateCursorFromText(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+}
+
 // ----------------- 3.1 Get Chapter -----------------
 func TestGetChapter(t *testing.T) {
 	api, token := setupAPIWithAuth(t)

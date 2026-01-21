@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestChunkText(t *testing.T) {
+func TestTextChunk(t *testing.T) {
 	tests := []struct {
 		name        string
 		text        string
@@ -66,7 +66,7 @@ func TestChunkText(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			linear := LinearText{FullText: tt.text}
-			chunks := ChunkText(linear, tt.ChunkPolicy)
+			chunks := TextChunk(linear, tt.ChunkPolicy)
 			prettychunks := PrettyChunks(chunks, linear)
 			fmt.Printf("chunks: %v\n", chunks)
 			fmt.Printf("chunks text: [%v]\n", strings.Join(prettychunks, ";"))

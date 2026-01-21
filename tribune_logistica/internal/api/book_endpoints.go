@@ -271,6 +271,133 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(chunks)
 }
 
+func (api *API) GetCursorText(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 5 || pathParts[4] == "" {
+		http.Error(w, "Book ID missing", http.StatusBadRequest)
+		return
+	}
+	bookID := pathParts[4]
+
+	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
+
+	if err != nil {
+		fmt.Printf("error with cursor: %v\n", err)
+		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
+		return
+	}
+
+	epub, err := epub.Load(api.DB, bookID)
+
+	if err != nil {
+		fmt.Printf("error with Epub: %v\n", err)
+		http.Error(w, "Could not load epub", http.StatusInternalServerError)
+		return
+	}
+
+	text, err := epub.ExtractChunk(cursor.Cursor.Chapter, cursor.Cursor.Chunk, api.Policy)
+	if err != nil {
+		fmt.Printf("error with Chunk: %v\n", err)
+		http.Error(w, "Could not load Chunk text", http.StatusInternalServerError)
+		return
+	}
+
+	textCursor := types.TextCursor{Cursor: cursor, Text: text}
+	fmt.Printf("got: %s\n", text)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(textCursor)
+}
+
+func (api *API) CalculateCursorFromText(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 8 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	bookID := pathParts[4]
+	chapterStr := pathParts[6]
+
+	if bookID == "" || chapterStr == "" {
+		http.Error(w, "Book ID or chapter index missing", http.StatusBadRequest)
+		return
+	}
+
+	chapterIndex, err := strconv.Atoi(chapterStr)
+	if err != nil {
+		http.Error(w, "Invalid chapter index", http.StatusBadRequest)
+		return
+	}
+
+	var req types.CursorLocateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.SnippetHTML) == "" {
+		http.Error(w, "snippet_html is required", http.StatusBadRequest)
+		return
+	}
+
+	epub, err := epub.Load(api.DB, bookID)
+	if err != nil {
+		fmt.Printf("error loading epub: %v\n", err)
+		http.Error(w, "Could not load epub", http.StatusInternalServerError)
+		return
+	}
+
+	cursor, err := epub.CalculateCursorPlace(
+		chapterIndex,
+		req.SnippetHTML,
+		api.Policy,
+	)
+	if err != nil {
+		fmt.Printf("Error in text to chunk: %v\n", err)
+		switch err.Error() {
+		case "snippet too short to uniquely locate cursor":
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case "example text not found in chapter":
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			fmt.Printf("cursor calculation error: %v\n", err)
+			http.Error(w, "Could not calculate cursor", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	userCursor := types.UserCursor{
+		UserID: userID,
+		BookID: bookID,
+		Cursor: cursor,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(userCursor)
+}
+
 func (api *API) GetNav(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -339,6 +466,11 @@ func (api *API) GetCover(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(coverData)
+
+}
+
+func (api *API) TextToCursorGetCSSFiles(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func (api *API) GetCSSFiles(w http.ResponseWriter, r *http.Request) {

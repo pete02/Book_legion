@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -428,7 +429,7 @@ func TestEpub_MaxChunkIndex(t *testing.T) {
 		chapterBytes, _ := epub.ExtractChapter(0)
 		doc, _ := html.Parse(bytes.NewReader(chapterBytes))
 		linear := LinearizeChapter(doc)
-		chunks := ChunkText(linear, policy)
+		chunks := TextChunk(linear, policy)
 
 		if maxIdx != chunks[len(chunks)-1].Index {
 			t.Errorf("MaxChunkIndex() = %d, want last chunk index %d", maxIdx, chunks[len(chunks)-1].Index)
@@ -586,5 +587,127 @@ func TestBookProgress(t *testing.T) {
 				t.Fatalf("got %f, want %f", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCalculateCursorPlace_Success(t *testing.T) {
+	e := &Epub{}
+
+	// Mock chapter content
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<div>
+				<p>Chapter 1</p>
+				<p>Tala looked around the room, ignoring the man.</p>
+				<p>A waist-high stone wall stood in a circle halfway between her and the smooth granite of the outer walls.</p>
+			</div>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     80,
+		MinSize:        40,
+		MaxSize:        120,
+		MinSnippetSize: 30,
+	}
+
+	exampleHTML := `<p>Tala looked around the room, ignoring the man.</p>`
+
+	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cursor.Chapter != 0 {
+		t.Errorf("expected chapter 0, got %d", cursor.Chapter)
+	}
+
+	if cursor.Chunk < 0 {
+		t.Errorf("expected valid chunk index, got %d", cursor.Chunk)
+	}
+}
+
+func TestCalculateCursorPlace_SnippetTooShort(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`<p>This is a chapter</p>`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     80,
+		MinSize:        40,
+		MaxSize:        120,
+		MinSnippetSize: 20,
+	}
+
+	exampleHTML := `<p>Hi</p>`
+
+	_, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, errors.New("snippet too short to uniquely locate cursor")) &&
+		err.Error() != "snippet too short to uniquely locate cursor" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCalculateCursorPlace_SnippetNotFound(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<p>This is the first paragraph.</p>
+			<p>This is the second paragraph.</p>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     80,
+		MinSize:        40,
+		MaxSize:        120,
+		MinSnippetSize: 20,
+	}
+
+	exampleHTML := `<p>This text does not exist in the chapter.</p>`
+
+	_, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if err.Error() != "example text not found in chapter" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCalculateCursorPlace_ChunkBoundary(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<p>This is sentence one. This is sentence two.</p>
+			<p>This is sentence three. This is sentence four.</p>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     30, // force multiple chunks
+		MinSize:        20,
+		MaxSize:        40,
+		MinSnippetSize: 22,
+	}
+
+	exampleHTML := `<p>This is sentence three.</p>`
+
+	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cursor.Chunk == 0 {
+		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
 	}
 }
