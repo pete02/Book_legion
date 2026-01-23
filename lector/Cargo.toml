@@ -13,6 +13,7 @@ dioxus = { version = "0.7.1", features = ["router"] }
 futures-timer = "3.0.3"
 gloo-timers = "0.3.0"
 js-sys = "0.3.82"
+kuchiki = "0.8.1"
 once_cell = "1.21.3"
 regex = "1.12.2"
 reqwasm = { version="0.5.0", features = ["json"]}
@@ -20,7 +21,14 @@ serde = {version="1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 wasm-bindgen = "0.2.105"
 wasm-bindgen-futures = "0.4.55"
-web-sys = {version="0.3.82", features=["Url", "Blob", "BlobPropertyBag", "HtmlAudioElement", "Storage"]}
+web-sys = {version="0.3.82", features=["Url", "Blob", "BlobPropertyBag", "HtmlAudioElement", "Storage","Document",
+    "Element",
+    "HtmlElement",
+    "Node",
+    "Text",
+    "Range",
+    "DomRect",
+    "DomRectList",]}
 [features]
 default = ["web"]
 web = ["dioxus/web"]

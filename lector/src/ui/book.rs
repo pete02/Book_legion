@@ -17,8 +17,12 @@ pub fn Book(book_id:String)->Element{
             path: Route::Series { series_id: book().series_id }
         },
         TopBarEntry {
-            name: "Audio".into(),
+            name: "Listen".into(),
             path: Route::Audio { book_id:book_id.clone() }
+        },
+        TopBarEntry {
+            name: "Read".into(),
+            path: Route::Text { book_id:book_id.clone() }
         },
     ];
     

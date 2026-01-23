@@ -13,3 +13,6 @@ pub use book::Book;
 
 mod audio;
 pub use audio::Audio;
+
+mod text;
+pub use text::Text;

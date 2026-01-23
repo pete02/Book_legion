@@ -1,4 +1,4 @@
-use dioxus::{html::link::title, prelude::*};
+use dioxus::prelude::*;
 
 use crate::{domain, infra};
 
@@ -85,17 +85,6 @@ pub async fn get_book_progress(book_id: String)->f64{
     }
 }
 
-pub fn get_book_progress_signal(book_id: String)->Signal<f64>{
-    let progress=use_signal(||0.0);
-    use_effect(move || {
-        let mut progress=progress.clone();
-        let book_id=book_id.clone();
-        spawn(async move{
-            progress.set(get_book_progress(book_id).await);
-        });
-    });
-    return progress
-}
 
 pub fn get_chapter_progress(book_id: String)->Signal<f64>{
     let progress=use_signal(||0.0);

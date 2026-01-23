@@ -5,3 +5,5 @@ pub mod series;
 pub mod book;
 pub mod cursor;
 pub mod audio;
+
+pub mod text;

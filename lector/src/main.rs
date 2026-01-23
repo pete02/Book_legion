@@ -4,7 +4,7 @@ mod infra;
 mod domain;
 mod ui;
 mod styles;
-use crate::{domain::login, ui::{Library, LoginGuard, Series, Book, Audio}};
+use crate::{domain::login, ui::{Library, LoginGuard, Series, Book, Audio, Text}};
 
 use assets::*;
 
@@ -26,6 +26,9 @@ pub enum Route {
 
     #[route("/books/:book_id/audio")]
     Audio{book_id: String},
+
+    #[route("/books/:book_id/text")]
+    Text{book_id: String},
 
     #[route("/:..route")]
     PageNotFound {
