@@ -9,14 +9,15 @@ pub struct TextHandler{
     pub book_id: String,
     pub chapter: Signal<String>,
     pub visible_text: Signal<String>,
-    pub start_text: Signal<String>,
+    pub cur_text: Signal<String>,
+    pub next_text: Signal<String>,
     pub chapter_idx: Signal<usize>,
     pub chapter_end: Signal<bool>
 }
 
 impl TextHandler {
     pub fn new(book_id: String)->TextHandler{
-        return TextHandler { book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), start_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
+        return TextHandler { book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
     }
 }
 
@@ -29,7 +30,8 @@ pub fn fetch_chapter(text_handler: &mut TextHandler){
             Ok(txt)=>{
                 let next=infra::chapters::fetch_cursor_text(&text_handler.book_id).await;
                 if let Ok(text)=next{
-                    text_handler.start_text.set(text.text);
+                    text_handler.next_text.set(text.text.clone());
+                    text_handler.cur_text.set(text.text);
                 }
                 text_handler.chapter.set(txt.text.clone());
                 domain::page_forward::render_next_page(&mut text_handler);

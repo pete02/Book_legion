@@ -42,7 +42,7 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
     save_cursor(text_handler.clone());
 
     let chapter = (text_handler.chapter)();
-    let start_text = (text_handler.start_text)();
+    let start_text = (text_handler.next_text)();
     let start_offset = find_sentence_offset_with_html_backtrack(&chapter, &start_text);
     
     let new_visible = chapter[start_offset..].to_string();
@@ -66,8 +66,8 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
 
 fn save_cursor(text_handler: TextHandler){
     spawn(async move{
-        if(text_handler.start_text)().len() > 0{
-            let cursor=infra::cursor::get_cursor_from_text(&text_handler.book_id, (text_handler.chapter_idx)(), &(text_handler.start_text)()).await;
+        if(text_handler.next_text)().len() > 0{
+            let cursor=infra::cursor::get_cursor_from_text(&text_handler.book_id, (text_handler.chapter_idx)(), &(text_handler.next_text)()).await;
             match cursor {
                 Err(e)=>tracing::error!("No cursor founnd: {}",e),
                 Ok(c)=>{domain::cursor::save_bookcursor(c).await;}
@@ -151,7 +151,8 @@ pub fn find_sentence_offset(chapter_html: &str, start_snippet: &str) -> usize {
 
 
 pub fn trim_overflowing_node(text_handler: &mut TextHandler){
-    text_handler.start_text.set("".to_owned());
+    text_handler.cur_text.set((text_handler.next_text)());
+    text_handler.next_text.set("".to_owned());
     let document=web_sys::window().unwrap().document().unwrap();
     let container = document
         .get_element_by_id("book-renderer").unwrap()
@@ -165,8 +166,8 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
 
     if child.1{
-        text_handler.start_text.set(set_text(&child.0,&mut child.0.inner_text()));
-        debug_flagged!("next txt: {}",(text_handler.start_text)());
+        text_handler.next_text.set(set_text(&child.0,&mut child.0.inner_text()));
+        debug_flagged!("next txt: {}",(text_handler.next_text)());
     }else{
         let (visible,hidden)=split_node_by_visible_words(
             &document,
@@ -176,8 +177,8 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
         let (vis,mut hid)=snap_to_last_sentence_break(&visible, &hidden);
         split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid, text_handler);
-        text_handler.start_text.set(set_text(&child.0,&mut hid));
-        debug_flagged!("next txt: {}",(text_handler.start_text)());
+        text_handler.next_text.set(set_text(&child.0,&mut hid));
+        debug_flagged!("next txt: {}",(text_handler.next_text)());
         
     }
 }
