@@ -7,3 +7,5 @@ pub mod cursor;
 pub mod audio;
 
 pub mod text;
+
+pub mod page_forward;

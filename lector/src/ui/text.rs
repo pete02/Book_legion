@@ -79,7 +79,7 @@ pub fn Text(book_id: String) -> Element {
                             cursor: pointer;
                             background: transparent;
                         ",
-                        onclick: move |_| { domain::text::render_next_page(&mut text_handler);},
+                        onclick: move |_| { domain::page_forward::render_next_page(&mut text_handler);},
                     }
                 }
             }
