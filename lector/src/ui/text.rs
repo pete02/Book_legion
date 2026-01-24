@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{logger::tracing, prelude::*};
 
 use crate::{Route, domain::{self, text::use_text}, ui::components::{TopBar, TopBarEntry}};
 
@@ -70,7 +70,13 @@ pub fn Text(book_id: String) -> Element {
                             cursor: pointer;
                             background: transparent;
                         ",
-                        onclick: move |_| { move_page.set(-1); },
+                        onclick: {
+                            let mut val=text_handler.clone();
+                            move |_| { 
+                                tracing::debug!("clicked back");
+                                domain::page_backwards::render_prev_page(&mut val);
+                            }
+                    },
                     },
                     // Right half
                     button {
@@ -79,7 +85,10 @@ pub fn Text(book_id: String) -> Element {
                             cursor: pointer;
                             background: transparent;
                         ",
-                        onclick: move |_| { domain::page_forward::render_next_page(&mut text_handler);},
+                        onclick: {
+                            let mut val= text_handler.clone();
+                            move |_|{domain::page_forward::render_next_page(&mut val);}
+                        },
                     }
                 }
             }

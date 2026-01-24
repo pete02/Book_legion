@@ -79,7 +79,7 @@ pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
 #[cfg(feature = "mock")]
 pub async fn save_cursor(cursor: &BookCursor) -> Result<(), String> {
     let mut guard = MOCK_CURSOR.lock().unwrap();
-    tracing::debug!("save cursor: {:?}", cursor);
+    //tracing::debug!("save cursor: {:?}", cursor);
     *guard = Some(cursor.clone());
     Ok(())
 }

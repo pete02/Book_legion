@@ -1,17 +1,14 @@
 use dioxus::{logger::tracing, prelude::*};
-use once_cell::sync::Lazy;
-use regex::Regex;
+use web_sys::Node;
+
 
 use crate::domain;
 use crate::infra;
-
+use wasm_bindgen::{JsCast, prelude::Closure};
+use web_sys::{Document, HtmlElement, Range, window};
 use crate::domain::text::TextHandler;
 
 const DEBUG:bool=false;
-
-static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
-
-static SENTENCE_SPLIT: Lazy<Regex>= Lazy::new(||Regex::new(r#"([^.!?…]+)[.!?…]+(\s*)"#).unwrap());
 
 #[macro_export]
 macro_rules! debug_flagged {
@@ -25,15 +22,6 @@ macro_rules! debug_flagged {
     };
 }
 
-
-fn next_chapter(text_handler: &mut TextHandler){
-    text_handler.chapter_idx.set((text_handler.chapter_idx)()+1);
-    text_handler.chapter_end.set(false);
-    domain::text::fetch_chapter(text_handler);
-}
-
-use wasm_bindgen::{JsCast, prelude::Closure};
-use web_sys::{Document, HtmlElement, Range, window};
 pub fn render_next_page(text_handler: &mut TextHandler) {
     if (text_handler.chapter_end)() ==true{
         next_chapter(text_handler);
@@ -43,13 +31,16 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
 
     let chapter = (text_handler.chapter)();
     let start_text = (text_handler.next_text)();
-    let start_offset = find_sentence_offset_with_html_backtrack(&chapter, &start_text);
-    
+    let start_offset = domain::text::find_sentence_offset_with_html_backtrack(&chapter, &start_text);
+
     let new_visible = chapter[start_offset..].to_string();
     text_handler.visible_text.set(new_visible);
+    let container=domain::text::get_container();
+    container.set_scroll_top(0);
 
     let mut handler_for_trim = text_handler.clone();
     let closure = Closure::once_into_js(move || {
+        container.set_scroll_top(0);
         trim_overflowing_node(&mut handler_for_trim);
     });
 
@@ -61,8 +52,6 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
         )
         .unwrap();
 }
-
-
 
 fn save_cursor(text_handler: TextHandler){
     spawn(async move{
@@ -80,93 +69,21 @@ fn save_cursor(text_handler: TextHandler){
     });
 }
 
-pub fn find_sentence_offset_with_html_backtrack(
-    chapter_html: &str,
-    start_snippet: &str,
-) -> usize {
-    let candidate_start = find_sentence_offset(chapter_html, start_snippet);
-
-    let mut safe_start = candidate_start;
-
-    while safe_start > 0 {
-        if let Some(pos) = chapter_html[..safe_start].rfind('<') {
-            if chapter_html[pos..].starts_with("</") {
-                safe_start = pos;
-            } else {
-                safe_start = pos;
-                break;
-            }
-        } else {
-            safe_start = 0;
-            break;
-        }
-    }
-
-    debug_flagged!(
-        "candidate_start: {}, safe_start: {}",
-        candidate_start,
-        safe_start
-    );
-
-    safe_start
-}
-
-pub fn find_sentence_offset(chapter_html: &str, start_snippet: &str) -> usize {
-    let snippet_sents = split_sentences(start_snippet);
-    if snippet_sents.is_empty() {
-        return 0;
-    }
-
-    let first_sent = &snippet_sents[0];
-    let mut candidates = vec![];
-    debug_flagged!("snips {:?}",snippet_sents);
-    let mut search_start = 0;
-    while let Some(pos) = chapter_html[search_start..].find(first_sent) {
-        candidates.push((search_start + pos,first_sent.len()));
-        search_start += pos + first_sent.len();
-    }
-
-    while candidates.len() > 1 {
-        candidates.retain(|&(start, _)| {
-            let start=clamp_to_char_boundary(chapter_html, start);
-            let normal=normalize_text(&chapter_html[start..]);
-            debug_flagged!("searchin in: {}",normal);
-            if let Some(i)=normal.find(&normalize_text(start_snippet)){
-                debug_flagged!("found pos: {}",i);
-                i<10
-            }else{
-                false
-            }
-        });
-    }
-
-    if candidates.len()==0{
-        tracing::error!("Did not find any candidate. Search start: {}",search_start);
-        tracing::error!("Tried to find {}", first_sent);
-        return 0;
-    }
-    candidates[0].0
-}
-
-
-
 pub fn trim_overflowing_node(text_handler: &mut TextHandler){
     text_handler.cur_text.set((text_handler.next_text)());
+    debug_flagged!("cur_text: {}", (text_handler.cur_text)());
     text_handler.next_text.set("".to_owned());
-    let document=web_sys::window().unwrap().document().unwrap();
-    let container = document
-        .get_element_by_id("book-renderer").unwrap()
-        .dyn_into::<HtmlElement>().unwrap();
+    let container=domain::text::get_container();
     debug_flagged!("running trim");
     let  Some(child)=first_overflowing_child(&container) else {
         debug_flagged!("No child found");
         text_handler.chapter_end.set(true);
         return;
     };
-
+    let document=web_sys::window().unwrap().document().unwrap();
 
     if child.1{
-        text_handler.next_text.set(set_text(&child.0,&mut child.0.inner_text()));
+        text_handler.next_text.set(domain::text::set_text(&child.0,child.0.text_content().unwrap_or_default()));
         debug_flagged!("next txt: {}",(text_handler.next_text)());
     }else{
         let (visible,hidden)=split_node_by_visible_words(
@@ -177,7 +94,7 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
         let (vis,mut hid)=snap_to_last_sentence_break(&visible, &hidden);
         split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid, text_handler);
-        text_handler.next_text.set(set_text(&child.0,&mut hid));
+        text_handler.next_text.set(domain::text::set_text(&child.0,hid));
         debug_flagged!("next txt: {}",(text_handler.next_text)());
         
     }
@@ -186,17 +103,16 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
 fn first_overflowing_child(
     container: &HtmlElement,
-) -> Option<(HtmlElement,bool)> {
+) -> Option<(Node,bool)> {
     let container_rect = container.get_bounding_client_rect();
     let children = container.child_nodes();
 
     for i in 0..children.length() {
         let child = children
-            .item(i)?
-            .dyn_into::<HtmlElement>()
-            .ok()?;
+            .item(i)?;
 
-        let rect = child.get_bounding_client_rect();
+        let rect = child.clone().dyn_into::<HtmlElement>()
+            .ok()?.get_bounding_client_rect();
         const EPSILON: f64 = 1.0;
 
         if rect.bottom() <= container_rect.bottom() + EPSILON {
@@ -217,10 +133,12 @@ fn first_overflowing_child(
 
 fn split_node_by_visible_words(
     document: &Document,
-    node: &HtmlElement,
+    child: &Node,
     container_bottom: f64,
 )->(String,String){
-     let full_text = node.inner_html();
+    let node=child.clone().dyn_into::<HtmlElement>().unwrap();
+
+    let full_text = node.inner_html();
     let mut visible_text = String::new();
     let mut hidden_text = String::new();
     let mut overflow_found = false;
@@ -293,7 +211,7 @@ pub fn snap_to_last_sentence_break(visible: &str, hidden: &str) -> (String, Stri
 
 pub fn split_and_hide_node_in_chapter(
     document: &Document,
-    node: &HtmlElement,
+    child: &Node,
     visible_html: &str,
     hidden_html: &str,
     text_handler: &mut TextHandler,
@@ -301,6 +219,9 @@ pub fn split_and_hide_node_in_chapter(
     if hidden_html.is_empty() || visible_html.is_empty() {
         return None;
     }
+     let node=child.clone().dyn_into::<HtmlElement>()
+            .ok()?;
+
     let original_outer = node.outer_html();
 
     let visible_node = node.clone_node_with_deep(false).ok()?.dyn_into::<HtmlElement>().ok()?;
@@ -310,9 +231,9 @@ pub fn split_and_hide_node_in_chapter(
     hidden_node.set_inner_html(hidden_html);
     
     if let Some(parent) = node.parent_node() {
-        parent.insert_before(&visible_node, Some(node)).ok()?;
-        parent.insert_before(&hidden_node, Some(node)).ok()?;
-        parent.remove_child(node).ok()?;
+        parent.insert_before(&visible_node, Some(&node)).ok()?;
+        parent.insert_before(&hidden_node, Some(&node)).ok()?;
+        parent.remove_child(&node).ok()?;
     }
 
     let chapter_html = (text_handler.chapter)();
@@ -322,61 +243,8 @@ pub fn split_and_hide_node_in_chapter(
     Some(hidden_node.dyn_into::<HtmlElement>().ok()?)
 }
 
-
-fn set_text(child: &HtmlElement, hid: &mut String) ->String{
-    let mut current = child.next_sibling();
-
-    while hid.len() <= 50 {
-        let node = match current {
-            Some(ref n) => n,
-            None => break,
-        };
-
-        if let Some(text) = node.text_content() {
-            hid.push_str(&text);
-        }
-
-        current = node.next_sibling();
-    }
-
-    return hid.to_string();
-}
-
-
-fn normalize_text(s: &str) -> String {
-
-    strip_html(s).chars()
-        .filter(|c| !matches!(c, '.' | '!' | '?' | '…' | '"' | '\'' | '“' | '”'))
-        .collect::<String>()
-        .trim()
-        .to_lowercase()
-}
-
-
-pub fn strip_html(html: &str) -> String {
-    HTML_TAG_RE.replace_all(html, "").to_string()
-}
-
-
-
-fn split_sentences(text: &str) -> Vec<String> {
-
-    SENTENCE_SPLIT.captures_iter(text)
-        .map(|cap|{
-            let s=cap.get(1).unwrap().as_str().trim();
-            s.trim_matches(&['"', '“', '”', '\''][..]).to_string()
-        })
-        .filter(|s| s.chars().count() > 1) 
-        .collect()
-}
-
-fn clamp_to_char_boundary(s: &str, idx: usize) -> usize {
-    if idx >= s.len() {
-        return s.len();
-    }
-    let mut i = idx;
-    while !s.is_char_boundary(i) {
-        i -= 1;
-    }
-    i
+fn next_chapter(text_handler: &mut TextHandler){
+    text_handler.chapter_idx.set((text_handler.chapter_idx)()+1);
+    text_handler.chapter_end.set(false);
+    domain::text::fetch_chapter(text_handler);
 }
