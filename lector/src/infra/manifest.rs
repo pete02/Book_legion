@@ -1,5 +1,4 @@
 
-use reqwasm::http::Request;
 use serde::{Serialize, Deserialize};
 
 #[cfg(feature = "mock")]

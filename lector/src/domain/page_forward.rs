@@ -1,12 +1,29 @@
 use dioxus::{logger::tracing, prelude::*};
+use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::domain;
-use crate::{infra, ui::Text};
+use crate::infra;
 
 use crate::domain::text::TextHandler;
 
+const DEBUG:bool=false;
 
+static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
+
+static SENTENCE_SPLIT: Lazy<Regex>= Lazy::new(||Regex::new(r#"([^.!?…]+)[.!?…]+(\s*)"#).unwrap());
+
+#[macro_export]
+macro_rules! debug_flagged {
+    ($($arg:tt)*) => {
+        {
+            if DEBUG{
+                tracing::debug!($($arg)*);
+            }
+            
+        }
+    };
+}
 
 
 fn next_chapter(text_handler: &mut TextHandler){
@@ -85,7 +102,7 @@ pub fn find_sentence_offset_with_html_backtrack(
         }
     }
 
-    tracing::debug!(
+    debug_flagged!(
         "candidate_start: {}, safe_start: {}",
         candidate_start,
         safe_start
@@ -102,7 +119,7 @@ pub fn find_sentence_offset(chapter_html: &str, start_snippet: &str) -> usize {
 
     let first_sent = &snippet_sents[0];
     let mut candidates = vec![];
-    tracing::debug!("snips {:?}",snippet_sents);
+    debug_flagged!("snips {:?}",snippet_sents);
     let mut search_start = 0;
     while let Some(pos) = chapter_html[search_start..].find(first_sent) {
         candidates.push((search_start + pos,first_sent.len()));
@@ -113,9 +130,9 @@ pub fn find_sentence_offset(chapter_html: &str, start_snippet: &str) -> usize {
         candidates.retain(|&(start, _)| {
             let start=clamp_to_char_boundary(chapter_html, start);
             let normal=normalize_text(&chapter_html[start..]);
-            tracing::debug!("searchin in: {}",normal);
+            debug_flagged!("searchin in: {}",normal);
             if let Some(i)=normal.find(&normalize_text(start_snippet)){
-                tracing::debug!("found pos: {}",i);
+                debug_flagged!("found pos: {}",i);
                 i<10
             }else{
                 false
@@ -139,9 +156,9 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
     let container = document
         .get_element_by_id("book-renderer").unwrap()
         .dyn_into::<HtmlElement>().unwrap();
-    tracing::debug!("running trim");
+    debug_flagged!("running trim");
     let  Some(child)=first_overflowing_child(&container) else {
-        tracing::debug!("No child found");
+        debug_flagged!("No child found");
         text_handler.chapter_end.set(true);
         return;
     };
@@ -149,7 +166,7 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
     if child.1{
         text_handler.start_text.set(set_text(&child.0,&mut child.0.inner_text()));
-        tracing::debug!("next txt: {}",(text_handler.start_text)());
+        debug_flagged!("next txt: {}",(text_handler.start_text)());
     }else{
         let (visible,hidden)=split_node_by_visible_words(
             &document,
@@ -160,7 +177,7 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
         let (vis,mut hid)=snap_to_last_sentence_break(&visible, &hidden);
         split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid, text_handler);
         text_handler.start_text.set(set_text(&child.0,&mut hid));
-        tracing::debug!("next txt: {}",(text_handler.start_text)());
+        debug_flagged!("next txt: {}",(text_handler.start_text)());
         
     }
 }
@@ -213,7 +230,7 @@ fn split_node_by_visible_words(
     let range: Range = document.create_range().unwrap();
     let mut current_offset = 0;
 
-    for (i, word) in words.iter().enumerate() {
+    for (_, word) in words.iter().enumerate() {
         if overflow_found {
             if !hidden_text.is_empty() {
                 hidden_text.push(' ');
@@ -336,15 +353,14 @@ fn normalize_text(s: &str) -> String {
 
 
 pub fn strip_html(html: &str) -> String {
-    let re = Regex::new(r"<[^>]+>").unwrap();
-    re.replace_all(html, "").to_string()
+    HTML_TAG_RE.replace_all(html, "").to_string()
 }
 
 
 
 fn split_sentences(text: &str) -> Vec<String> {
-    let re = Regex::new(r#"([^.!?…]+)[.!?…]+(\s*)"#).unwrap();
-    re.captures_iter(text)
+
+    SENTENCE_SPLIT.captures_iter(text)
         .map(|cap|{
             let s=cap.get(1).unwrap().as_str().trim();
             s.trim_matches(&['"', '“', '”', '\''][..]).to_string()
@@ -352,21 +368,6 @@ fn split_sentences(text: &str) -> Vec<String> {
         .filter(|s| s.chars().count() > 1) 
         .collect()
 }
-
-fn collect_text_nodes(root: &web_sys::Node, out: &mut Vec<web_sys::Text>) {
-    let children = root.child_nodes();
-    for i in 0..children.length() {
-        let node = children.item(i).unwrap();
-        if node.node_type() == web_sys::Node::TEXT_NODE {
-            if let Ok(text) = node.dyn_into::<web_sys::Text>() {
-                out.push(text);
-            }
-        } else {
-            collect_text_nodes(&node, out);
-        }
-    }
-}
-
 
 fn clamp_to_char_boundary(s: &str, idx: usize) -> usize {
     if idx >= s.len() {

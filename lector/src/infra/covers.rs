@@ -1,4 +1,3 @@
-use reqwasm::http::Request;
 use web_sys::{Blob, Url};
 use crate::infra::auth;
 

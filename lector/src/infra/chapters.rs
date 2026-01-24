@@ -1,9 +1,4 @@
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct Chapter {
-    pub index: usize,
-    pub number: usize,
-    pub title: String,
-}
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PrettySpineItem {
     #[serde(rename = "Index")]

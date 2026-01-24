@@ -1,8 +1,7 @@
 use dioxus::{logger::tracing, prelude::*};
-use regex::Regex;
 
 use crate::domain;
-use crate::{infra, ui::Text};
+use crate::infra;
 
 
 #[derive(Clone, PartialEq, Eq)]
@@ -16,7 +15,7 @@ pub struct TextHandler{
 }
 
 impl TextHandler {
-    pub fn New(book_id: String)->TextHandler{
+    pub fn new(book_id: String)->TextHandler{
         return TextHandler { book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), start_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
     }
 }
@@ -28,6 +27,10 @@ pub fn fetch_chapter(text_handler: &mut TextHandler){
         let html=infra::chapters::fetch_chapter(&text_handler.book_id, (text_handler.chapter_idx)()).await;    
         match html{
             Ok(txt)=>{
+                let next=infra::chapters::fetch_cursor_text(&text_handler.book_id).await;
+                if let Ok(text)=next{
+                    text_handler.start_text.set(text.text);
+                }
                 text_handler.chapter.set(txt.text.clone());
                 domain::page_forward::render_next_page(&mut text_handler);
             },
@@ -37,7 +40,7 @@ pub fn fetch_chapter(text_handler: &mut TextHandler){
 }
 
 pub fn use_text(book_id: String) -> TextHandler {
-    let txt=TextHandler::New(book_id);
+    let txt=TextHandler::new(book_id);
     let a=txt.clone();
     use_effect(move ||{
         let mut text=a.clone();

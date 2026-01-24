@@ -1,7 +1,6 @@
 use crate::domain::cursor::BookCursor;
 use crate::infra::auth::{get_with_auth,post_with_auth};
 
-pub const MIN_START_TEXT_LEN: usize = 50;
 
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -47,6 +46,7 @@ pub async fn save_cursor(cursor: &BookCursor) -> Result<(), String> {
 use std::sync::Mutex;
 #[cfg(feature = "mock")]
 use once_cell::sync::Lazy;
+#[cfg(feature = "mock")]
 use regex::Regex;
 #[cfg(feature = "mock")]
 use crate::domain::cursor::Cursor;
@@ -55,6 +55,9 @@ use dioxus::logger::tracing;
 #[cfg(feature = "mock")]
 static MOCK_CURSOR: Lazy<Mutex<Option<BookCursor>>> =
     Lazy::new(|| Mutex::new(None));
+#[cfg(feature = "mock")]
+pub const MIN_START_TEXT_LEN: usize = 50;
+
 
 #[cfg(feature = "mock")]
 pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {

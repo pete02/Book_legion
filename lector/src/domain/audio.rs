@@ -1,19 +1,14 @@
 use std::{collections::HashMap, time::Duration};
 
 
-use dioxus::{html::{a, audio}, logger::tracing, prelude::*};
+use dioxus::{ logger::tracing, prelude::*};
 use gloo_timers::future::sleep;
 use js_sys::{Array, Uint8Array};
 use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
-use crate::{domain::{self, book::get_book_progress, cursor::{self, BookCursor, Cursor}}, infra};
+use crate::{domain::{self, cursor::{ BookCursor, Cursor}}, infra};
 
 
-#[derive(Clone, PartialEq)]
-pub struct AudioChunk{
-    url:String,
-    cursor: domain::cursor::BookCursor
-}
 
 #[derive(Clone, PartialEq, Copy)]
 pub struct AudioData{

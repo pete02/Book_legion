@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use dioxus::prelude::*;
-use reqwasm::http::Request;
 #[cfg(feature = "mock")]
 use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "mock")]

@@ -9,11 +9,6 @@ pub struct User {
     pub auth_token: Option<String>,
 }
 
-
-pub fn use_user()->Signal<User>{
-    use_context::<Signal<User>>()
-}
-
 pub fn current_name()->String{
     let user: Signal<User> = use_context::<Signal<User>>();
     user.read().username.clone()
