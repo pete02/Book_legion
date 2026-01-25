@@ -3,37 +3,50 @@ use dioxus::{logger::tracing, prelude::*};
 
 use crate::domain::{self, text::normalize_html_fragment};
 use crate::domain::text::TextHandler;
+use crate::infra;
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Document, HtmlElement, Node, Range, window};
 
 
 pub fn render_prev_page(text_handler:&mut TextHandler){
-    let mut offset=domain::text::find_sentence_offset_with_html_backtrack(&(text_handler.chapter)(), &(text_handler.cur_text)(), &(text_handler.map)());
-    text_handler.chapter_end.set(false);
-    text_handler.next_text.set((text_handler.cur_text)());
-    tracing::debug!("next: {}",(text_handler.next_text)());
+    domain::text::save_cursor(text_handler, (text_handler.cur_text)());
+    let offset;
+
+    if (text_handler.start_at_end)(){
+        offset=(text_handler.chapter)().len();
+        text_handler.start_at_end.set(false);
+    }else if (text_handler.cur_text)().len()>0{
+        offset=domain::text::find_sentence_offset_with_html_backtrack(&(text_handler.chapter)(), &(text_handler.cur_text)(), &(text_handler.map)());
+        text_handler.chapter_end.set(false);
+        text_handler.next_text.set((text_handler.cur_text)());
+    }else{
+        prev_chapter(text_handler);
+        return;
+    }    
+
+    
 
     let container = domain::text::get_container();
-
-    offset=adjust_for_open_tags(&(text_handler.chapter)(), offset);
-
     let vis=&(text_handler.chapter)()[..offset];
-
-    let visible=normalize_html_fragment(vis);
-    text_handler.visible_text.set(visible);
+    
+    if !has_visible_text(vis) {
+        prev_chapter(text_handler);
+        return;
+    }
+        
+    text_handler.set_visible(vis.to_owned());
     
 
     let mut handler_for_trim = text_handler.clone();
     let closure = Closure::once_into_js(move || {
         container.set_scroll_top(container.scroll_height());
         if let Some(node) = first_visible_text_container(&container.clone().into(), container.get_bounding_client_rect().top()) {
-            tracing::debug!("tx:{:?}",node);
             let jump=domain::text::set_text(&node, node.text_content().unwrap_or_default());
             handler_for_trim.cur_text.set(jump);
-            tracing::debug!("next back: {}",(handler_for_trim.cur_text)());
-            
         }else{
+            tracing::debug!("offset: {}", offset);
             tracing::debug!("issues");
+            prev_chapter(&mut handler_for_trim);
         }
     });
 
@@ -46,6 +59,7 @@ pub fn render_prev_page(text_handler:&mut TextHandler){
         .unwrap();
 
 }
+
 
 
 fn text_container_ancestor(mut node: Node) -> Option<web_sys::Element> {
@@ -98,41 +112,30 @@ fn first_visible_text_container(
     None
 }
 
+fn prev_chapter(text_handler: &mut TextHandler){
+    if (text_handler.chapter_idx)() > 0 {
+        text_handler.chapter_idx.set((text_handler.chapter_idx)() - 1);
+    }else{
+        return;
+    }
+    text_handler.chapter_end.set(true);
+    text_handler.start_at_end.set(true);
+    domain::text::fetch_chapter(text_handler, render_prev_page);
+}
 
-fn adjust_for_open_tags(chapter_html: &str, mut safe_start: usize) -> usize {
-    let snippet = &chapter_html[..safe_start];
-    
-    // Find the last '<' before safe_start
-    if let Some(pos) = snippet.rfind('<') {
-        let tag_text = &snippet[pos..];
-        tracing::debug!("tag: {}",tag_text);
-        if tag_text.starts_with("</") {
-            // closing tag → safe
-            return safe_start;
-        } else if tag_text.starts_with('<') {
-            // opening tag → check if it is closed
-            let tag_name = extract_tag_name(tag_text);
-            if let Some(tag_name) = tag_name {
-                // check if the tag is closed before safe_start
-                let closing_tag = format!("</{}>", tag_name);
-                if snippet.contains(&closing_tag) {
-                    // tag closed already → safe
-                    return safe_start;
-                } else {
-                    // tag not closed → move safe_start back to include the opening tag
-                    return pos;
-                }
+pub fn has_visible_text(html: &str) -> bool {
+    let mut inside_tag = false;
+
+    for c in html.chars() {
+        match c {
+            '<' => inside_tag = true,
+            '>' => inside_tag = false,
+            _ if !inside_tag && !c.is_whitespace() => {
+                return true;
             }
+            _ => {}
         }
     }
 
-    safe_start
-}
-
-fn extract_tag_name(tag: &str) -> Option<String> {
-    // matches <tag ...> or <tag>
-    let tag = tag.trim_start_matches('<').trim_start_matches('/');
-    let end = tag.find(|c: char| c.is_whitespace() || c == '>' || c == '/').unwrap_or(tag.len());
-    if end == 0 { return None; }
-    Some(tag[..end].to_string())
+    false
 }

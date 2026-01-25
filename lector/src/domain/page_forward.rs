@@ -9,7 +9,7 @@ use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Document, HtmlElement, Range, window};
 use crate::domain::text::TextHandler;
 
-const DEBUG:bool=true;
+const DEBUG:bool=false;
 
 #[macro_export]
 macro_rules! debug_flagged {
@@ -28,7 +28,7 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
         next_chapter(text_handler);
         return;
     }
-    save_cursor(text_handler.clone());
+    domain::text::save_cursor(text_handler, (text_handler.next_text)());
 
     let chapter = (text_handler.chapter)();
     let start_text = (text_handler.next_text)();
@@ -37,7 +37,7 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
 
     let new_visible = chapter[start_offset..].to_string();
     let vis= normalize_html_fragment(&new_visible);
-    text_handler.visible_text.set(vis);
+    text_handler.set_visible(vis);
     let container=domain::text::get_container();
     container.set_scroll_top(0);
 
@@ -56,22 +56,6 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
         .unwrap();
 }
 
-fn save_cursor(text_handler: TextHandler){
-    spawn(async move{
-        if(text_handler.next_text)().len() > 0{
-            let cursor=infra::cursor::get_cursor_from_text(&text_handler.book_id, (text_handler.chapter_idx)(), &(text_handler.next_text)()).await;
-            match cursor {
-                Err(e)=>tracing::error!("No cursor founnd: {}",e),
-                Ok(c)=>{domain::cursor::save_bookcursor(c).await;}
-            }
-        }else{
-            let mut cursor=domain::cursor::load_bookcursor(text_handler.book_id).await;
-            cursor.cursor.chapter=(text_handler.chapter_idx)();
-            domain::cursor::save_bookcursor(cursor).await;
-        }
-    });
-}
-
 pub fn trim_overflowing_node(text_handler: &mut TextHandler){
     text_handler.cur_text.set((text_handler.next_text)());
     debug_flagged!("cur_text: {}", (text_handler.cur_text)());
@@ -87,18 +71,17 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
 
     if child.1{
         text_handler.next_text.set(domain::text::set_text(&child.0,child.0.text_content().unwrap_or_default()));
-        debug_flagged!("next txt: {}",(text_handler.next_text)());
+
     }else{
         let (visible,hidden)=split_node_by_visible_words(
             &document,
             &child.0,
             container.get_bounding_client_rect().bottom()
         );
-
+        tracing::debug!("hidden: {}",hidden);
         let (vis,mut hid)=snap_to_last_sentence_break(&visible, &hidden);
         split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid, text_handler);
         text_handler.next_text.set(domain::text::set_text(&child.0,hid));
-        debug_flagged!("next txt: {}",(text_handler.next_text)());
         
     }
 }
@@ -187,7 +170,6 @@ fn split_node_by_visible_words(
 
         current_offset = end_offset + 1;
     }
-
     return (visible_text, hidden_text);
 }
 
@@ -245,5 +227,5 @@ pub fn split_and_hide_node_in_chapter(
 fn next_chapter(text_handler: &mut TextHandler){
     text_handler.chapter_idx.set((text_handler.chapter_idx)()+1);
     text_handler.chapter_end.set(false);
-    domain::text::fetch_chapter(text_handler);
+    domain::text::fetch_chapter(text_handler, render_next_page);
 }
