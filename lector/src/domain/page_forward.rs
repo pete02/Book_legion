@@ -32,7 +32,8 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
 
     let chapter = (text_handler.chapter)();
     let start_text = (text_handler.next_text)();
-    let start_offset = domain::text::find_sentence_offset_with_html_backtrack(&chapter, &start_text);
+    let map=(text_handler.map)();
+    let start_offset = domain::text::find_sentence_offset_with_html_backtrack(&chapter, &start_text, &map);
 
     let new_visible = chapter[start_offset..].to_string();
     let vis= normalize_html_fragment(&new_visible);

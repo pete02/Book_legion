@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use dioxus::{logger::tracing, prelude::*};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -16,6 +18,12 @@ static SENTENCE_SPLIT: Lazy<Regex>= Lazy::new(||Regex::new(r#"([^.!?…]+)[.!?�
 
 
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TextMap {
+    pub plain: String,
+    pub html_offsets: Vec<usize>, // same length as plain.chars()
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct TextHandler{
     pub book_id: String,
@@ -24,12 +32,13 @@ pub struct TextHandler{
     pub cur_text: Signal<String>,
     pub next_text: Signal<String>,
     pub chapter_idx: Signal<usize>,
-    pub chapter_end: Signal<bool>
+    pub chapter_end: Signal<bool>,
+    pub map: Signal<TextMap>
 }
 
 impl TextHandler {
     pub fn new(book_id: String)->TextHandler{
-        return TextHandler { book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
+        return TextHandler {map: use_signal(||TextMap { plain: "".to_owned(), html_offsets: Vec::new() }), book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
     }
 }
 
@@ -40,12 +49,8 @@ pub fn fetch_chapter(text_handler: &mut TextHandler){
         let html=infra::chapters::fetch_chapter(&text_handler.book_id, (text_handler.chapter_idx)()).await;    
         match html{
             Ok(txt)=>{
-                let next=infra::chapters::fetch_cursor_text(&text_handler.book_id).await;
-                if let Ok(text)=next{
-                    text_handler.next_text.set(text.text.clone());
-                    text_handler.cur_text.set(text.text);
-                }
                 text_handler.chapter.set(txt.text.clone());
+                text_handler.map.set(build_text_map_from_html( &(text_handler.chapter)()));
                 domain::page_forward::render_next_page(&mut text_handler);
             },
             Err(e)=>tracing::error!("error in getting chapter:{}",e)
@@ -57,8 +62,16 @@ pub fn use_text(book_id: String) -> TextHandler {
     let txt=TextHandler::new(book_id);
     let a=txt.clone();
     use_effect(move ||{
-        let mut text=a.clone();
-        fetch_chapter(&mut text);
+        let mut text_handler=a.clone();
+        
+        spawn(async move{
+            let next=infra::chapters::fetch_cursor_text(&text_handler.book_id).await;
+            if let Ok(text)=next{
+                text_handler.next_text.set(text.text.clone());
+                text_handler.cur_text.set(text.text);
+            }
+            fetch_chapter(&mut text_handler);
+        });
     });
     return txt;
 }
@@ -66,67 +79,37 @@ pub fn use_text(book_id: String) -> TextHandler {
 pub fn find_sentence_offset_with_html_backtrack(
     chapter_html: &str,
     start_snippet: &str,
+    map: &TextMap
 ) -> usize {
-    let candidate_start = find_sentence_offset(chapter_html, start_snippet);
-
-    let mut safe_start = candidate_start;
-
-    while safe_start > 0 {
-        if let Some(pos) = chapter_html[..safe_start].rfind('<') {
-            if chapter_html[pos..].starts_with("</") {
-                safe_start = pos;
-            } else {
-                safe_start = pos;
-                break;
-            }
-        } else {
-            safe_start = 0;
-            break;
-        }
+    tracing::debug!("searching: {}", start_snippet);
+    if let Some(pos) = map.plain.find(&normalize_text(start_snippet)) {
+        tracing::debug!("found pos: {}", pos);
+        let val=map.html_offsets[pos];
+        tracing::debug!("val: {}", val);
+        val
+    } else {
+        tracing::debug!("no pos");
+        0
     }
-
-
-    safe_start
 }
 
 
-pub fn find_sentence_offset(chapter_html: &str, start_snippet: &str) -> usize {
-    let snippet_sents = split_sentences(start_snippet);
-    if snippet_sents.is_empty() {
-        return 0;
+
+pub fn find_sentence_offset(
+    start_snippet: &str,
+    map: &TextMap
+) -> usize {
+
+
+    let plain_norm   = normalize_text(&map.plain);
+    let snippet_norm = normalize_text(start_snippet);
+    if let Some(pos) = plain_norm.find(&snippet_norm) {
+        tracing::debug!("map: {:?}",map);
+        return map.html_offsets[pos];
     }
 
-    let first_sent = &snippet_sents[0];
-    let mut candidates = vec![];
-    let mut search_start = 0;
-    while let Some(pos) = chapter_html[search_start..].find(first_sent) {
-        candidates.push((search_start + pos,first_sent.len()));
-        search_start += pos + first_sent.len();
-    }
-    let org_length=candidates.len();
-
-    while candidates.len() > 1 {
-        candidates.retain(|&(start, _)| {
-            let start=clamp_to_char_boundary(chapter_html, start);
-            let normal=normalize_text(&chapter_html[start..]);
-            if let Some(i)=normal.find(&normalize_text(start_snippet)){
-                i<10
-            }else{
-                false
-            }
-        });
-    }
-
-    if candidates.len()==0{
-        tracing::error!(" Searching for: {}",start_snippet);
-        tracing::error!("Did not find any candidate. Search start: {}",search_start);
-        tracing::error!("Tried to find: {}", first_sent);
-        tracing::error!("Original length: {}", org_length);
-        return 0;
-    }
-    candidates[0].0
+    0
 }
-
 
 
 fn split_sentences(text: &str) -> Vec<String> {
@@ -139,6 +122,8 @@ fn split_sentences(text: &str) -> Vec<String> {
         .filter(|s| s.chars().count() > 1) 
         .collect()
 }
+
+
 
 fn clamp_to_char_boundary(s: &str, idx: usize) -> usize {
     if idx >= s.len() {
@@ -270,3 +255,32 @@ pub fn normalize_html_fragment(html: &str) -> String {
     repair_end(&repaired)
 }
 
+
+pub fn build_text_map_from_html(chapter_html: &str) -> TextMap{
+    let mut plain = String::new();
+    let mut html_offsets = Vec::new();
+    let mut inside_tag = false;
+
+    for (idx, c) in chapter_html.char_indices() {
+        if c == '<' {
+            inside_tag = true;
+            continue;
+        } else if c == '>' {
+            inside_tag = false;
+            continue;
+        }
+
+        if inside_tag {
+            continue;
+        }
+
+        if matches!(c, '.' | '!' | '?' | '…' | '"' | '\'' | '“' | '”') {
+            continue;
+        }
+
+        plain.push(c.to_ascii_lowercase());
+        html_offsets.push(idx);
+    }
+
+    TextMap { plain, html_offsets }
+}

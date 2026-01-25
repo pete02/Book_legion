@@ -8,7 +8,7 @@ use web_sys::{Document, HtmlElement, Node, Range, window};
 
 
 pub fn render_prev_page(text_handler:&mut TextHandler){
-    let mut offset=domain::text::find_sentence_offset_with_html_backtrack(&(text_handler.chapter)(), &(text_handler.cur_text)());
+    let mut offset=domain::text::find_sentence_offset_with_html_backtrack(&(text_handler.chapter)(), &(text_handler.cur_text)(), &(text_handler.map)());
     text_handler.chapter_end.set(false);
     text_handler.next_text.set((text_handler.cur_text)());
     tracing::debug!("next: {}",(text_handler.next_text)());
