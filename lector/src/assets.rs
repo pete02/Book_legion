@@ -9,5 +9,3 @@ pub const FORWARD: Asset = asset!("/assets/forward.png");
 #[cfg(feature = "mock")]
 pub const MOCK_COVER: Asset = asset!("/test_assets/test.jpg");
 
-#[cfg(feature = "mock")]
-pub const MOCK_MP3: Asset = asset!("/test_assets/test.mp3");

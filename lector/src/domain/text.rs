@@ -134,7 +134,7 @@ fn split_sentences(text: &str) -> Vec<String> {
     SENTENCE_SPLIT.captures_iter(text)
         .map(|cap|{
             let s=cap.get(1).unwrap().as_str().trim();
-            s.trim_matches(&['"', '“', '”', '\''][..]).to_string()
+            s.trim_matches(&['"', '“', '”', '\'',' '][..]).to_string()
         })
         .filter(|s| s.chars().count() > 1) 
         .collect()
@@ -193,3 +193,80 @@ pub fn set_text(child: &Node, text: String) ->String{
 
     return hid.to_string();
 }
+
+#[derive(Debug)]
+enum HtmlToken<'a> {
+    Open(&'a str),
+    Close(&'a str),
+    SelfClosing,
+}
+
+fn parse_tag(tag: &str) -> HtmlToken<'_> {
+    if tag.starts_with("</") {
+        HtmlToken::Close(tag[2..].trim_end_matches('>').trim())
+    } else if tag.ends_with("/>") {
+        HtmlToken::SelfClosing
+    } else {
+        HtmlToken::Open(
+            tag.trim_start_matches('<')
+               .trim_end_matches('>')
+               .split_whitespace()
+               .next()
+               .unwrap()
+        )
+    }
+}
+
+fn collect_unbalanced_tags(html: &str) -> Vec<String> {
+    let mut stack = Vec::new();
+
+    let mut rest = html;
+    while let Some(start) = rest.find('<') {
+        let Some(end) = rest[start..].find('>') else { break };
+        let tag = &rest[start..start + end + 1];
+
+        match parse_tag(tag) {
+            HtmlToken::Open(name) => stack.push(name.to_string()),
+            HtmlToken::Close(name) => {
+                if let Some(pos) = stack.iter().rposition(|t| t == name) {
+                    stack.truncate(pos);
+                }
+            }
+            HtmlToken::SelfClosing => {}
+        }
+
+        rest = &rest[start + end + 1..];
+    }
+
+    stack
+}
+
+fn repair_beginning(html: &str) -> String {
+    let mut repaired = String::new();
+
+    let unclosed = collect_unbalanced_tags(html);
+
+    for tag in &unclosed {
+        repaired.push_str(&format!("<{}>", tag));
+    }
+
+    repaired.push_str(html);
+    repaired
+}
+
+fn repair_end(html: &str) -> String {
+    let unclosed = collect_unbalanced_tags(html);
+    let mut repaired = html.to_string();
+
+    for tag in unclosed.iter().rev() {
+        repaired.push_str(&format!("</{}>", tag));
+    }
+
+    repaired
+}
+
+pub fn normalize_html_fragment(html: &str) -> String {
+    let repaired = repair_beginning(html);
+    repair_end(&repaired)
+}
+

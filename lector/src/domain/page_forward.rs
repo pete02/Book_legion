@@ -3,12 +3,13 @@ use web_sys::Node;
 
 
 use crate::domain;
+use crate::domain::text::normalize_html_fragment;
 use crate::infra;
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Document, HtmlElement, Range, window};
 use crate::domain::text::TextHandler;
 
-const DEBUG:bool=false;
+const DEBUG:bool=true;
 
 #[macro_export]
 macro_rules! debug_flagged {
@@ -34,7 +35,8 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
     let start_offset = domain::text::find_sentence_offset_with_html_backtrack(&chapter, &start_text);
 
     let new_visible = chapter[start_offset..].to_string();
-    text_handler.visible_text.set(new_visible);
+    let vis= normalize_html_fragment(&new_visible);
+    text_handler.visible_text.set(vis);
     let container=domain::text::get_container();
     container.set_scroll_top(0);
 
@@ -235,11 +237,7 @@ pub fn split_and_hide_node_in_chapter(
         parent.insert_before(&hidden_node, Some(&node)).ok()?;
         parent.remove_child(&node).ok()?;
     }
-
-    let chapter_html = (text_handler.chapter)();
-    let new_outer_html = format!("{}{}", visible_node.outer_html(), hidden_node.outer_html());
-    let updated_chapter = chapter_html.replacen(&original_outer, &new_outer_html, 1);
-    text_handler.chapter.set(updated_chapter);
+    
     Some(hidden_node.dyn_into::<HtmlElement>().ok()?)
 }
 

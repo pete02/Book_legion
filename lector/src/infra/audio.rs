@@ -64,7 +64,7 @@ pub async fn get_chunks(
         return Err("no chunks found".into());
     }
 
-    let bytes = dioxus::asset_resolver::read_asset_bytes(&assets::MOCK_MP3).await.unwrap();
+    //let bytes = dioxus::asset_resolver::read_asset_bytes(&assets::MOCK_MP3).await.unwrap();
 
     let start_chapter = cursor.cursor.chapter;
     let start_chunk = cursor.cursor.chunk;
@@ -75,7 +75,7 @@ pub async fn get_chunks(
 
     for i in 0..request_size {
         results.push(ChunkResponse {
-            data: bytes.to_vec(),
+            data: Vec::new(),
             cursor: domain::cursor::Cursor {
                 chapter: start_chapter,
                 chunk: start_chunk + i as usize,
