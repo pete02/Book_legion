@@ -52,6 +52,9 @@ impl BookCursor {
 
 pub async fn load_bookcursor(book_id: String)->BookCursor{
     let username=domain::login::current_name();
+    if username ==""{
+        tracing::error!("Could not get any username");
+    }
     match infra::fetch_cursor(&book_id).await{
         Ok(c) => return c,
         Err(_) => return  BookCursor::new(&username, &book_id, 0, 0),
@@ -61,31 +64,14 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
 pub async fn save_bookcursor(cursor:BookCursor){
     let _=infra::save_cursor(&cursor).await;
 }
+pub fn sync_save_bookcursor(cursor:BookCursor){
+    spawn(async move{
+        save_bookcursor(cursor).await
+    });
+}
 
 
-
-use dioxus::prelude::*;
+use dioxus::{core::spawn, logger::tracing};
 use serde::{Deserialize, Serialize};
 use crate::{domain, infra::cursor as infra};
 
-pub fn use_cursor(book_id: String) -> Signal<Option<BookCursor>> {
-    let mut cursor = use_signal(|| None);
-    use_effect(move || {
-        let book_id = book_id.clone();
-        spawn(async move {
-            cursor.set(Some(load_bookcursor(book_id).await));
-        });
-    });
-
-    cursor
-}
-
-pub fn save_cursor(cursor: Signal<Option<BookCursor>>) {
-    use_effect(move || {
-        if let Some(c) = cursor() {
-            spawn(async move {
-                save_bookcursor(c);
-            });
-        }
-    });
-}

@@ -11,9 +11,9 @@ import (
 )
 
 type PrettySpineItem struct {
-	Index  int    `json:"Index"`
-	Number int    `json:"Number"`
-	Title  string `json:"Title"`
+	Index  int    `json:"index"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
 }
 type NavToc struct {
 	NavPoints []NavPoint `xml:"navMap>navPoint"`

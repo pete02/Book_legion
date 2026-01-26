@@ -15,6 +15,7 @@ import (
 	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/manager"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	"github.com/book_legion-tribune_logistica/internal/tts"
 	"github.com/book_legion-tribune_logistica/internal/types"
 	// replace with actual module path
 )
@@ -56,7 +57,12 @@ func main() {
 
 	if config.TTSBackend == TTSMock {
 		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-			return TTS_fetch_mock(c, api)
+			return tts.TTS_fetch_mock(c, api)
+		}
+		go manager.StartOrderProcessor(fetchFn)
+	} else {
+		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
+			return tts.TTS_fetch(c, api, config.TTSAPIURL)
 		}
 		go manager.StartOrderProcessor(fetchFn)
 	}
@@ -70,10 +76,12 @@ func main() {
 	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
 	r.Get("/api/v1/cursors/{bookID}/text", api.GetCursorText)
 	r.Get("/api/v1/books/{bookID}", api.GetBook)
+	r.Get("/api/v1/book/{book_id}/chapterprogress", api.GetChapterProgress)
+	r.Get("/api/v1/book/{book_id}/progress", api.GetBookProgress)
 	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
 	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
-	r.Post("/api/v1/books/{book_id}/chapters/{chapter_index}/cursor", api.CalculateCursorFromText)
-	r.Get("/api/v1/books/{bookID}/chunks", api.GetChunks)
+	r.Post("/api/v1/books/{book_id}/chapters/{chapter_index}/cursor", api.SaveCursorText)
+	r.Post("/api/v1/books/{bookID}/chunks", api.GetChunks)
 	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)
 	r.Get("/api/v1/books/{bookID}/cover", api.GetCover)
 	r.Get("/api/v1/books/{bookID}/css", api.GetCSSFiles)
@@ -85,30 +93,6 @@ func main() {
 	if err := http.ListenAndServe(":8000", r); err != nil {
 		fmt.Printf("Server failed: %v\n", err)
 	}
-}
-
-func TTS_fetch_mock(c types.UserCursor, api api.API) (types.Chunk, bool) {
-
-	chunk, err := extractChunk(c, api)
-	if err != nil {
-		fmt.Printf("Error in fetching chunk: %v", err)
-		return types.Chunk{}, false
-	}
-	ch := types.Chunk{
-		ID:   c,
-		Data: []byte(chunk),
-	}
-
-	return ch, true
-}
-
-func extractChunk(c types.UserCursor, api api.API) (string, error) {
-	epub, err := epub.Load(api.DB, c.BookID)
-	if err != nil {
-		return "", err
-	}
-	fmt.Printf("Extract: %d, %d\n", c.Cursor.Chapter, c.Cursor.Chunk)
-	return epub.ExtractChunk(c.Cursor.Chapter, c.Cursor.Chunk, api.Policy)
 }
 
 func createStorage(cfg Config) (storage.Storage, error) {

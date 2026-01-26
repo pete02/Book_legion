@@ -2,9 +2,9 @@ use dioxus::{logger::tracing, prelude::*};
 use web_sys::Node;
 
 
-use crate::domain;
+use crate::domain::cursor::Cursor;
+use crate::domain::{self, cursor::BookCursor};
 use crate::domain::text::normalize_html_fragment;
-use crate::infra;
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Document, HtmlElement, Range, window};
 use crate::domain::text::TextHandler;
@@ -33,7 +33,7 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
     let chapter = (text_handler.chapter)();
     let start_text = (text_handler.next_text)();
     let map=(text_handler.map)();
-    let start_offset = domain::text::find_sentence_offset_with_html_backtrack(&chapter, &start_text, &map);
+    let start_offset = domain::text::find_sentence_offset_with_html_backtrack( &start_text, &map);
 
     let new_visible = chapter[start_offset..].to_string();
     let vis= normalize_html_fragment(&new_visible);
@@ -78,9 +78,9 @@ pub fn trim_overflowing_node(text_handler: &mut TextHandler){
             &child.0,
             container.get_bounding_client_rect().bottom()
         );
-        tracing::debug!("hidden: {}",hidden);
-        let (vis,mut hid)=snap_to_last_sentence_break(&visible, &hidden);
-        split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid, text_handler);
+
+        let (vis,hid)=snap_to_last_sentence_break(&visible, &hidden);
+        split_and_hide_node_in_chapter(&document, &child.0, &vis, &hid);
         text_handler.next_text.set(domain::text::set_text(&child.0,hid));
         
     }
@@ -199,15 +199,12 @@ pub fn split_and_hide_node_in_chapter(
     child: &Node,
     visible_html: &str,
     hidden_html: &str,
-    text_handler: &mut TextHandler,
 ) -> Option<HtmlElement> {
     if hidden_html.is_empty() || visible_html.is_empty() {
         return None;
     }
      let node=child.clone().dyn_into::<HtmlElement>()
             .ok()?;
-
-    let original_outer = node.outer_html();
 
     let visible_node = node.clone_node_with_deep(false).ok()?.dyn_into::<HtmlElement>().ok()?;
     visible_node.set_inner_html(visible_html);
@@ -227,5 +224,11 @@ pub fn split_and_hide_node_in_chapter(
 fn next_chapter(text_handler: &mut TextHandler){
     text_handler.chapter_idx.set((text_handler.chapter_idx)()+1);
     text_handler.chapter_end.set(false);
+    let book_cursor=BookCursor{
+        user_id: domain::login::current_name(),
+        book_id: text_handler.book_id.clone(),
+        cursor: Cursor{chapter: (text_handler.chapter_idx)(), chunk: 0}
+    };
+    domain::cursor::sync_save_bookcursor(book_cursor);
     domain::text::fetch_chapter(text_handler, render_next_page);
 }

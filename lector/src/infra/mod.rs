@@ -1,4 +1,3 @@
-pub mod covers;
 pub mod manifest;
 
 pub mod login;

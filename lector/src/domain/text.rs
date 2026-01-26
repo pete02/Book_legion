@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::format;
 
 use dioxus::{logger::tracing, prelude::*};
 use once_cell::sync::Lazy;
@@ -11,11 +10,11 @@ use web_sys::HtmlElement;
 use web_sys::Node;
 
 use crate::domain;
+use crate::domain::cursor::BookCursor;
+use crate::domain::cursor::Cursor;
 use crate::infra;
 
 static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
-
-static SENTENCE_SPLIT: Lazy<Regex>= Lazy::new(||Regex::new(r#"([^.!?…]+)[.!?…]+(\s*)"#).unwrap());
 
 
 
@@ -55,7 +54,7 @@ where
 {
     tracing::debug!("Fetch chapter: {}", (text_handler.chapter_idx)());
     let mut text_handler = text_handler.clone();
-
+    
     spawn(async move {
         let html = infra::chapters::fetch_chapter(&text_handler.book_id, (text_handler.chapter_idx)()).await;
 
@@ -64,7 +63,6 @@ where
                 text_handler.chapter.set(txt.text.clone());
                 text_handler.map.set(build_text_map_from_html(&(text_handler.chapter)()));
 
-                // Call the renderer you passed in
                 renderer(&mut text_handler);
             }
             Err(e) => tracing::error!("error in getting chapter: {}", e),
@@ -83,6 +81,7 @@ pub fn use_text(book_id: String) -> TextHandler {
             if let Ok(text)=next{
                 text_handler.next_text.set(text.text.clone());
                 text_handler.cur_text.set(text.text);
+                text_handler.chapter_idx.set(text.cursor.cursor.chapter);
             }
             fetch_chapter(&mut text_handler, domain::page_forward::render_next_page);
         });
@@ -92,29 +91,31 @@ pub fn use_text(book_id: String) -> TextHandler {
 
 
 pub fn find_sentence_offset_with_html_backtrack(
-    chapter_html: &str,
     start_snippet: &str,
     map: &TextMap
 ) -> usize {
     let normalized = normalize_text(start_snippet);
 
     if let Some(pos) = map.plain.find(&normalized) {
-        let end = (pos + 1000).min(map.plain.len());
         let val =map.html_offsets[&pos];
-        let html_end = (val + 1000).min(chapter_html.len());
-
         val
     } else {
-        tracing::debug!("no pos");
+        tracing::error!("no pos");
+        tracing::error!("tired to search for: {}",normalize_text(start_snippet));
+        tracing::error!("Originally: {}",start_snippet);
+        tracing::error!("From: {}",map.plain);
         0
     }
 }
 
 
-fn normalize_text(s: &str) -> String {
+fn check_char_match(c:&char)->bool{
+    matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”')
+}
 
+fn normalize_text(s: &str) -> String {
     HTML_TAG_RE.replace_all(s, "").to_string().chars()
-        .filter(|c| !matches!(c, '.' | '!' | '?' | '…' | '"' | '\'' | '“' | '”'))
+        .filter(|c| !check_char_match(c))
         .collect::<String>()
         .trim()
         .to_lowercase()
@@ -131,7 +132,7 @@ pub fn set_text(child: &Node, text: String) ->String{
     let mut hid=text;
     let mut current = child.next_sibling();
     
-    while hid.len() <= 50 {
+    while hid.len() <= 100 {
         let node = match current {
             Some(ref n) => n,
             None => break,
@@ -147,64 +148,18 @@ pub fn set_text(child: &Node, text: String) ->String{
     return hid.to_string();
 }
 
-#[derive(Debug)]
-enum HtmlToken<'a> {
-    Open(&'a str),
-    Close(&'a str),
-    SelfClosing,
-}
-
-fn parse_tag(tag: &str) -> HtmlToken<'_> {
-    if tag.starts_with("</") {
-        HtmlToken::Close(tag[2..].trim_end_matches('>').trim())
-    } else if tag.ends_with("/>") {
-        HtmlToken::SelfClosing
-    } else {
-        HtmlToken::Open(
-            tag.trim_start_matches('<')
-               .trim_end_matches('>')
-               .split_whitespace()
-               .next()
-               .unwrap()
-        )
-    }
-}
-
-fn collect_unbalanced_tags(html: &str) -> Vec<String> {
-    let mut stack = Vec::new();
-
-    let mut rest = html;
-    while let Some(start) = rest.find('<') {
-        let Some(end) = rest[start..].find('>') else { break };
-        let tag = &rest[start..start + end + 1];
-
-        match parse_tag(tag) {
-            HtmlToken::Open(name) => stack.push(name.to_string()),
-            HtmlToken::Close(name) => {
-                if let Some(pos) = stack.iter().rposition(|t| t == name) {
-                    stack.truncate(pos);
-                }
-            }
-            HtmlToken::SelfClosing => {}
-        }
-
-        rest = &rest[start + end + 1..];
-    }
-
-    stack
-}
 
 
 pub fn find_first_closing_tag(html: &str) -> Option<(usize, String)> {
-    let mut rest = html;
-    let mut offset = 0;
+    let rest = html;
+    let offset = 0;
 
     while let Some(start) = rest.find("</") {
         let Some(end) = rest[start..].find('>') else { break; };
         let tag_text = &rest[start..start + end + 1];
         let tag_name = tag_text[2..tag_text.len() - 1].trim().to_string();
         let close_start = offset + start;
-        let close_end = offset + start + end + 1;
+
         return Some((close_start, tag_name));
     }
     None
@@ -253,7 +208,7 @@ pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
         }
 
         // skip normalized punctuation
-        if matches!(c, '.' | '!' | '?' | '…' | '"' | '\'' | '“' | '”') {
+        if check_char_match(&c) {
             continue;
         }
 

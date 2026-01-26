@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::{domain::cover::{CardData,use_cover}, styles};
+use crate::{domain::cover::{CardData}, styles};
 
 #[component]
 pub fn Cover(
@@ -7,17 +7,11 @@ pub fn Cover(
     #[props(default = "90%".to_string())] width: String,
     #[props(default = "400px".to_string())] max_width: String,
 ) -> Element {
-    let cover = use_cover(cover_path);
-
-    let Some(src) = cover() else {
-        return rsx!(div { class: "h-[400px]" });
-    };
-
     rsx! {
         img {
             class: "rounded-xl shadow-md object-contain",
             style: "width: {width}; max-width: {max_width}; height: auto; margin: 16px; display: block",
-            src: "{src}"
+            src: "{cover_path}"
         }
     }
 }

@@ -1,11 +1,8 @@
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PrettySpineItem {
-    #[serde(rename = "Index")]
     pub index: usize,
-    #[serde(rename = "Number")]
     pub number: usize,
-    #[serde(rename = "Title")]
     pub title: String,
 }
 
@@ -44,19 +41,29 @@ pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, Strin
 
 #[cfg(feature = "mock")]
 pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, String> {
-    let chapters = match book_id {
-        "b1" => vec![
-            PrettySpineItem { index: 0, number: 1, title: "Chapter 1".to_string() },
-            PrettySpineItem { index: 1, number: 2, title: "Chapter 2".to_string() },
-        ],
-        "b2" => vec![
-            PrettySpineItem { index: 0, number: 1, title: "First Chapter".to_string() },
-            PrettySpineItem { index: 1, number: 2, title: "Second Chapter".to_string() },
-        ],
-        _ => vec![
-            PrettySpineItem { index: 0, number: 1, title: "Default Chapter".to_string() },
-        ],
+    use serde_json::json;
+    use serde_json::Value;
+
+    // JSON data per book_id
+    let json_data: Value = match book_id {
+        "b1" => json!([
+            { "index": 4, "number": 1, "title": "Chapter: 1 New Beginnings" },
+            { "index": 5, "number": 2, "title": "Chapter: 2 The Caravanner’s Guild" },
+            { "index": 6, "number": 3, "title": "Chapter: 3 Dinner" },
+            { "index": 7, "number": 4, "title": "Chapter: 4 A Simple Home" }
+        ]),
+        "b2" => json!([
+            { "index": 0, "number": 1, "title": "First Chapter" },
+            { "index": 1, "number": 2, "title": "Second Chapter" }
+        ]),
+        _ => json!([
+            { "index": 0, "number": 1, "title": "Default Chapter" }
+        ]),
     };
+
+    // Deserialize JSON into Vec<PrettySpineItem>
+    let chapters: Vec<PrettySpineItem> = serde_json::from_value(json_data)
+        .map_err(|e| format!("Failed to deserialize mock JSON: {}", e))?;
 
     Ok(chapters)
 }
@@ -119,33 +126,40 @@ pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, Stri
 
 #[cfg(feature = "mock")]
 pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, String> {
-    // Paste your mock data here
-    let cursor_text = match book_id {
-        "b1" => CursorTextResponse {
-            cursor: domain::cursor::BookCursor {
-                user_id: "u1".to_string(),
-                book_id: "b1".to_string(),
-                cursor: domain::cursor::Cursor { chapter: 0, chunk: 11 },
+    use serde_json::json;
+    use serde_json::Value;
+
+    // Define the JSON data per book_id
+    let json_data: Value = match book_id {
+        "b1" => json!({
+            "cursor": {
+                "user_id": "pete",
+                "book_id": "b1",
+                "cursor": { "chapter": 1, "chunk": 0 }
             },
-            text: "That was assuming the distortions didn’t make such work impossible.Make no mistake, Mages, one and all, were vain creatures, but it wasn’t their vanity that inspired scrupulous attention to their own bodies, so much as devotion to their art.The older Mage moved with practiced grace and fluidity, obviously aware of her every gesture, careful not to brush any of her lines against others.".to_string(),
-        },
-        "b2" => CursorTextResponse {
-            cursor: domain::cursor::BookCursor {
-                user_id: "u1".to_string(),
-                book_id: "b2".to_string(),
-                cursor: domain::cursor::Cursor { chapter: 1, chunk: 0 },
+            "text": ""
+        }),
+        "b2" => json!({
+            "cursor": {
+                "user_id": "pete",
+                "book_id": "b2",
+                "cursor": { "chapter": 1, "chunk": 0 }
             },
-            text: "<p>Sample text for chunk 0 of chapter 1.</p>".to_string(),
-        },
-        _ => CursorTextResponse {
-            cursor: domain::cursor::BookCursor {
-                user_id: "u1".to_string(),
-                book_id: book_id.to_string(),
-                cursor: domain::cursor::Cursor { chapter: 0, chunk: 0 },
+            "text": "<p>Sample text for chunk 0 of chapter 1.</p>"
+        }),
+        _ => json!({
+            "cursor": {
+                "user_id": "pete",
+                "book_id": book_id,
+                "cursor": { "chapter": 0, "chunk": 0 }
             },
-            text: "<p>Default cursor text.</p>".to_string(),
-        },
+            "text": "<p>Default cursor text.</p>"
+        }),
     };
+
+    // Deserialize JSON into your CursorTextResponse
+    let cursor_text: CursorTextResponse = serde_json::from_value(json_data)
+        .map_err(|e| format!("Failed to deserialize mock JSON: {}", e))?;
 
     Ok(cursor_text)
 }

@@ -108,7 +108,7 @@ func (api *API) GetChapter(w http.ResponseWriter, r *http.Request) {
 }
 
 type progressResponse struct {
-	progress float32
+	Progress float32 `json:"progress"`
 }
 
 func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
@@ -153,9 +153,9 @@ func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
 		return
 	}
-
+	fmt.Printf("progress: %v", progress)
 	resp := progressResponse{
-		progress: progress,
+		Progress: progress,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -207,7 +207,7 @@ func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := progressResponse{
-		progress: progress,
+		Progress: progress,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -216,13 +216,13 @@ func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 type ChunksRequest struct {
-	UserCursor  types.UserCursor `json:"UserCursor"`
+	UserCursor  types.UserCursor `json:"usercursor"`
 	RequestSize int              `json:"requestSize"`
 }
 
 type ChunkResponse struct {
 	Data   string       `json:"data"`   // chunk content
-	Cursor types.Cursor `json:"Cursor"` // chapter & chunk
+	Cursor types.Cursor `json:"cursor"` // chapter & chunk
 }
 
 func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
@@ -319,7 +319,7 @@ func (api *API) GetCursorText(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(textCursor)
 }
 
-func (api *API) CalculateCursorFromText(w http.ResponseWriter, r *http.Request) {
+func (api *API) SaveCursorText(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -530,7 +530,7 @@ func (api *API) SaveCursor(w http.ResponseWriter, r *http.Request) {
 
 	// Optional: ensure the userID in body matches token
 	if req.UserID != userID {
-		fmt.Printf("Wrong userID, expected: %v", userID)
+		fmt.Printf("Wrong userID, expected: %v, Got %v\n", userID, req.UserID)
 		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
 		return
 	}
@@ -544,6 +544,7 @@ func (api *API) SaveCursor(w http.ResponseWriter, r *http.Request) {
 
 	}
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
 }
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {

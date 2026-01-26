@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -101,7 +102,7 @@ func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
-
+	fmt.Printf("Logging in: %v\n", req.Username)
 	refresh_token, err := login.VerifyUser(api.DB, req.Username, req.Password)
 	if err != nil {
 		http.Error(w, "Wrong credentials", http.StatusUnauthorized)

@@ -711,3 +711,90 @@ func TestCalculateCursorPlace_ChunkBoundary(t *testing.T) {
 		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
 	}
 }
+
+func TestCalculateCursorPlace_MissingSpace(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<p>This is sentence one. This is sentence two.</p>
+			<p>This is sentence three. This is sentence four.</p>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     30, // force multiple chunks
+		MinSize:        20,
+		MaxSize:        40,
+		MinSnippetSize: 20,
+	}
+
+	exampleHTML := `<p>This is sentencethree.</p>`
+
+	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cursor.Chunk == 0 {
+		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
+	}
+}
+
+func TestCalculateCursorPlace_Punctuations(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<p>This is sentence one. This is sentence two.</p>
+			<p>This is sentence three. This is sentence four.</p>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     30, // force multiple chunks
+		MinSize:        20,
+		MaxSize:        40,
+		MinSnippetSize: 20,
+	}
+
+	exampleHTML := `<p>This is sentence three!!!</p>`
+
+	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cursor.Chunk == 0 {
+		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
+	}
+}
+
+func TestCalculateCursorPlace_DifferentQuotes(t *testing.T) {
+	e := &Epub{}
+
+	e.extractChapter = func(navIndex int) ([]byte, error) {
+		return []byte(`
+			<p>This is sentence one. This is sentence two.</p>
+			<p>”This is sentence three.” This is sentence four.</p>
+		`), nil
+	}
+
+	policy := ChunkPolicy{
+		TargetSize:     30, // force multiple chunks
+		MinSize:        20,
+		MaxSize:        40,
+		MinSnippetSize: 20,
+	}
+
+	exampleHTML := `<p>"This is sentence three."</p>`
+
+	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cursor.Chunk == 0 {
+		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
+	}
+}

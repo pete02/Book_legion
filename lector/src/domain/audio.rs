@@ -82,6 +82,7 @@ pub async fn get_audio_url(mut audio: AudioData) {
         if cursors_ahead(&audio) < AHEAD {
             load_audio_urls(audio.clone());
         }
+        tracing::info!("audio_url: {}",url);
         audio.audio_url.set(url.clone());
     } else {
         get_audio_urls(audio.clone()).await;
@@ -89,7 +90,6 @@ pub async fn get_audio_url(mut audio: AudioData) {
             audio.audio_url.set(url.clone());
         }
     }
-
     spawn(async move{
         domain::cursor::save_bookcursor(current_cursor.clone()).await;
     });

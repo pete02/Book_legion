@@ -79,7 +79,7 @@ pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
 #[cfg(feature = "mock")]
 pub async fn save_cursor(cursor: &BookCursor) -> Result<(), String> {
     let mut guard = MOCK_CURSOR.lock().unwrap();
-    //tracing::debug!("save cursor: {:?}", cursor);
+    tracing::debug!("save cursor: {:?}", cursor);
     *guard = Some(cursor.clone());
     Ok(())
 }
@@ -90,6 +90,12 @@ pub async fn get_cursor_from_text(
     chapter_index: usize,
     snippet_html: &str,
 ) -> Result<BookCursor, String> {
+
+    if snippet_html.len() < 100{
+        use dioxus::logger::tracing;
+        tracing::error!("Snippet is too short: {}", snippet_html.len());
+        return Err("snippet too short".into())
+    }
     let payload = CursorRequest {
         snippet_html: snippet_html.to_string(),
     };
@@ -115,6 +121,8 @@ pub async fn get_cursor_from_text(
     chapter_index: usize,
     snippet_html: &str,
 ) -> Result<BookCursor, String> {
+    use dioxus::logger::tracing;
+
 
 
     let visible_len = visible_text_len(snippet_html);
@@ -122,6 +130,7 @@ pub async fn get_cursor_from_text(
     if visible_len < 50 {
         return Err("Snippet must contain at least 50 visible characters".to_string());
     }
+
 
     // Deterministic chunk derivation
     let chunk = visible_len / 200;

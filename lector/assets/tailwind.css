@@ -237,9 +237,6 @@
   .h-14 {
     height: calc(var(--spacing) * 14);
   }
-  .h-\[400px\] {
-    height: 400px;
-  }
   .h-full {
     height: 100%;
   }

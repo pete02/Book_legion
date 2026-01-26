@@ -260,8 +260,8 @@ func TestGetCursor(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if cursorResp["BookID"] != bookID {
-			t.Fatalf("Expected BookID %s, got %v", bookID, cursorResp["BookID"])
+		if cursorResp["book_id"] != bookID {
+			t.Fatalf("Expected BookID %s, got %v, %v", bookID, cursorResp["BookID"], cursorResp)
 		}
 	})
 
@@ -348,7 +348,7 @@ func TestCalculateCursorFromText(t *testing.T) {
 
 		w := httptest.NewRecorder()
 
-		api.CalculateCursorFromText(w, req)
+		api.SaveCursorText(w, req)
 
 		resp := w.Result()
 		defer resp.Body.Close()
@@ -389,7 +389,7 @@ func TestCalculateCursorFromText(t *testing.T) {
 
 		w := httptest.NewRecorder()
 
-		api.CalculateCursorFromText(w, req)
+		api.SaveCursorText(w, req)
 
 		resp := w.Result()
 		defer resp.Body.Close()
@@ -453,10 +453,10 @@ func TestGetChunks(t *testing.T) {
 	defer close(stopChan)
 
 	reqBody := map[string]interface{}{
-		"UserCursor": map[string]interface{}{
-			"UserID": "pete",
-			"BookID": bookID,
-			"Cursor": map[string]int{"Chapter": 0, "Chunk": 0},
+		"usercursor": map[string]interface{}{
+			"user_id": "pete",
+			"book_id": bookID,
+			"cursor":  map[string]int{"Chapter": 0, "Chunk": 0},
 		},
 		"requestSize": 2,
 	}
@@ -625,9 +625,9 @@ func TestSaveCursors(t *testing.T) {
 	api, token := setupAPIWithAuth(t)
 
 	payload := map[string]interface{}{
-		"UserID": "pete",
-		"BookID": "b1",
-		"Cursor": map[string]int{"Chapter": 10, "Chunk": 1},
+		"user_id": "pete",
+		"book_id": "b1",
+		"cursor":  map[string]int{"chapter": 10, "chunk": 1},
 	}
 
 	data, _ := json.Marshal(payload)

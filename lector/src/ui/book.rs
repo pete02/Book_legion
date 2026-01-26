@@ -1,4 +1,4 @@
-use dioxus::{ logger::tracing, prelude::*};
+use dioxus::prelude::*;
 
 use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
 

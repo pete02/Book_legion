@@ -1,11 +1,11 @@
 use dioxus::{logger::tracing, prelude::*};
 
 
-use crate::domain::{self, text::normalize_html_fragment};
+use crate::domain;
 use crate::domain::text::TextHandler;
-use crate::infra;
+
 use wasm_bindgen::{JsCast, prelude::Closure};
-use web_sys::{Document, HtmlElement, Node, Range, window};
+use web_sys::Node;
 
 
 pub fn render_prev_page(text_handler:&mut TextHandler){
@@ -16,7 +16,7 @@ pub fn render_prev_page(text_handler:&mut TextHandler){
         offset=(text_handler.chapter)().len();
         text_handler.start_at_end.set(false);
     }else if (text_handler.cur_text)().len()>0{
-        offset=domain::text::find_sentence_offset_with_html_backtrack(&(text_handler.chapter)(), &(text_handler.cur_text)(), &(text_handler.map)());
+        offset=domain::text::find_sentence_offset_with_html_backtrack( &(text_handler.cur_text)(), &(text_handler.map)());
         text_handler.chapter_end.set(false);
         text_handler.next_text.set((text_handler.cur_text)());
     }else{

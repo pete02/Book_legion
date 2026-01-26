@@ -8,6 +8,10 @@ use serde_json::json;
 use dioxus::{logger::tracing, prelude::trace};
 
 
+#[derive(Deserialize)]
+pub struct ManifestResponse {
+    pub series: Vec<ManifestEntry>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ManifestEntry {
@@ -26,8 +30,8 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
         return Err(format!("manifest request failed: {}", resp.status()).into());
     }
 
-    let manifest = resp.json::<Vec<ManifestEntry>>().await?;
-    Ok(manifest)
+    let manifest = resp.json::<ManifestResponse>().await?;
+    Ok(manifest.series)
 }
 
 #[cfg(feature = "mock")]
@@ -48,8 +52,8 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
         ]
     });
 
-    let manifest: Vec<ManifestEntry> = serde_json::from_value(manifest_json["series"].clone())
+    let manifest: ManifestResponse= serde_json::from_value(manifest_json.clone())
         .map_err(|e| e.to_string())?;
 
-    Ok(manifest)
+    Ok(manifest.series)
 }

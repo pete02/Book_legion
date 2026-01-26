@@ -54,11 +54,20 @@ pub fn restore_user_from_storage() -> User {
         .get_item("auth_token")
         .ok()
         .flatten();
+
+    let username=web_sys::window()
+        .unwrap()
+        .session_storage()
+        .unwrap()
+        .unwrap()
+        .get_item("username")
+        .ok()
+        .flatten();
     tracing::debug!("Got refresh: {:?}",refresh_token);
     tracing::debug!("Got auth: {:?}",auth_token);
 
     User {
-        username: "".into(),
+        username: username.unwrap_or_default(),
         refresh_token,
         auth_token,
     }
@@ -72,6 +81,8 @@ pub fn persist_user(user: &User) {
     if let Some(at) = &user.auth_token {
         storage.set_item("auth_token", at).unwrap();
     }
+
+    storage.set_item("username", &user.username).unwrap();
 }
 
 
@@ -85,12 +96,14 @@ pub fn attempt_login(username: String, password: String, error:Signal<String>, l
             loading.set(true);
             match login::login(&username, &password).await {
                 Ok(resp) => {
-                    let u=user.clone();
                     let new_user=User{
-                        username: u.read().username.clone(),
+                        username: username.clone(),
                         auth_token: Some(resp.auth_token),
                         refresh_token: Some(resp.refresh_token)
                     };
+                    if new_user.username ==""{
+                        tracing::error!("Error in loggin in with the username");
+                    }
                     loading.set(false);
                     persist_user(&new_user);
                     user.set(new_user);

@@ -1,6 +1,7 @@
 use dioxus::{ prelude::*};
-
 use crate::{Route, assets, domain::{self, audio::{AudioData, skip_backward, skip_forward, use_audio}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+
+
 
 #[component]
 pub fn Audio(book_id: String)->Element{
@@ -123,8 +124,17 @@ fn AudioPlayer(mut audio:AudioData) -> Element {
                 style: "display:none",
                 autoplay: true,
                 src: "{audio.audio_url}",
-                onplay: move |_| audio.playing.set(true),
-                onended: move |_| { domain::audio::switch_audio(audio.clone());},
+                onplay: move |_| {
+                    domain::wake::on_audio_play();
+                    audio.playing.set(true)
+                },
+                onended: move |_| { 
+                    domain::wake::on_audio_pause();
+                    domain::audio::switch_audio(audio.clone());
+                },
+                onpause: move |_|{
+                    domain::wake::on_audio_pause();
+                }
             }
         }
     }

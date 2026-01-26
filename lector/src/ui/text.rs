@@ -1,4 +1,4 @@
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::prelude::*;
 
 use crate::{Route, domain::{self, text::use_text}, ui::components::{TopBar, TopBarEntry}};
 
@@ -6,13 +6,8 @@ use crate::{Route, domain::{self, text::use_text}, ui::components::{TopBar, TopB
 #[component]
 pub fn Text(book_id: String) -> Element {
     // Full chapter HTML (Signal)
-    let mut text_handler = use_text(book_id.clone());
-
-    // Page index and move delta
-    let mut move_page = use_signal(|| 0);
-
-    
-
+    let text_handler = use_text(book_id.clone());
+  
     // Top bar entries
     let top_entries = vec![
         TopBarEntry {
@@ -73,7 +68,6 @@ pub fn Text(book_id: String) -> Element {
                         onclick: {
                             let mut val=text_handler.clone();
                             move |_| { 
-                                tracing::debug!("clicked back");
                                 domain::page_backwards::render_prev_page(&mut val);
                             }
                     },

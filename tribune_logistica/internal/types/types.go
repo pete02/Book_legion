@@ -65,19 +65,18 @@ func (a Cursor) CompareCursor(b Cursor) int {
 
 // Chunk represents an audio Chunk
 type Chunk struct {
-	ID   UserCursor `json:"Cursor"`
+	ID   UserCursor `json:"cursor"`
 	Data []byte     `json:"data"`
 }
 
 type TextCursor struct {
-	Cursor UserCursor `json:cursor`
-	Text   string     `json:cursor_text`
+	Cursor UserCursor `json:"cursor"`
+	Text   string     `json:"text"`
 }
-
 type UserCursor struct {
-	UserID string `json:"UserID"`
-	BookID string `json:"BookID"`
-	Cursor Cursor `json:"Cursor"`
+	UserID string `json:"user_id"`
+	BookID string `json:"book_id"`
+	Cursor Cursor `json:"cursor"`
 }
 
 func (a UserCursor) CompareCursor(b UserCursor) int {

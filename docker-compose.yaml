@@ -9,16 +9,15 @@ services:
       - ./tribune_logistica/config:/config
       - ./tribune_logistica/data:/data
     environment:
-      - RUST_LOG=info
+      - TTS_BACKEND=http
+      - TTS_API_URL=http://192.168.88.244:8888/tts
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
       # Router for backend
       - "traefik.http.routers.booklegion-backend.rule=PathPrefix(`/api`)"
       - "traefik.http.routers.booklegion-backend.entrypoints=web"
-      # Middleware to strip /api prefix
-      - "traefik.http.middlewares.booklegion-strip.stripprefix.prefixes=/api"
-      - "traefik.http.routers.booklegion-backend.middlewares=booklegion-strip"
+
       # Service port inside container
       - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
 

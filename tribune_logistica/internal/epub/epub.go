@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
@@ -224,7 +225,8 @@ func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (strin
 	return chunkStrings[chunkIndex], nil
 }
 
-func (e *Epub) CalculateCursorPlace(navIndex int, examle string, policy ChunkPolicy) (types.Cursor, error) {
+func (e *Epub) CalculateCursorPlace(navIndex int, example string, policy ChunkPolicy) (types.Cursor, error) {
+	// --- 1. Extract chapter and linearize ---
 	chapterBytes, err := e.ExtractChapter(navIndex)
 	if err != nil {
 		return types.Cursor{}, err
@@ -236,25 +238,39 @@ func (e *Epub) CalculateCursorPlace(navIndex int, examle string, policy ChunkPol
 	}
 	linear := LinearizeChapter(doc)
 
-	doc, err = html.Parse(bytes.NewReader([]byte(examle)))
+	// --- 2. Linearize example text ---
+	docExample, err := html.Parse(bytes.NewReader([]byte(example)))
 	if err != nil {
 		return types.Cursor{}, err
 	}
-	linearExample := LinearizeChapter(doc)
+	linearExample := LinearizeChapter(docExample)
 	linearExample.FullText = trimTrailingPunctuation(linearExample.FullText)
 
 	if len(linearExample.FullText) < policy.MinSnippetSize {
 		return types.Cursor{}, errors.New("snippet too short to uniquely locate cursor")
 	}
 
-	offset := strings.Index(linear.FullText, linearExample.FullText)
-	if offset == -1 {
+	// --- 3. Normalize both texts and build mapping ---
+	normalizedChapter, chapterMap := buildNormalizedMapping(linear.FullText)
+	normalizedExample, _ := buildNormalizedMapping(linearExample.FullText) // mapping not needed for example
+
+	// --- 4. Find normalized offset ---
+	normOffset := strings.Index(normalizedChapter, normalizedExample)
+	if normOffset == -1 {
 		return types.Cursor{}, errors.New("example text not found in chapter")
 	}
+
+	// --- 5. Map normalized offset back to original text ---
+	if normOffset >= len(chapterMap) {
+		return types.Cursor{}, errors.New("offset mapping failed")
+	}
+	origOffset := chapterMap[normOffset]
+
+	// --- 6. Find target chunk ---
 	chunks := TextChunk(linear, policy)
 	var targetChunk Chunk
 	for _, c := range chunks {
-		if offset >= c.Start && offset < c.End {
+		if origOffset >= c.Start && origOffset < c.End {
 			targetChunk = c
 			break
 		}
@@ -356,4 +372,22 @@ func trimTrailingPunctuation(s string) string {
 	return strings.TrimRightFunc(s, func(r rune) bool {
 		return r == ' ' || r == '.' || r == '!' || r == '?'
 	})
+}
+
+type NormalizedIndex struct {
+	NormPos int // position in normalized string
+	OrigPos int // position in original string
+}
+
+func buildNormalizedMapping(orig string) (string, []int) {
+	var norm strings.Builder
+	var mapping []int
+
+	for i, r := range orig {
+		if !unicode.IsSpace(r) && !unicode.IsPunct(r) {
+			norm.WriteRune(unicode.ToLower(r))
+			mapping = append(mapping, i)
+		}
+	}
+	return norm.String(), mapping
 }

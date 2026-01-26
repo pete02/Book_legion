@@ -17,7 +17,7 @@ COPY . .
 
 # Build web release bundle
 # Note: if wasm-opt errors, the build still produces output
-RUN dx bundle --platform web --release --features "dioxus-router?/wasm-split"  --experimental-wasm-split
+RUN dx bundle --platform web --release
 
 # ===== Stage 2: Minimal nginx =====
 FROM nginx:alpine
