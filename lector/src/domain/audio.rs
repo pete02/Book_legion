@@ -24,7 +24,7 @@ pub struct AudioData{
     pub debounce: Signal<i32>
 }
 
-const AHEAD:usize=3;
+const AHEAD:usize=10;
 
 fn error_audio(book_id: String)->AudioData{
     AudioData { 
@@ -82,7 +82,6 @@ pub async fn get_audio_url(mut audio: AudioData) {
         if cursors_ahead(&audio) < AHEAD {
             load_audio_urls(audio.clone());
         }
-        tracing::info!("audio_url: {}",url);
         audio.audio_url.set(url.clone());
     } else {
         get_audio_urls(audio.clone()).await;
@@ -92,6 +91,7 @@ pub async fn get_audio_url(mut audio: AudioData) {
     }
     spawn(async move{
         domain::cursor::save_bookcursor(current_cursor.clone()).await;
+        audio.progress.set(domain::book::get_book_progress((audio.book_id)()).await);
     });
 }
 
@@ -111,10 +111,10 @@ pub async fn get_audio_urls(mut audio:AudioData){
         Ok(urls)=>{
             let mut c=(audio.current_cursor)();
             for e in urls{
-                if e.cursor.chapter > c.cursor.chapter{
+                if e.cursor.cursor.chapter > c.cursor.chapter{
                     audio.chapter_change.with_mut(|f|f.push(c.cursor.clone()));
                 }
-                c.cursor=e.cursor;
+                c.cursor=e.cursor.cursor;
                 let url=create_blob(e.data);
                 audio.audio_urls.with_mut(|f: &mut HashMap<BookCursor, String>|f.insert(c.clone(),url));
             }

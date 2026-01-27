@@ -216,7 +216,7 @@ func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 type ChunksRequest struct {
-	UserCursor  types.UserCursor `json:"usercursor"`
+	UserCursor  types.UserCursor `json:"user_cursor"`
 	RequestSize int              `json:"requestSize"`
 }
 

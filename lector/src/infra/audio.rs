@@ -1,26 +1,38 @@
-use serde::{Deserialize, Serialize};
+use dioxus::logger::tracing;
+use serde::{Deserialize, Serialize,Deserializer};
+use base64::{engine::general_purpose, Engine as _};
+
 
 use crate::domain;
 use crate::domain::cursor::BookCursor;
 
+fn base64_to_vec<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    general_purpose::STANDARD
+        .decode(s)
+        .map_err(serde::de::Error::custom)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkResponse {
+    #[serde(deserialize_with = "base64_to_vec")]
+    pub data:  Vec<u8>,
+    pub cursor: domain::cursor::BookCursor,
+}
 
 #[derive(Debug, Clone, Serialize,Deserialize)]
 pub struct GetChunksRequest {
-    #[serde(rename = "UserCursor")]
     pub user_cursor: BookCursor,
     #[serde(rename = "requestSize")]
     pub request_size: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChunkResponse {
-    pub data:  Vec<u8>,
-    #[serde(rename = "Cursor")]
-    pub cursor: domain::cursor::Cursor,
-}
+
 
 #[cfg(not(feature = "mock"))]
-
 pub async fn get_chunks(
     cursor:BookCursor,
     request_size:usize
@@ -49,6 +61,7 @@ pub async fn get_chunks(
     Ok(chunks)
 }
 
+
 #[cfg(feature = "mock")]
 pub async fn get_chunks(
     cursor:BookCursor,
@@ -65,23 +78,33 @@ pub async fn get_chunks(
     }
 
     let bytes = dioxus::asset_resolver::read_asset_bytes(&assets::MOCK_MP3).await.unwrap();
-
+    let base64_string = general_purpose::STANDARD.encode(&bytes);
     let start_chapter = cursor.cursor.chapter;
     let start_chunk = cursor.cursor.chunk;
 
     let mut results = Vec::with_capacity(request_size);
 
     sleep(Duration::from_millis(1000)).await;
-
+    
     for i in 0..request_size {
-        results.push(ChunkResponse {
-            data: bytes.to_vec(),
-            cursor: domain::cursor::Cursor {
-                chapter: start_chapter,
-                chunk: start_chunk + i as usize,
+        let chunk_json = serde_json::json!({
+            "cursor": {
+                "user_id": cursor.user_id,
+                "book_id": cursor.book_id,
+                "cursor": {
+                    "chapter": start_chapter,
+                    "chunk": start_chunk + i
+                }
             },
+            "data": base64_string
         });
+        results.push(chunk_json);
     }
+    let json_value = serde_json::Value::Array(results);
+    let json_string = serde_json::to_string(&json_value)?;
 
-    Ok(results)
+    let chunks: Vec<ChunkResponse> = serde_json::from_str(&json_string)
+        .map_err(|e| format!("Failed to parse mocked chunks JSON: {}", e))?;
+
+    Ok(chunks)
 }
