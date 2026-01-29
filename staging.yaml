@@ -4,7 +4,6 @@ services:
     image: lumilukko/tribune_logistica-staging:latest
     container_name: tribune_logistica-staging
     volumes:
-      - ./tribune_logistica/config:/config
       - ./tribune_logistica/data:/data
     environment:
       - TTS_BACKEND=http

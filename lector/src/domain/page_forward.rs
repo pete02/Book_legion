@@ -47,13 +47,18 @@ pub fn render_next_page(text_handler: &mut TextHandler) {
         trim_overflowing_node(&mut handler_for_trim);
     });
 
-    let window = window().unwrap();
-    window
-        .set_timeout_with_callback_and_timeout_and_arguments_0(
-            closure.as_ref().unchecked_ref(),
-            0,
-        )
-        .unwrap();
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => {
+            tracing::error!("window not available");
+            return;
+        }
+    };
+    window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        closure.as_ref().unchecked_ref(),
+        10,
+    )
+    .unwrap();
 }
 
 pub fn trim_overflowing_node(text_handler: &mut TextHandler){
@@ -99,9 +104,9 @@ fn first_overflowing_child(
 
         let rect = child.clone().dyn_into::<HtmlElement>()
             .ok()?.get_bounding_client_rect();
-        const EPSILON: f64 = 1.0;
+        const EPSILON: f64 = 3.0;
 
-        if rect.bottom() <= container_rect.bottom() + EPSILON {
+        if rect.bottom() <= container_rect.bottom(){
             continue;
         }
 

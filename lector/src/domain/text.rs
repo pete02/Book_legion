@@ -6,6 +6,7 @@ use regex::Regex;
 
 
 use wasm_bindgen::JsCast;
+use web_sys::Document;
 use web_sys::HtmlElement;
 use web_sys::Node;
 
@@ -46,6 +47,17 @@ impl TextHandler {
         let vis=normalize_html_fragment(&visible_text);
         self.visible_text.set(vis);
     }
+    pub fn copy_from(&mut self, other: &TextHandler) {
+
+        self.chapter.set((other.chapter)());
+        self.visible_text.set((other.visible_text)());
+        self.cur_text.set((other.cur_text)());
+        self.next_text.set((other.next_text)());
+        self.chapter_idx.set((other.chapter_idx)());
+        self.chapter_end.set((other.chapter_end)());
+        self.map.set((other.map)());
+        self.start_at_end.set((other.start_at_end)());
+    }
 }
 
 pub fn fetch_chapter<F>(text_handler: &mut TextHandler, renderer: F)
@@ -60,7 +72,7 @@ where
 
         match html {
             Ok(txt) => {
-                text_handler.chapter.set(txt.text.clone());
+                text_handler.chapter.set(txt.clone());
                 text_handler.map.set(build_text_map_from_html(&(text_handler.chapter)()));
 
                 renderer(&mut text_handler);
@@ -70,10 +82,11 @@ where
     });
 }
 
-pub fn use_text(book_id: String) -> TextHandler {
+pub fn use_text(book_id: String, css_ready: Signal<bool>) -> TextHandler {
     let txt=TextHandler::new(book_id);
     let a=txt.clone();
     use_effect(move ||{
+        if !css_ready(){return;}
         let mut text_handler=a.clone();
         
         spawn(async move{
@@ -82,6 +95,7 @@ pub fn use_text(book_id: String) -> TextHandler {
                 text_handler.next_text.set(text.text.clone());
                 text_handler.cur_text.set(text.text);
                 text_handler.chapter_idx.set(text.cursor.cursor.chapter);
+                tracing::debug!("ue_text oK:")
             }
             fetch_chapter(&mut text_handler, domain::page_forward::render_next_page);
         });
@@ -110,7 +124,7 @@ pub fn find_sentence_offset_with_html_backtrack(
 
 
 fn check_char_match(c:&char)->bool{
-    matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”')
+    matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”' | ',')
 }
 
 fn normalize_text(s: &str) -> String {
@@ -236,4 +250,44 @@ pub fn save_cursor(text_handler: &mut TextHandler, save_txt:String){
             domain::cursor::save_bookcursor(cursor).await;
         }
     });
+}
+
+pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
+    spawn(async move{
+        match infra::chapters::fetch_book_css(&book_id).await {
+            Ok(css_text) => {
+                // Inject CSS into the document
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        inject_css(&document, &book_id, &css_text);
+                        css_redy.set(true);
+                        tracing::debug!("CSS loaded");
+                    }
+                }
+            }
+            Err(e) => tracing::error!("Failed to fetch book CSS: {}", e),
+        }
+    });
+}
+
+
+
+fn inject_css(document: &Document, book_id: &str, css: &str) {
+    let style_id = format!("book-css-{}", book_id);
+    if let Some(existing) = document.get_element_by_id(&style_id) {
+        existing.set_inner_html(css);
+        return;
+    }
+
+    let style: HtmlElement = document
+        .create_element("style")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    style.set_id(&style_id);
+    style.set_inner_html(css);
+
+    if let Some(head) = document.head() {
+        head.append_child(&style).unwrap();
+    }
 }

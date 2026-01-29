@@ -77,6 +77,7 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
     let current = book().current_chapter;
     let progress=domain::book::get_chapter_progress(book_id.clone());
 
+
     return rsx! {
         h3 { "Chapters:" }
 
@@ -96,7 +97,8 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
                         li {
                             button {
                                 onclick: move |_| {
-                                   domain::book::select_chapter(book, idx, id.clone());
+                                   domain::book::select_chapter(book,progress, idx, id.clone());
+
                                 },
                                 style: format!(
                                 "

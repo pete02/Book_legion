@@ -105,6 +105,10 @@ func createStorage(cfg Config) (storage.Storage, error) {
 			if err != nil {
 				log.Fatalf("failed to open sqlite db: %v", err)
 			}
+			if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+				log.Fatalf("failed to enable WAL mode: %v", err)
+			}
+
 			return storage.NewSQLStorage(db), err
 		}
 	case DBAPI:

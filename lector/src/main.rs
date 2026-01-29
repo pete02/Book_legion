@@ -51,6 +51,7 @@ fn app() -> Element {
     let load=login::restore_user_from_storage();
 
     let user = use_signal(|| load);
+    console_error_panic_hook::set_once();
 
     use_context_provider(||user);
 

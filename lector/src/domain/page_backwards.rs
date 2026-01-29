@@ -8,56 +8,51 @@ use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::Node;
 
 
-pub fn render_prev_page(text_handler:&mut TextHandler){
+pub fn render_prev_page(text_handler: &mut TextHandler) {
+    tracing::info!("start to turn page");
     domain::text::save_cursor(text_handler, (text_handler.cur_text)());
-    let offset;
-
-    if (text_handler.start_at_end)(){
-        offset=(text_handler.chapter)().len();
+    
+    let offset = if (text_handler.start_at_end)() {
+        let len = (text_handler.chapter)().len();
         text_handler.start_at_end.set(false);
-    }else if (text_handler.cur_text)().len()>0{
-        offset=domain::text::find_sentence_offset_with_html_backtrack( &(text_handler.cur_text)(), &(text_handler.map)());
+        len
+    } else if (text_handler.cur_text)().len() > 0 {
+        let off = domain::text::find_sentence_offset_with_html_backtrack(
+            &(text_handler.cur_text)(),
+            &(text_handler.map)(),
+        );
         text_handler.chapter_end.set(false);
         text_handler.next_text.set((text_handler.cur_text)());
-    }else{
+        off
+    } else {
         prev_chapter(text_handler);
         return;
-    }    
-
-    
+    };
 
     let container = domain::text::get_container();
-    let vis=&(text_handler.chapter)()[..offset];
-    
+    let vis = &(text_handler.chapter)()[..offset];
+
     if !has_visible_text(vis) {
         prev_chapter(text_handler);
         return;
     }
-        
+    text_handler.next_text.set((text_handler.cur_text)());
+
     text_handler.set_visible(vis.to_owned());
-    
 
-    let mut handler_for_trim = text_handler.clone();
-    let closure = Closure::once_into_js(move || {
-        container.set_scroll_top(container.scroll_height());
-        if let Some(node) = first_visible_text_container(&container.clone().into(), container.get_bounding_client_rect().top()) {
-            let jump=domain::text::set_text(&node, node.text_content().unwrap_or_default());
-            handler_for_trim.cur_text.set(jump);
-        }else{
-            tracing::debug!("offset: {}", offset);
-            tracing::debug!("issues");
-            prev_chapter(&mut handler_for_trim);
-        }
-    });
+    tracing::info!("height: {}", container.scroll_height());
+    //tracing::info!("DOM: {}", container.inner_html());
 
-    let window = web_sys::window().unwrap();
-    window
-        .set_timeout_with_callback_and_timeout_and_arguments_0(
-            closure.as_ref().unchecked_ref(),
-            0,
-        )
-        .unwrap();
-
+    if let Some(node) = first_visible_text_container(&container.clone().into(), container.get_bounding_client_rect().top()) {
+        tracing::debug!("First text: {:?}",node.text_content());
+        let jump = domain::text::set_text(&node, node.text_content().unwrap_or_default());
+        tracing::debug!("Set: {}", jump);
+        text_handler.cur_text.set(jump);
+    } else {
+        tracing::warn!("offset: {}", offset);
+        tracing::warn!("No visible text container, falling back to prev chapter");
+        prev_chapter(text_handler);
+    }
 }
 
 
@@ -102,13 +97,10 @@ fn first_visible_text_container(
 
     let children = node.child_nodes();
     for i in 0..children.length() {
-        if let Some(el) =
-            first_visible_text_container(&children.item(i)?, container_top)
-        {
+        if let Some(el) =first_visible_text_container(&children.item(i)?, container_top){
             return Some(el);
         }
     }
-
     None
 }
 

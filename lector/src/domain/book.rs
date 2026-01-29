@@ -63,8 +63,9 @@ pub fn use_book(book_id: String) -> Signal<BookData> {
 }
 
 
-pub fn select_chapter(book: Signal<BookData>, index: usize, book_id: String) {
+pub fn select_chapter(book: Signal<BookData>, progress:Signal<f64>, index: usize, book_id: String) {
     let mut book=book.clone();
+    let mut progress=progress.clone();
     book.with_mut(|f| f.current_chapter = index);
 
     // 2. Persist cursor asynchronously
@@ -74,6 +75,11 @@ pub fn select_chapter(book: Signal<BookData>, index: usize, book_id: String) {
         cursor.cursor.chunk = 0;
 
         let _ = domain::cursor::save_bookcursor(cursor).await;
+        match infra::book::fetch_book_progress(&book_id).await{
+            Err(_)=>{},
+            Ok(p)=>progress.set(p.progress),
+        };
+        
     });
 }
 

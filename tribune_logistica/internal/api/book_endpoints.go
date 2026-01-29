@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,7 +33,7 @@ func (api *API) GetCursor(w http.ResponseWriter, r *http.Request) {
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 
 	if err != nil {
-		fmt.Printf("error with cursor: %v\n", err)
+		log.Printf("error with cursor: %v\n", err)
 		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -76,35 +76,24 @@ func (api *API) GetChapter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	epub, err := epub.Load(api.DB, bookID)
-
 	if err != nil {
-		fmt.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
+		log.Printf("Tried to load epub, failed due to %v", err)
 		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
 		return
 	}
 
 	chapterText, err := epub.ExtractChapter(chapterIndex)
-
 	if err != nil {
+		log.Printf("Tried to load chapter, failed due to %v", err)
 		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
 		return
 	}
 
-	numChunks, err := epub.MaxChunkIndex(chapterIndex, api.Policy)
-	if err != nil {
-		http.Error(w, "Error in extracting max chunk", http.StatusInternalServerError)
-		return
-	}
-
-	resp := ChapterResponse{
-		ChapterIndex: chapterIndex,
-		NumChunks:    numChunks,
-		Text:         string(chapterText),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
+	// If the extracted chapter is XHTML/HTML, this is the correct MIME type.
+	// Use text/plain if you explicitly want no markup semantics.
+	w.Header().Set("Content-Type", "application/xhtml+xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	w.Write([]byte(chapterText))
 }
 
 type progressResponse struct {
@@ -134,7 +123,7 @@ func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
 	epub, err := epub.Load(api.DB, bookID)
 
 	if err != nil {
-		fmt.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
+		log.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
 		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
 		return
 	}
@@ -142,7 +131,7 @@ func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 
 	if err != nil {
-		fmt.Printf("error with cursor: %v\n", err)
+		log.Printf("error with cursor: %v\n", err)
 		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -153,7 +142,6 @@ func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("progress: %v", progress)
 	resp := progressResponse{
 		Progress: progress,
 	}
@@ -186,7 +174,7 @@ func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
 	epub, err := epub.Load(api.DB, bookID)
 
 	if err != nil {
-		fmt.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
+		log.Printf("Tried to load epub from %v, failed due to %v", epub.Path, err)
 		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
 		return
 	}
@@ -194,7 +182,7 @@ func (api *API) GetBookProgress(w http.ResponseWriter, r *http.Request) {
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 
 	if err != nil {
-		fmt.Printf("error with cursor: %v\n", err)
+		log.Printf("error with cursor: %v\n", err)
 		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -243,7 +231,7 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.UserCursor.UserID != userID {
-		fmt.Printf("Wrong userID: %v, expected: %v", req.UserCursor.UserID, userID)
+		log.Printf("Wrong userID: %v, expected: %v", req.UserCursor.UserID, userID)
 		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
 		return
 	}
@@ -251,7 +239,7 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 	epub, err := epub.Load(api.DB, req.UserCursor.BookID)
 
 	if err != nil {
-		fmt.Printf("Error in getting chunks: %v", err)
+		log.Printf("Error in getting chunks: %v", err)
 
 		http.Error(w, "Could not load epub file", http.StatusInternalServerError)
 		return
@@ -262,7 +250,7 @@ func (api *API) GetChunks(w http.ResponseWriter, r *http.Request) {
 	chunks, err := api.Manager.GetUserChunks(req.UserCursor, req.RequestSize, maxchunks)
 
 	if err != nil {
-		fmt.Printf("Manager error in Get Chunks: %v", err)
+		log.Printf("Manager error in Get Chunks: %v", err)
 		http.Error(w, "Manager error", http.StatusInternalServerError)
 	}
 
@@ -292,7 +280,7 @@ func (api *API) GetCursorText(w http.ResponseWriter, r *http.Request) {
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 
 	if err != nil {
-		fmt.Printf("error with cursor: %v\n", err)
+		log.Printf("error with cursor: %v\n", err)
 		http.Error(w, "Could not load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -300,20 +288,19 @@ func (api *API) GetCursorText(w http.ResponseWriter, r *http.Request) {
 	epub, err := epub.Load(api.DB, bookID)
 
 	if err != nil {
-		fmt.Printf("error with Epub: %v\n", err)
+		log.Printf("error with Epub: %v\n", err)
 		http.Error(w, "Could not load epub", http.StatusInternalServerError)
 		return
 	}
 
 	text, err := epub.ExtractChunk(cursor.Cursor.Chapter, cursor.Cursor.Chunk, api.Policy)
 	if err != nil {
-		fmt.Printf("error with Chunk: %v\n", err)
+		log.Printf("error with Chunk: %v\n", err)
 		http.Error(w, "Could not load Chunk text", http.StatusInternalServerError)
 		return
 	}
 
 	textCursor := types.TextCursor{Cursor: cursor, Text: text}
-	fmt.Printf("got: %s\n", text)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(textCursor)
@@ -363,7 +350,7 @@ func (api *API) SaveCursorText(w http.ResponseWriter, r *http.Request) {
 
 	epub, err := epub.Load(api.DB, bookID)
 	if err != nil {
-		fmt.Printf("error loading epub: %v\n", err)
+		log.Printf("error loading epub: %v\n", err)
 		http.Error(w, "Could not load epub", http.StatusInternalServerError)
 		return
 	}
@@ -374,14 +361,14 @@ func (api *API) SaveCursorText(w http.ResponseWriter, r *http.Request) {
 		api.Policy,
 	)
 	if err != nil {
-		fmt.Printf("Error in text to chunk: %v\n", err)
+		log.Printf("Error in text to chunk: %v\n", err)
 		switch err.Error() {
 		case "snippet too short to uniquely locate cursor":
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		case "example text not found in chapter":
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
-			fmt.Printf("cursor calculation error: %v\n", err)
+			log.Printf("cursor calculation error: %v\n", err)
 			http.Error(w, "Could not calculate cursor", http.StatusInternalServerError)
 		}
 		return
@@ -530,12 +517,12 @@ func (api *API) SaveCursor(w http.ResponseWriter, r *http.Request) {
 
 	// Optional: ensure the userID in body matches token
 	if req.UserID != userID {
-		fmt.Printf("Wrong userID, expected: %v, Got %v\n", userID, req.UserID)
+		log.Printf("Wrong userID, expected: %v, Got %v\n", userID, req.UserID)
 		http.Error(w, "UserID does not match token", http.StatusUnauthorized)
 		return
 	}
 
-	fmt.Printf("saving cursor: %v\n", req)
+	log.Printf("saving cursor: %v\n", req)
 	err := types.SaveUserCursor(api.DB, req)
 
 	if err != nil {
@@ -567,7 +554,7 @@ func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
 	err := library.SaveBook(api.DB, req)
 
 	if err != nil {
-		fmt.Printf("Failed to save book: %v", err)
+		log.Printf("Failed to save book: %v", err)
 		http.Error(w, "Failed to save book", http.StatusInternalServerError)
 		return
 	} else {

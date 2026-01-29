@@ -367,6 +367,7 @@ POST /api/v1/savebook   //works
   "author_id": "a1",
   "series_id": "s1",
   "series_order": 1,
+  "series_name": "Series One"
   "file_path": "/path/to/book.epub"
 }
 ```
