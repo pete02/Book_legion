@@ -14,6 +14,7 @@ futures-timer = "3.0.3"
 gloo-timers = "0.3.0"
 js-sys = "0.3.82"
 kuchiki = "0.8.1"
+markup5ever = "0.38.0"
 once_cell = "1.21.3"
 regex = "1.12.2"
 reqwasm = { version="0.5.0", features = ["json"]}

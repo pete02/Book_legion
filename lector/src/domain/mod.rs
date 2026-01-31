@@ -8,7 +8,7 @@ pub mod audio;
 
 pub mod text;
 
-pub mod page_forward;
-
-pub mod page_backwards;
 pub mod wake;
+
+
+pub mod text_renderer;

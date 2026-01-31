@@ -30,33 +30,25 @@ pub struct TextHandler{
     pub book_id: String,
     pub chapter: Signal<String>,
     pub visible_text: Signal<String>,
+    pub map: Signal<TextMap>,
+    pub chapter_idx: Signal<usize>,
     pub cur_text: Signal<String>,
     pub next_text: Signal<String>,
-    pub chapter_idx: Signal<usize>,
     pub chapter_end: Signal<bool>,
-    pub map: Signal<TextMap>,
-    pub start_at_end: Signal<bool>
+    pub chapter_start: Signal<bool>,
+    pub start_at_end: Signal<bool>,
+    pub start_offset: Signal<usize>,
+    pub end_offset: Signal<usize>
 }
 
 impl TextHandler {
     pub fn new(book_id: String)->TextHandler{
-        return TextHandler {start_at_end: use_signal(|| false),map: use_signal(||TextMap { plain: "".to_owned(), html_offsets: HashMap::new() }), book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
+        return TextHandler {chapter_start: use_signal(||false),end_offset: use_signal(||0),start_offset: use_signal(||0), start_at_end: use_signal(|| false),map: use_signal(||TextMap { plain: "".to_owned(), html_offsets: HashMap::new() }), book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
     }
 
     pub fn set_visible(&mut self, visible_text:String){
         let vis=normalize_html_fragment(&visible_text);
         self.visible_text.set(vis);
-    }
-    pub fn copy_from(&mut self, other: &TextHandler) {
-
-        self.chapter.set((other.chapter)());
-        self.visible_text.set((other.visible_text)());
-        self.cur_text.set((other.cur_text)());
-        self.next_text.set((other.next_text)());
-        self.chapter_idx.set((other.chapter_idx)());
-        self.chapter_end.set((other.chapter_end)());
-        self.map.set((other.map)());
-        self.start_at_end.set((other.start_at_end)());
     }
 }
 
@@ -82,45 +74,6 @@ where
     });
 }
 
-pub fn use_text(book_id: String, css_ready: Signal<bool>) -> TextHandler {
-    let txt=TextHandler::new(book_id);
-    let a=txt.clone();
-    use_effect(move ||{
-        if !css_ready(){return;}
-        let mut text_handler=a.clone();
-        
-        spawn(async move{
-            let next=infra::chapters::fetch_cursor_text(&text_handler.book_id).await;
-            if let Ok(text)=next{
-                text_handler.next_text.set(text.text.clone());
-                text_handler.cur_text.set(text.text);
-                text_handler.chapter_idx.set(text.cursor.cursor.chapter);
-                tracing::debug!("ue_text oK:")
-            }
-            fetch_chapter(&mut text_handler, domain::page_forward::render_next_page);
-        });
-    });
-    return txt;
-}
-
-
-pub fn find_sentence_offset_with_html_backtrack(
-    start_snippet: &str,
-    map: &TextMap
-) -> usize {
-    let normalized = normalize_text(start_snippet);
-
-    if let Some(pos) = map.plain.find(&normalized) {
-        let val =map.html_offsets[&pos];
-        val
-    } else {
-        tracing::error!("no pos");
-        tracing::error!("tired to search for: {}",normalize_text(start_snippet));
-        tracing::error!("Originally: {}",start_snippet);
-        tracing::error!("From: {}",map.plain);
-        0
-    }
-}
 
 
 fn check_char_match(c:&char)->bool{
@@ -141,28 +94,6 @@ pub fn get_container()->HtmlElement{
         .get_element_by_id("book-renderer").unwrap()
         .dyn_into::<HtmlElement>().unwrap()
 }
-
-pub fn set_text(child: &Node, text: String) ->String{
-    let mut hid=text;
-    let mut current = child.next_sibling();
-    
-    while hid.len() <= 100 {
-        let node = match current {
-            Some(ref n) => n,
-            None => break,
-        };
-
-        if let Some(text) = node.text_content() {
-            hid.push_str(&text);
-        }
-
-        current = node.next_sibling();
-    }
-
-    return hid.to_string();
-}
-
-
 
 pub fn find_first_closing_tag(html: &str) -> Option<(usize, String)> {
     let rest = html;
@@ -203,6 +134,26 @@ pub fn normalize_html_fragment(html: &str) -> String {
 }
 
 
+
+
+pub fn find_sentence_offset_with_html_backtrack(
+    start_snippet: &str,
+    map: &TextMap
+) -> usize {
+    let normalized = normalize_text(start_snippet);
+
+    if let Some(pos) = map.plain.find(&normalized) {
+        let val =map.html_offsets[&pos];
+        val
+    } else {
+        tracing::error!("no pos");
+        tracing::error!("tired to search for: {}",normalize_text(start_snippet));
+        tracing::error!("Originally: {}",start_snippet);
+        tracing::error!("From: {}",map.plain);
+        0
+    }
+}
+
 pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
     let mut plain = String::new();
     let mut html_offsets = HashMap::new();
@@ -220,13 +171,10 @@ pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
         if inside_tag {
             continue; // skip tag content
         }
-
-        // skip normalized punctuation
         if check_char_match(&c) {
             continue;
         }
 
-        // add plain character
         plain.push(c.to_ascii_lowercase());
         html_offsets.insert(plain.len()-1,idx);
     }
