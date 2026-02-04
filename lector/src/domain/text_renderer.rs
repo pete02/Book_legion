@@ -235,9 +235,7 @@ fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
 
     let mut text = normalize_text(slice_safe_html(&chapter_html, start, 1000));
 
-    if text.len() > 200 {
-        text.truncate(200);
-    }
+    text = text.chars().take(200).collect();
 
     if text.len() > 50{
         save_cursor(book_id, index, text);
