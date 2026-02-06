@@ -63,7 +63,7 @@ pub fn Text(book_id: String) -> Element {
                 // Paged chapter display
                 div {
                     id: "book-renderer",
-                    style: "height: 95dvh; overflow: hidden; position: relative;width: 90%;margin-left: 5%; margin-bottom:0%;padding-bottom:10px;",
+                    style: "height: 90dvh; overflow: hidden; position: relative;width: 90%;margin-left: 5%; margin-bottom:0%;padding-bottom:10px;",
                     dangerous_inner_html: "{text_handler.visible_text}"
                 }
 
