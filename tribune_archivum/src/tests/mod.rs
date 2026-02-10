@@ -1,2 +1,2 @@
-pub mod spec_compliance;
-pub mod test_epub_generator;
+pub mod epub_integrity_tests;
+mod test_epub;

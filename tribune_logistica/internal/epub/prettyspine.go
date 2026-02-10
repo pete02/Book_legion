@@ -91,8 +91,7 @@ func (e *Epub) LoadPrettySpine() ([]PrettySpineItem, error) {
 			}
 		}
 		if spineIndex == -1 {
-			// skip TOC entry if not in mechanical spine
-			continue
+			return nil, fmt.Errorf("Could not match spine index with the nav index")
 		}
 		playOrderInt, err := strconv.Atoi(np.PlayOrder)
 		if err != nil {
