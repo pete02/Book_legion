@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -379,15 +380,34 @@ type NormalizedIndex struct {
 	OrigPos int // position in original string
 }
 
+var htmlEntityRe = regexp.MustCompile(`&#\d+;|&[a-zA-Z]+;`)
+
+func normalizeEntities(s string) string {
+	return htmlEntityRe.ReplaceAllStringFunc(s, func(entity string) string {
+		switch entity {
+		case "&#39;", "&apos;":
+			return "'"
+		case "&quot;":
+			return `"`
+		case "&amp;":
+			return "&"
+		default:
+			return "" // remove unknown entities
+		}
+	})
+}
+
 func buildNormalizedMapping(orig string) (string, []int) {
+	orig = normalizeEntities(orig)
 	var norm strings.Builder
 	var mapping []int
 
 	for i, r := range orig {
-		if !unicode.IsSpace(r) && !unicode.IsPunct(r) {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
 			norm.WriteRune(unicode.ToLower(r))
 			mapping = append(mapping, i)
 		}
+		// optionally include space if you want normalized spacing
 	}
 	return norm.String(), mapping
 }

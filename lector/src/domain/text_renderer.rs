@@ -2,6 +2,7 @@ use dioxus::{hooks::{use_effect, use_signal}, logger::tracing, prelude::*, signa
 use once_cell::sync::Lazy;
 use regex::Regex;
 static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
+static HTML_ENTITY_RE:  Lazy<Regex> = Lazy::new(|| Regex::new(r"&#\d+;|&[a-zA-Z]+;").unwrap());
 
 
 use web_sys::{DomRect, HtmlElement};
@@ -34,9 +35,9 @@ pub async fn fetch_ch(book_id:String, idx: usize, mut chapter: Signal<String>, m
     let html = infra::chapters::fetch_chapter(&book_id, idx).await;
     match html {
         Ok(txt) => {
-            chapter.set(txt.clone());
+            chapter.set(domain::text::replace_html_entities(&txt));
             
-            map.set(domain::text::build_text_map_from_html(&txt));
+            map.set(domain::text::build_text_map_from_html(&chapter()));
         }
         Err(e) => tracing::error!("error in getting chapter: {}", e),
     }
@@ -66,7 +67,7 @@ pub fn use_renderer(book_id:String, mut align: Signal<Align>)->TextHandler{
     return text_handler;
 }
 
-pub fn render(text: &TextHandler, mut align: Signal<Align>, book_id:String){
+pub fn render(text: &TextHandler, align: Signal<Align>, book_id:String){
     let mut text: TextHandler=text.clone();
     let book_s=use_signal(||book_id);
     
@@ -124,8 +125,7 @@ pub fn render(text: &TextHandler, mut align: Signal<Align>, book_id:String){
             let start_offset = (text.start_offset)();
             let map = (text.map)();
             let visible_text = (text.visible_text).clone();
-            let chapter_idx = (text.chapter_idx)();
-            let book_id = text.book_id.clone();
+
 
             tracing::debug!("run cut");
 
@@ -169,7 +169,7 @@ fn render_page(chapter_html: &str, start_offset: usize, align: Align,mut visible
 
 pub fn cut_render(
     chapter_html: &str,
-    start_offset: usize,
+    mut start_offset: usize,
     align: Align,
     mut visible_text: Signal<String>,
     text_map: &domain::text::TextMap
@@ -185,7 +185,7 @@ pub fn cut_render(
     match align {
         Align::Top => {
             container.set_scroll_top(0);
-            let end_offset = if let Some(child) = scan_children(&container, chapter_html, align) {
+            let mut end_offset = if let Some(child) = scan_children(&container, chapter_html, align) {
                 child
             } else {
                 tracing::debug!("found end");
@@ -193,6 +193,12 @@ pub fn cut_render(
             };
 
             tracing::debug!("end offset:{}",end_offset);
+
+            if start_offset>end_offset{
+                let temp=end_offset;
+                end_offset=start_offset;
+                start_offset=temp;
+            }
 
             let html_fragment = &chapter_html[start_offset..end_offset];
             visible_text.set(html_fragment.to_owned());
@@ -207,12 +213,18 @@ pub fn cut_render(
         Align::None => unreachable!("Cut renrer should never be called without alignment"),
         Align::Bottom => {
             container.set_scroll_top(container.scroll_height());
-            let start_offset_result = if let Some(child) = scan_children(&container, chapter_html, align) {
+            let mut start_offset_result = if let Some(child) = scan_children(&container, chapter_html, align) {
                 child
             } else {
                 0
             };
             tracing::debug!("back_result: {}-{}", start_offset_result,start_offset);
+
+            if start_offset_result>start_offset{
+                let temp=start_offset_result;
+                start_offset_result=start_offset;
+                start_offset=temp;
+            }
             let html_fragment = &chapter_html[start_offset_result..start_offset];
             visible_text.set(html_fragment.to_owned());
 
@@ -228,24 +240,26 @@ pub fn cut_render(
 
 
 fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
-    if start >= chapter_html.len() {
+    if start >= chapter_html.chars().count() {
         tracing::warn!("save skipped: start out of bounds ({})", start);
         return;
     }
 
-    let mut text = normalize_text(slice_safe_html(&chapter_html, start, 1000));
+    // Safely take a slice by chars
+    let slice: String = chapter_html.chars().skip(start).take(1000).collect();
 
+    let mut text = normalize_text(&slice);
+
+    // Take first 200 characters safely
     text = text.chars().take(200).collect();
 
-    if text.len() > 50{
+    if text.len() > 50 {
         save_cursor(book_id, index, text);
     }
 }
 
 
-
 fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Option<usize>{
-
     let container_rect = container.get_bounding_client_rect();
     return scan_children_inner(container, chapter_html, align, &container_rect);
     fn scan_children_inner(container: &HtmlElement, chapter_html: &str, align:Align, container_rect: &DomRect)->Option<usize>{
@@ -254,13 +268,7 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
 
         tracing::debug!("children lengt: {}", children.length());
 
-        let iter: Box<dyn Iterator<Item = u32>> = if align==Align::Bottom {
-            Box::new((0..children.length()).rev())
-        } else {
-            Box::new(0..children.length())
-        };
-
-        for i in iter{
+        for i in 0..children.length(){
             let node = match children.item(i) {
                 Some(n) => n,
                 None => continue,
@@ -290,7 +298,7 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
                 continue;
             }
             let measurement=match align {
-                Align::Bottom => last_fitting_child(&rect, &container_rect, EPSILON, i),
+                Align::Bottom => first_fitting_child(&rect, &container_rect, EPSILON, i),
                 Align::Top => first_overflowing_child(&rect, &container_rect, EPSILON, i),
                 Align::None=>unreachable!("scan_children called with Align::None")
             };
@@ -325,42 +333,51 @@ fn is_container(el: &HtmlElement) -> bool {
     block_tags.contains(&el.tag_name().as_str()) && el.child_nodes().length() > 0
 }
 
-fn first_overflowing_child(rect: &DomRect, container_rect: &DomRect, epsilon: f64, index:u32)->Option<u32>{
-    tracing::debug!("child: {}-{}",rect.top(),rect.bottom());
-    tracing::debug!("container: {}-{}",container_rect.top(), container_rect.bottom());
-    if rect.bottom() <= container_rect.bottom() + epsilon {
+fn first_overflowing_child(rect: &DomRect, container_rect: &DomRect, epsilon: f64, index:u32) -> Option<u32> {
+    let bottom = rect.bottom();
+    let container_bottom = container_rect.bottom();
+
+    if bottom <= container_bottom + epsilon {
         return None;
-    } else if rect.top() >= container_rect.bottom() - epsilon {
+    }
+
+    Some(index)
+}
+
+fn first_fitting_child(rect: &DomRect, container_rect: &DomRect, epsilon: f64, index: u32) -> Option<u32> {
+    let top = rect.top();
+    let bottom = rect.bottom();
+    let container_top = container_rect.top();
+    let container_bottom = container_rect.bottom();
+
+    if top >= container_top - epsilon && bottom <= container_bottom + epsilon {
         return Some(index);
-    } else {            
-        return  Some(index);
     }
 
-}
-
-fn last_fitting_child(rect: &DomRect, container_rect: &DomRect, epsilon: f64, index:u32) -> Option<u32> {
-    tracing::debug!("child: {}-{}",rect.top(),rect.bottom());
-    tracing::debug!("container: {}-{}",container_rect.top(), container_rect.bottom());
-
-    if rect.bottom() <= container_rect.bottom() + epsilon && rect.top() >= container_rect.top() - epsilon{
-        return None;
-    } else if rect.top() < container_rect.top() - epsilon {
-        return Some(index+1);
-    }else{
-        return Some(index+1);
-    }
-}
-
-fn check_char_match(c:&char)->bool{
-    matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”' | ',')
+    None
 }
 
 fn normalize_text(s: &str) -> String {
-    HTML_TAG_RE.replace_all(s, "").to_string().chars()
-        .filter(|c| !check_char_match(c))
+    // 1. Remove HTML tags
+    let text = HTML_TAG_RE.replace_all(s, "");
+
+    // 2. Replace HTML entities (like &#39; → ')
+    let text = HTML_ENTITY_RE.replace_all(&text, |caps: &regex::Captures| {
+        match &caps[0] {
+            "&#39;" | "&apos;" => "'".to_string(),
+            "&quot;" => "\"".to_string(),
+            "&amp;" => "&".to_string(),
+            _ => "".to_string(), // remove unknown entities
+        }
+    });
+
+    // 3. Keep only ASCII letters and digits
+    text.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
         .collect::<String>()
-        .trim()
         .to_lowercase()
+        .trim()
+        .to_string()
 }
 
 pub fn save_cursor(book_id:String,index: usize, save_txt:String){

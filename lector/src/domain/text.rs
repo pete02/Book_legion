@@ -1,22 +1,13 @@
 use std::collections::HashMap;
 
 use dioxus::{logger::tracing, prelude::*};
-use once_cell::sync::Lazy;
-use regex::Regex;
 
 
 use wasm_bindgen::JsCast;
 use web_sys::Document;
 use web_sys::HtmlElement;
-use web_sys::Node;
 
-use crate::domain;
-use crate::domain::cursor::BookCursor;
-use crate::domain::cursor::Cursor;
 use crate::infra;
-
-static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
-
 
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -45,33 +36,6 @@ impl TextHandler {
     pub fn new(book_id: String)->TextHandler{
         return TextHandler {chapter_start: use_signal(||false),end_offset: use_signal(||0),start_offset: use_signal(||0), start_at_end: use_signal(|| false),map: use_signal(||TextMap { plain: "".to_owned(), html_offsets: HashMap::new() }), book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
     }
-
-    pub fn set_visible(&mut self, visible_text:String){
-        let vis=normalize_html_fragment(&visible_text);
-        self.visible_text.set(vis);
-    }
-}
-
-pub fn fetch_chapter<F>(text_handler: &mut TextHandler, renderer: F)
-where
-    F: FnOnce(&mut TextHandler) + Send + 'static,
-{
-    tracing::debug!("Fetch chapter: {}", (text_handler.chapter_idx)());
-    let mut text_handler = text_handler.clone();
-    
-    spawn(async move {
-        let html = infra::chapters::fetch_chapter(&text_handler.book_id, (text_handler.chapter_idx)()).await;
-
-        match html {
-            Ok(txt) => {
-                text_handler.chapter.set(txt.clone());
-                text_handler.map.set(build_text_map_from_html(&(text_handler.chapter)()));
-
-                renderer(&mut text_handler);
-            }
-            Err(e) => tracing::error!("error in getting chapter: {}", e),
-        }
-    });
 }
 
 
@@ -80,61 +44,33 @@ fn check_char_match(c:&char)->bool{
     matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”' | ',')
 }
 
-fn normalize_text(s: &str) -> String {
-    HTML_TAG_RE.replace_all(s, "").to_string().chars()
-        .filter(|c| !check_char_match(c))
-        .collect::<String>()
-        .trim()
-        .to_lowercase()
-}
-
-pub fn get_container()->HtmlElement{
-    let document=web_sys::window().unwrap().document().unwrap();
-    document
-        .get_element_by_id("book-renderer").unwrap()
-        .dyn_into::<HtmlElement>().unwrap()
-}
-
-pub fn find_first_closing_tag(html: &str) -> Option<(usize, String)> {
-    let rest = html;
-    let offset = 0;
-
-    while let Some(start) = rest.find("</") {
-        let Some(end) = rest[start..].find('>') else { break; };
-        let tag_text = &rest[start..start + end + 1];
-        let tag_name = tag_text[2..tag_text.len() - 1].trim().to_string();
-        let close_start = offset + start;
-
-        return Some((close_start, tag_name));
+fn normalize_char(c: &char) -> Option<char> {
+    if check_char_match(c) {
+        return None;
     }
+
+    if c.is_ascii_alphanumeric() {
+        return Some(c.to_ascii_lowercase());
+    }
+
+
     None
 }
 
-fn repair_beginning(html: &str) -> String {
-    let first_end=find_first_closing_tag(html);
-    if let Some((idx,tag))=first_end{
-        let start=html.find(&format!("<{tag}>"));
-        if let Some(sidx)=start && sidx<idx{
-            return html.to_string();
-        }else{
-            if tag=="span"{
-                return format!("<p><{tag}>{}",html);
-            }else{
-                return format!("<{tag}>{}",html);
-            }
-        }
-    }else{
-        return html.to_string();
-    }
-
-}
-pub fn normalize_html_fragment(html: &str) -> String {
-    let repaired = repair_beginning(html);
-    repaired
+pub fn normalize_text(s: &str) -> String {
+    // Replace HTML entities if any
+    let s = replace_html_entities(s);
+    s.chars()
+        .filter_map(|c| normalize_char(&c))  // keep only ASCII letters/digits
+        .collect::<String>()
 }
 
-
-
+pub fn replace_html_entities(s: &str) -> String {
+    s.replace("&nbsp;", " ")
+     .replace("&amp;", "&")
+     .replace("&#39;", "'")
+     .replace("&quot;", "\"")
+}
 
 pub fn find_sentence_offset_with_html_backtrack(
     start_snippet: &str,
@@ -147,7 +83,8 @@ pub fn find_sentence_offset_with_html_backtrack(
         val
     } else {
         tracing::error!("no pos");
-        tracing::error!("tired to search for: {}",normalize_text(start_snippet));
+        tracing::error!("update worked");
+        tracing::error!("tired to search for: {}",&normalized);
         tracing::error!("Originally: {}",start_snippet);
         tracing::error!("From: {}",map.plain);
         0
@@ -159,7 +96,10 @@ pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
     let mut html_offsets = HashMap::new();
     let mut inside_tag = false;
 
-    for (idx, c) in chapter_html.char_indices() {
+    let mut idx_iter = chapter_html.char_indices().peekable();
+
+    while let Some((idx, c)) = idx_iter.next() {
+        // handle tags
         if c == '<' {
             inside_tag = true;
             continue;
@@ -167,37 +107,16 @@ pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
             inside_tag = false;
             continue;
         }
+        if inside_tag { continue; }
 
-        if inside_tag {
-            continue; // skip tag content
-        }
-        if check_char_match(&c) {
-            continue;
-        }
 
-        plain.push(c.to_ascii_lowercase());
-        html_offsets.insert(plain.len()-1,idx);
+        if let Some(char)=normalize_char(&c){
+            plain.push(char);
+            html_offsets.insert(plain.len() - 1, idx);
+        }
     }
 
     TextMap { plain, html_offsets }
-}
-
-
-pub fn save_cursor(text_handler: &mut TextHandler, save_txt:String){
-    let text_handler=text_handler.clone();
-    spawn(async move{
-        if(text_handler.next_text)().len() > 0{
-            let cursor=infra::cursor::get_cursor_from_text(&text_handler.book_id, (text_handler.chapter_idx)(), &save_txt).await;
-            match cursor {
-                Err(e)=>tracing::error!("No cursor founnd: {}",e),
-                Ok(c)=>{domain::cursor::save_bookcursor(c).await;}
-            }
-        }else{
-            let mut cursor=domain::cursor::load_bookcursor(text_handler.book_id).await;
-            cursor.cursor.chapter=(text_handler.chapter_idx)();
-            domain::cursor::save_bookcursor(cursor).await;
-        }
-    });
 }
 
 pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {

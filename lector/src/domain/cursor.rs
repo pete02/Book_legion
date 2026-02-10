@@ -64,14 +64,10 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
 pub async fn save_bookcursor(cursor:BookCursor){
     let _=infra::save_cursor(&cursor).await;
 }
-pub fn sync_save_bookcursor(cursor:BookCursor){
-    spawn(async move{
-        save_bookcursor(cursor).await
-    });
-}
 
 
-use dioxus::{core::spawn, logger::tracing};
+
+use dioxus::logger::tracing;
 use serde::{Deserialize, Serialize};
 use crate::{domain, infra::cursor as infra};
 
