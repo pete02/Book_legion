@@ -8,12 +8,13 @@ fn epub_integrity_happy_path() {
     let path = dir.path().join("happy.epub");
 
     // Build a fully valid EPUB
-    let epub = TestEpub::new("Happy Book")
+    let epub = TestEpub::new("Happy Book", true)
         .chapters(vec!["c1.xhtml", "c2.xhtml"])
         .toc(vec![
             TocItem::chapter("c1.xhtml"),
             TocItem::chapter("c2.xhtml"),
-        ]);
+        ])
+        .spine(vec!["c1.xhtml","c2.xhtml"]);
 
     epub.write_to(&path).unwrap();
     let result = verify_integrity(&path).unwrap();
@@ -30,18 +31,36 @@ fn epub_integrity_invalid_zip() {
     let result = verify_integrity(&path);
     assert!(result.is_err());
 }
-
 #[test]
-fn epub_integrity_missing_spine_file() {
-    let dir = tempdir::TempDir::new("missing_spine_file").unwrap();
-    let path = dir.path().join("missing_spine_file.epub");
+fn epub_integrity_missing_container() {
+    let dir = tempdir::TempDir::new("happy_path").unwrap();
+    let path = dir.path().join("happy.epub");
 
-    let epub = TestEpub::new("Missing Chapter")
+    // Build a fully valid EPUB
+    let epub = TestEpub::new("Happy Book", false)
         .chapters(vec!["c1.xhtml", "c2.xhtml"])
         .toc(vec![
             TocItem::chapter("c1.xhtml"),
             TocItem::chapter("c2.xhtml"),
         ])
+        .spine(vec!["c1.xhtml","c2.xhtml"]);
+
+    epub.write_to(&path).unwrap();
+    assert!(verify_integrity(&path).is_err())
+
+}
+
+#[test]
+fn epub_integrity_missing_file_from_manifest() {
+    let dir = tempdir::TempDir::new("missing_spine_file").unwrap();
+    let path = dir.path().join("missing_spine_file.epub");
+
+    let epub = TestEpub::new("Missing Chapter", true)
+        .chapters(vec!["c1.xhtml", "c2.xhtml"])
+        .toc(vec![
+            TocItem::chapter("c1.xhtml"),
+        ])
+        .spine(vec!["c1.xhtml","c2.xhtml"])
         .remove_file("c2.xhtml");
 
     epub.write_to(&path).unwrap();
@@ -50,12 +69,13 @@ fn epub_integrity_missing_spine_file() {
     assert!(result.is_err())
 }
 
+
 #[test]
 fn epub_integrity_missing_toc() {
     let dir = tempdir::TempDir::new("missing_toc").unwrap();
     let path = dir.path().join("missing_toc.epub");
 
-    let epub = TestEpub::new("No TOC")
+    let epub = TestEpub::new("No TOC", true)
         .chapters(vec!["c1.xhtml", "c2.xhtml"])
         .no_toc();
 
@@ -72,7 +92,7 @@ fn epub_integrity_invalid_playorder() {
     let dir = tempdir::TempDir::new("invalid_playorder").unwrap();
     let path = dir.path().join("invalid_playorder.epub");
 
-    let epub = TestEpub::new("Bad PlayOrder")
+    let epub = TestEpub::new("Bad PlayOrder", true)
         .chapters(vec!["c1.xhtml", "c2.xhtml"])
         .toc(vec![
             TocItem::chapter_with_playorder("c1.xhtml", "one"), // invalid number
@@ -82,7 +102,5 @@ fn epub_integrity_invalid_playorder() {
     epub.write_to(&path).unwrap();
 
     let result = verify_integrity(&path).unwrap();
-
-    // Should pass, but trigger reconstruction
     assert_eq!(result, true);
 }

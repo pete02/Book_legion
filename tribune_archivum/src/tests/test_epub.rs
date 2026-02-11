@@ -7,7 +7,9 @@ pub struct TestEpub {
     title: String,
     chapters: Vec<String>,
     toc: Option<Vec<TocItem>>,
+    spine: Vec<String>,
     remove_files: Vec<String>, // for simulating missing files
+    create_container: bool
 }
 
 #[derive(Clone)]
@@ -27,17 +29,24 @@ impl TocItem {
 }
 
 impl TestEpub {
-    pub fn new(title: &str) -> Self {
+    pub fn new(title: &str, create:bool) -> Self {
         Self {
             title: title.to_string(),
             chapters: vec![],
             toc: None,
+            spine: vec![],
             remove_files: vec![],
+            create_container: create
         }
     }
 
     pub fn chapters(mut self, files: Vec<&str>) -> Self {
         self.chapters = files.into_iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn spine(mut self, refs: Vec<&str>)->Self{
+        self.spine=refs.iter().map(|f|f.to_owned().to_owned()).collect();
         self
     }
 
@@ -62,6 +71,52 @@ impl TestEpub {
 
         
         let options= SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);        
+
+        let container=r#"
+            <?xml version="1.0"?>
+        <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+        <rootfiles>
+            <rootfile full-path="content.opf" media-type="application/oebps-package+xml"/>
+        </rootfiles>
+        </container>
+        "#;
+
+        if self.create_container{
+            zip.start_file("META-INF/container.xml", options)?;
+            zip.write_all(container.as_bytes())?;
+        }
+
+        let mut opf = String::new();
+        opf.push_str(&format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+        <package version="2.0" xmlns="http://www.idpf.org/2007/opf">
+        <metadata>
+            <title>{}</title>
+        </metadata>
+        <manifest>
+        "#,
+            self.title
+        ));
+
+        for chapter in &self.chapters {
+            opf.push_str(&format!(
+                r#"    <item id="{0}" href="{0}" media-type="application/xhtml+xml"/>"#,
+                chapter
+            ));
+            opf.push('\n');
+        }
+
+        opf.push_str("  </manifest>\n  <spine toc=\"toc.ncx\">\n");
+
+        for itemref in &self.spine {
+            opf.push_str(&format!("    <itemref idref=\"{}\"/>\n", itemref));
+        }
+
+        opf.push_str("  </spine>\n</package>");
+        zip.start_file("content.opf", options)?;
+        zip.write_all(opf.as_bytes())?;
+
+
 
         // write chapters
         for chapter in &self.chapters {
