@@ -12,6 +12,7 @@ console_error_panic_hook = "0.1.7"
 dioxus = { version = "0.7.1", features = ["router"] }
 futures-timer = "3.0.3"
 gloo-timers = "0.3.0"
+html-escape = "0.2.13"
 js-sys = "0.3.82"
 kuchiki = "0.8.1"
 markup5ever = "0.38.0"

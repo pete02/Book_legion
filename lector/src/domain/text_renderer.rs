@@ -1,14 +1,7 @@
 use dioxus::{hooks::{use_effect, use_signal}, logger::tracing, prelude::*, signals::{Signal, WritableExt}};
-
-
-
-
+use html_escape::decode_html_entities;
 use web_sys::{DomRect, HtmlElement};
-
-
-
 use wasm_bindgen::{JsCast, prelude::Closure};
-
 use crate::{domain::{self, text::{TextHandler, TextMap, find_sentence_offset_with_html_backtrack}}, infra};
 
 
@@ -183,7 +176,7 @@ pub fn cut_render(
             let mut end_offset = if let Some(child) = scan_children(&container, chapter_html, align) {
                 child
             } else {
-                tracing::debug!("found end");
+                tracing::info!("found end");
                 chapter_html.len()-1
             };
 
@@ -245,9 +238,6 @@ fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
 
     let first_lt = slice.find('<');
     let first_gt = slice.find('>');
-    tracing::info!("slice: {:?}", slice.chars().take(100).collect::<String>());
-    tracing::info!("first gt: {:?}",first_gt);
-    tracing::info!("first lt: {:?}", first_lt);
 
     if let Some(gt_pos) = first_gt {
         let should_trim = match first_lt {
@@ -256,10 +246,7 @@ fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
         };
 
         if should_trim {
-            tracing::info!("trimming pos: {}", gt_pos);
-            tracing::info!("before trimming: {}", slice.len());
             slice = slice[gt_pos + 1..].to_string();
-            tracing::info!("after trimming: {}", slice.len());
         }
     }
 
@@ -318,24 +305,27 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
             if let Some(idx) =measurement {
                 if idx==children.length(){return None;}
 
-                tracing::debug!("index found: {}", idx);
-                tracing::debug!("search in order: {:?}", align);
+                tracing::info!("index found: {}", idx);
+                tracing::info!("search in order: {:?}", align);
                 let el = children
                     .item(idx)
                     .unwrap()
                     .dyn_into::<HtmlElement>()
                     .unwrap();
-
-                tracing::debug!("el: {}", el.outer_html());
-                return chapter_html.find(&el.outer_html());
+                let decoded_el=decode_html_entities(&el.outer_html()).to_string();
+                let decoded=decode_html_entities(&chapter_html).to_string();
+                tracing::info!("el_decoded: {}", decoded_el);
+                tracing::info!("chapter_decooded: {}", decoded);
+                return decoded.find(&decoded_el);
             }else{
-                tracing::debug!("no measurement")
+                tracing::info!("no measurement")
             }
 
         }
         None
     }
 }
+
 
 
 fn is_container(el: &HtmlElement) -> bool {
@@ -348,10 +338,12 @@ fn first_overflowing_child(rect: &DomRect, container_rect: &DomRect, epsilon: f6
     let bottom = rect.bottom();
     let container_bottom = container_rect.bottom();
 
-    if bottom <= container_bottom + epsilon {
+
+    if bottom <= container_bottom - epsilon {
         return None;
     }
 
+    tracing::info!("found overflow");
     Some(index)
 }
 

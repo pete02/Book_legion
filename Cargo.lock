@@ -2982,6 +2982,7 @@ dependencies = [
  "dioxus",
  "futures-timer",
  "gloo-timers",
+ "html-escape",
  "js-sys",
  "kuchiki",
  "markup5ever 0.38.0",
