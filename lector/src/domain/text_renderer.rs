@@ -1,8 +1,6 @@
 use dioxus::{hooks::{use_effect, use_signal}, logger::tracing, prelude::*, signals::{Signal, WritableExt}};
-use once_cell::sync::Lazy;
-use regex::Regex;
-static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
-static HTML_ENTITY_RE:  Lazy<Regex> = Lazy::new(|| Regex::new(r"&#\d+;|&[a-zA-Z]+;").unwrap());
+
+
 
 
 use web_sys::{DomRect, HtmlElement};
@@ -123,7 +121,6 @@ pub fn render(text: &TextHandler, align: Signal<Align>, book_id:String){
             // --- SNAPSHOT VALUES FIRST ---
             let chapter = (text.chapter)();
             let start_offset = (text.start_offset)();
-            let map = (text.map)();
             let visible_text = (text.visible_text).clone();
 
 
@@ -134,7 +131,6 @@ pub fn render(text: &TextHandler, align: Signal<Align>, book_id:String){
                 start_offset,
                 current_align,
                 visible_text,
-                &map,
             );
 
             tracing::debug!("results: {}", result.end_offset);
@@ -172,7 +168,6 @@ pub fn cut_render(
     mut start_offset: usize,
     align: Align,
     mut visible_text: Signal<String>,
-    text_map: &domain::text::TextMap
 ) -> RenderResult {
     let document = web_sys::window().unwrap().document().unwrap();
     let container = document
@@ -246,15 +241,31 @@ fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
     }
 
     // Safely take a slice by chars
-    let slice: String = chapter_html.chars().skip(start).take(1000).collect();
+    let mut slice: String = chapter_html.chars().skip(start).take(1000).collect();
 
-    let mut text = normalize_text(&slice);
+    let first_lt = slice.find('<');
+    let first_gt = slice.find('>');
+    tracing::info!("slice: {:?}", slice.chars().take(100).collect::<String>());
+    tracing::info!("first gt: {:?}",first_gt);
+    tracing::info!("first lt: {:?}", first_lt);
 
-    // Take first 200 characters safely
-    text = text.chars().take(200).collect();
+    if let Some(gt_pos) = first_gt {
+        let should_trim = match first_lt {
+            Some(lt_pos) => gt_pos < lt_pos,
+            None => true,
+        };
 
-    if text.len() > 50 {
-        save_cursor(book_id, index, text);
+        if should_trim {
+            tracing::info!("trimming pos: {}", gt_pos);
+            tracing::info!("before trimming: {}", slice.len());
+            slice = slice[gt_pos + 1..].to_string();
+            tracing::info!("after trimming: {}", slice.len());
+        }
+    }
+
+
+    if slice.len() > 50 {
+        save_cursor(book_id, index, slice);
     }
 }
 
@@ -357,29 +368,6 @@ fn first_fitting_child(rect: &DomRect, container_rect: &DomRect, epsilon: f64, i
     None
 }
 
-fn normalize_text(s: &str) -> String {
-    // 1. Remove HTML tags
-    let text = HTML_TAG_RE.replace_all(s, "");
-
-    // 2. Replace HTML entities (like &#39; → ')
-    let text = HTML_ENTITY_RE.replace_all(&text, |caps: &regex::Captures| {
-        match &caps[0] {
-            "&#39;" | "&apos;" => "'".to_string(),
-            "&quot;" => "\"".to_string(),
-            "&amp;" => "&".to_string(),
-            _ => "".to_string(), // remove unknown entities
-        }
-    });
-
-    // 3. Keep only ASCII letters and digits
-    text.chars()
-        .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
-        .collect::<String>()
-        .to_lowercase()
-        .trim()
-        .to_string()
-}
-
 pub fn save_cursor(book_id:String,index: usize, save_txt:String){
     spawn(async move{
         let cursor=infra::cursor::get_cursor_from_text(&book_id, index, &save_txt).await;
@@ -390,31 +378,3 @@ pub fn save_cursor(book_id:String,index: usize, save_txt:String){
     });
 }
 
-fn slice_safe_html(s: &str, start: usize, max_len: usize) -> &str {
-    let mut inside_tag = false;
-    let mut char_count = 0;
-    let mut start_byte = None;
-    let mut end_byte = None;
-
-    for (i, c) in s.char_indices() {
-        // Track whether we are inside a tag
-        if c == '<' { inside_tag = true; }
-        if !inside_tag {
-            // Only count chars outside tags
-            if char_count >= start && start_byte.is_none() {
-                start_byte = Some(i);
-            }
-            if char_count >= start + max_len {
-                end_byte = Some(i);
-                break;
-            }
-            char_count += 1;
-        }
-        if c == '>' { inside_tag = false; }
-    }
-
-    let start_byte = start_byte.unwrap_or(s.len());
-    let end_byte = end_byte.unwrap_or(s.len());
-
-    &s[start_byte..end_byte]
-}

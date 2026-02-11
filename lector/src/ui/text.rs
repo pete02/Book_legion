@@ -1,9 +1,7 @@
 use dioxus::{logger::tracing, prelude::*};
-use wasm_bindgen::prelude::Closure;
-use wasm_bindgen::JsCast;
 
 
-use crate::{Route, domain::{self, text_renderer::{Align, cut_render, render, use_renderer}}, ui::components::{TopBar, TopBarEntry}};
+use crate::{Route, domain::{self, text_renderer::{Align, render, use_renderer}}, ui::components::{TopBar, TopBarEntry}};
 
 /// Single component reader
 #[component]
@@ -13,7 +11,7 @@ pub fn Text(book_id: String) -> Element {
     let css_ready: Signal<bool>=use_signal(||false);
     let mut align=use_signal(||Align::None);
     let mut text_handler = use_renderer(book_id.clone(), align.clone());
-    let mut back=use_signal(||false);
+    
     
 
 

@@ -95,33 +95,3 @@ pub const CHAPTER_BUTTON: &str="
     word-break: break-word;
     overflow-wrap: anywhere;
 ";
-pub const CHAPTERLIST_CONTAINER: &str="
-    flex: 1 1 200px; 
-    max-width: 250px; 
-    min-width: 150px; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 4px; 
-    overflow-y: auto;
-";
-
-pub const BOOK_CONTAINER: &str="
-    flex: 1; 
-    display: flex; 
-    flex-direction: row; 
-    padding: 16px; 
-    gap: 16px; 
-    flex-wrap: wrap; 
-    justify-content: center;
-";
-
-pub const BOOK_TEXT: &str="
-    flex: 1 1 300px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 8px;
-    min-width: 250px;
-    max-width: 600px;
-";
-

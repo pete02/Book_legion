@@ -15,7 +15,6 @@ struct LoginRequest<'a> {
 pub struct LoginResponse {
     pub auth_token: String,
     pub refresh_token: String,
-    pub expires_in: u64,
 }
 
 #[cfg(feature = "mock")]
