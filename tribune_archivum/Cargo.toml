@@ -8,7 +8,7 @@ edition = "2024"
 anyhow = "1.0.101"
 features = "0.10.0"
 full = "0.3.0"
-quick-xml = { version = "0.39.0", features = ["serialize"] }
+regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 tempdir = "0.3.7"
 tempfile = "3.25.0"

@@ -26,7 +26,7 @@ pub async fn fetch_ch(book_id:String, idx: usize, mut chapter: Signal<String>, m
     let html = infra::chapters::fetch_chapter(&book_id, idx).await;
     match html {
         Ok(txt) => {
-            chapter.set(domain::text::replace_html_entities(&txt));
+            chapter.set(decode_html_entities(&domain::text::replace_html_entities(&txt)).to_string());
             
             map.set(domain::text::build_text_map_from_html(&chapter()));
         }
@@ -313,10 +313,9 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
                     .dyn_into::<HtmlElement>()
                     .unwrap();
                 let decoded_el=decode_html_entities(&el.outer_html()).to_string();
-                let decoded=decode_html_entities(&chapter_html).to_string();
                 tracing::info!("el_decoded: {}", decoded_el);
-                tracing::info!("chapter_decooded: {}", decoded);
-                return decoded.find(&decoded_el);
+                tracing::info!("chapter_decooded: {}", chapter_html);
+                return chapter_html.find(&decoded_el);
             }else{
                 tracing::info!("no measurement")
             }

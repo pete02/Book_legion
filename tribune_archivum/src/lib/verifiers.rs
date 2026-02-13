@@ -1,5 +1,6 @@
 use std::{fs::File, io::Read, path::Path};
 
+use regex::Regex;
 use zip::{ZipArchive, read::ZipFile};
 use anyhow::{Result, bail};
 
@@ -71,7 +72,10 @@ pub fn verify_integrity(path: &Path)-> Result<bool,Box<dyn std::error::Error>>{
     };
 
     let opf=read_container_opf_path(container_file)?;
-    
+    let opf_file=match archive.by_name(&opf) {
+        Ok(f) => f,
+        Err(_) => return Err("listed opf file does not exist".into())
+    };
 
     
     if !names.contains(&"toc.ncx".to_string()){
@@ -85,47 +89,21 @@ pub fn verify_integrity(path: &Path)-> Result<bool,Box<dyn std::error::Error>>{
 
 
 
-use quick_xml::de::from_reader;
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct Container {
-    #[serde(rename = "rootfiles")]
-    rootfiles: Rootfiles,
-}
-
-#[derive(Debug, Deserialize)]
-struct Rootfiles {
-    #[serde(rename = "rootfile")]
-    rootfile: Vec<Rootfile>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Rootfile {
-    #[serde(rename = "full-path", default)]
-    full_path: String,
-
-    #[serde(rename = "media-type", default)]
-    media_type: String,
-}
-
 /// Checks that META-INF/container.xml exists and returns the OPF path
 pub fn read_container_opf_path(container_file: ZipFile<'_, File>) -> Result<String> {
 
     let mut reader = std::io::BufReader::new(container_file);
-    let container: Container = from_reader(&mut reader)
-        .map_err(|e| anyhow::anyhow!("Failed to parse container.xml: {}", e))?;
+    let mut buf = Default::default();
+    reader.read_to_string(&mut buf)?;
+    let re = Regex::new(r#"<rootfile[^>]*\sfull-path="([^"]+)""#).unwrap();
 
-    if container.rootfiles.rootfile.is_empty() {
-        bail!("No rootfile entry in container.xml");
+    if let Some(caps) = re.captures(&buf) {
+        let opf_path = caps.get(1).unwrap().as_str();
+        if opf_path.is_empty() {
+            bail!("Rootfile full-path is empty");
+        }
+        Ok(opf_path.to_string())
+    } else {
+        bail!("No rootfile element with full-path found");
     }
-
-    // Usually the first rootfile is the main OPF
-    let opf_path = container.rootfiles.rootfile[0].full_path.clone();
-
-    if opf_path.is_empty() {
-        bail!("Rootfile full-path is empty");
-    }
-
-    Ok(opf_path)
 }

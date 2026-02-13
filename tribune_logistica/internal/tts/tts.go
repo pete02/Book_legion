@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"time"
@@ -46,6 +47,7 @@ type ttsRequest struct {
 
 func TTS_fetch(c types.UserCursor, api api.API, url string) (types.Chunk, bool) {
 	text, err := extractChunk(c, api)
+	text = html.UnescapeString(text)
 	if err != nil {
 		fmt.Printf("Error extracting chunk: %v\n", err)
 		return types.Chunk{}, false

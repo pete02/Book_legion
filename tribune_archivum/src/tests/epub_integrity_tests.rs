@@ -17,9 +17,11 @@ fn epub_integrity_happy_path() {
         .spine(vec!["c1.xhtml","c2.xhtml"]);
 
     epub.write_to(&path).unwrap();
-    let result = verify_integrity(&path).unwrap();
+    let result = verify_integrity(&path);
+    println!("{:?}",result);
 
-    assert_eq!(result, false);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), false);
 }
 
 #[test]
