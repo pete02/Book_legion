@@ -154,7 +154,7 @@ pub fn rewrite_epub_with_new_file(
 }
 
 use quick_xml::{
-    events::{BytesEnd, BytesStart, Event},
+    events::{ BytesStart, Event},
     Reader, Writer,
 };
 use std::io::Cursor;
@@ -166,7 +166,6 @@ fn update_opf(opf_xml: &str, toc_path: &str) -> Result<String, Box<dyn std::erro
 
     let mut inside_manifest = false;
     let mut manifest_has_ncx = false;
-    let mut spine_seen = false;
 
     loop {
         match reader.read_event_into(&mut buf)? {
@@ -202,7 +201,6 @@ fn update_opf(opf_xml: &str, toc_path: &str) -> Result<String, Box<dyn std::erro
             }
 
             Event::Start(ref e) if e.name().as_ref() == b"spine" => {
-                spine_seen = true;
 
                 let mut spine = e.clone();
                 let mut has_toc_attr = false;

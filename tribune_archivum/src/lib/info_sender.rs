@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize};
 use std::path::Path;
-use crate::lib::{helpers, nav_model::A};
+use crate::lib::helpers;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::Read;
