@@ -106,7 +106,7 @@ pub fn process_epub(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             return Err("TOC still invalid after regeneration".into());
         }
 
-        info!("Recovered invalid ZIP: {}", path.display());
+        debug!("Recovered invalid ZIP: {}", path.display());
         return Ok(());
     }else{
         match verify_toc_integrity(path) {
@@ -130,7 +130,7 @@ pub fn process_epub(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("TOC still invalid after regeneration".into());
                 }
 
-                info!("TOC regenerated successfully: {}", path.display());
+                debug!("TOC regenerated successfully: {}", path.display());
             }
         }
     }

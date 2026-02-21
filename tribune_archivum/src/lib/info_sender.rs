@@ -1,3 +1,4 @@
+use log::{debug, error, info};
 use serde_json::Value;
 use thiserror::Error;
 use reqwest::Client;
@@ -87,6 +88,38 @@ impl BookData {
     }
 }
 
+
+#[derive(Deserialize)]
+struct SearchResponse {
+    data: Data,
+}
+
+#[derive(Deserialize)]
+struct Data {
+    search: Search,
+}
+
+#[derive(Deserialize)]
+struct Search {
+    results: Results,
+}
+
+#[derive(Deserialize)]
+struct Results {
+    hits: Vec<Hit>,
+}
+
+#[derive(Deserialize)]
+struct Hit {
+    document: Document,
+}
+
+#[derive(Deserialize)]
+struct Document {
+    alternative_titles: Option<Vec<String>>,
+    author_names: Option<Vec<String>>,
+}
+
 const TITLE_AND_AUTHOR:&str = r#"
     query GetSpecificEdition($title: String!, $author: String!) {
         books(
@@ -116,14 +149,29 @@ const TITLE_AND_AUTHOR:&str = r#"
     }
 "#;
 
+const SEARCH:&str= r#"query LordOfTheRingsBooks($query: String!) {
+  search(
+      query: $query,
+      query_type: "Book",
+      per_page: 5,
+      page: 1
+  ) {
+      results
+  }
+}"#;
+
 
 
 pub async fn query_api(
-    endpoint: &str,
-    bearer_token: &str,
     query: &str,
     variables: Value
 ) -> Result<String, ApiError> {
+    let bearer_token = env::var("HARDCOVER_API_TOKEN")
+        .map_err(|_| ApiError::MissingConfig("HARDCOVER_API_TOKEN".into()))?;
+
+    let endpoint = env::var("HARDCOVER_API_ENDPOINT")
+        .unwrap_or_else(|_| "https://api.hardcover.app/v1/graphql".to_string());
+
     let client = Client::new();
     let body =json!({
             "query": query,
@@ -141,6 +189,40 @@ pub async fn query_api(
     Ok(text)
 }
 
+fn extract_from_search_json(
+    json: &str,
+) -> Result<(Option<String>, Option<String>), Box<dyn std::error::Error>> {
+
+    let parsed: SearchResponse = serde_json::from_str(json)?;
+
+    let first_hit = parsed
+        .data
+        .search
+        .results
+        .hits
+        .get(0);
+
+    if let Some(hit) = first_hit {
+        let alt_title = hit
+            .document
+            .alternative_titles
+            .as_ref()
+            .and_then(|v| v.get(0))
+            .cloned();
+
+        let author = hit
+            .document
+            .author_names
+            .as_ref()
+            .and_then(|v| v.get(0))
+            .cloned();
+
+        return Ok((alt_title, author));
+    }
+
+    Ok((None, None))
+}
+
 
 
 use std::env;
@@ -148,21 +230,18 @@ pub async fn get_series_title(
     title: &str,
     author: &str,
 ) -> Result<Option<(String, Option<f32>)>, ApiError> {
-    let bearer_token = env::var("HARDCOVER_API_TOKEN")
-        .map_err(|_| ApiError::MissingConfig("HARDCOVER_API_TOKEN".into()))?;
-
-    let endpoint = env::var("HARDCOVER_API_ENDPOINT")
-        .unwrap_or_else(|_| "https://api.hardcover.app/v1/graphql".to_string());
-
     let variables=json!({
         "author": author,
         "title": title
     });
 
-    match query_api(&endpoint, &bearer_token, TITLE_AND_AUTHOR, variables).await {
+    match query_api( TITLE_AND_AUTHOR, variables).await {
         Ok(books_string) => {
             // Take the first matching edition
             let books:GraphQLResponse<BooksData>=serde_json::from_str(&books_string)?;
+            if books.data.books.len() ==0{
+                return Err(ApiError::NoResults);
+            }
 
             let series_tuple = books.data.books
                 .into_iter()
@@ -252,18 +331,61 @@ pub fn extract_title_author(
     Ok((title, author))
 }
 
+fn clean_title(title: &str, author: &Option<String>) -> String {
+    if let Some(author_name) = author {
+        let trimmed_title = title.trim();
+        let trimmed_author = author_name.trim();
+
+        let suffix = format!(" - {}", trimmed_author);
+
+        // Case-insensitive end match
+        if trimmed_title
+            .to_lowercase()
+            .ends_with(&suffix.to_lowercase())
+        {
+            let new_len = trimmed_title.len() - suffix.len();
+            return trimmed_title[..new_len].trim_end().to_string();
+        }
+    }
+
+    title.trim().to_string()
+}
 
 async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Error>>{
     let mut bd=BookData::new();
     let (title_o,author_o)=extract_title_author(epub_path)?;
     if let Some(title)=title_o && let Some(author)=author_o{
-        bd.title=title;
+        let cleaned=clean_title(&title, &Some(author.clone()));
+        bd.title=cleaned;
         bd.author=author;
-        let series_o=get_series_title(&bd.title, &bd.author).await?;
-        if let Some((series, Some(pos)))=series_o{
-            bd.series=series;
-            bd.pos=pos.floor() as u32;
+
+        match get_series_title(&bd.title, &bd.author).await{
+            Ok(series_o)=>{
+                if let Some((series, Some(pos)))=series_o{
+                    bd.series=series;
+                    bd.pos=pos.floor() as u32;
+                }
+            },
+            Err(_)=>{
+                let variables=json!({
+                    "query": bd.title
+                });
+                let txt=query_api(SEARCH, variables).await?;
+                let res=extract_from_search_json(&txt)?;
+                debug!("res: {:?}",res);
+                if let (Some(title),Some(author))=res{
+                    let series_o=get_series_title(&title, &author).await?;
+                        bd.title=title;
+                        bd.author=author;
+                        if let Some((series, Some(pos)))=series_o{
+                            bd.series=series;
+                            bd.pos=pos.floor() as u32;
+                        }
+                }
+            }
         }
+
+
     }else{
         return Err("no title and author".into())
     }
@@ -271,43 +393,96 @@ async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Err
 }
 
 /// Scans a folder (and subfolders) for `.epub` files and returns a vector of BookData
-pub async fn scan_epub_folder<P: AsRef<Path>>(folder: P) -> Result<Vec<BookData>, Box<dyn std::error::Error>> {
-    let mut epubs = Vec::new();
+pub async fn scan_epub_folder<P: AsRef<Path>>(
+    folder: P,
+    output_dir: P,
+) -> Result<(), Box<dyn std::error::Error>> {
 
-    // Collect all epub paths recursively
+    let mut epubs = Vec::new();
     let mut stack = vec![folder.as_ref().to_path_buf()];
 
+    // --- Recursive collection ---
     while let Some(path) = stack.pop() {
         let mut dir = match fs::read_dir(&path).await {
             Ok(d) => d,
-            Err(_) => continue, // skip unreadable folders
+            Err(_) => continue,
         };
 
         while let Some(entry) = dir.next_entry().await? {
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if path.extension().map(|s| s.eq_ignore_ascii_case("epub")).unwrap_or(false) {
+            } else if path
+                .extension()
+                .map(|s| s.eq_ignore_ascii_case("epub"))
+                .unwrap_or(false)
+            {
                 epubs.push(path);
             }
         }
     }
 
-    // Process all EPUBs concurrently (limit concurrency to avoid rate limits)
-    let results = stream::iter(epubs)
-        .map(|epub_path| async move {
-            match get_book_data(epub_path.to_str().unwrap()).await {
-                Ok(data) => Some(data),
-                Err(err) => {
-                    eprintln!("Failed to read {}: {}", epub_path.display(), err);
-                    None
+    let output_dir = output_dir.as_ref().to_path_buf();
+
+    // --- Concurrent processing ---
+    stream::iter(epubs)
+        .map(|epub_path| {
+            let output_dir = output_dir.clone();
+            async move {
+                match get_book_data(epub_path.to_str().unwrap()).await {
+                    Ok(data) => {
+                        if let Err(e) =
+                            handle_successful_book(&epub_path, &output_dir, &data).await
+                        {
+                            error!(
+                                "Failed to move {}: {}",
+                                epub_path.display(),
+                                e
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        error!(
+                            "Failed to read {}: {}",
+                            epub_path.display(),
+                            err
+                        );
+                    }
                 }
             }
         })
-        .buffer_unordered(5) // adjust concurrency: 5 parallel requests
-        .filter_map(|x| async { x }) // discard failed EPUBs
-        .collect::<Vec<_>>()
+        .buffer_unordered(5)
+        .collect::<Vec<_>>() // drive stream
         .await;
 
-    Ok(results)
+    Ok(())
+}
+
+async fn handle_successful_book(
+    source_path: &Path,
+    output_dir: &Path,
+    data: &BookData,
+) -> Result<(), Box<dyn std::error::Error>> {
+
+    // Ensure output directory exists
+    fs::create_dir_all(output_dir).await?;
+
+    let file_name = source_path
+        .file_name()
+        .ok_or("Invalid source filename")?;
+
+    let destination = output_dir.join(file_name);
+
+    // Move file
+    fs::rename(source_path, &destination).await?;
+
+    info!(
+        "Title: {}, Author: {}, Series: {}, Pos: {}",
+        data.title,
+        data.author,
+        data.series,
+        data.pos
+    );
+
+    Ok(())
 }
