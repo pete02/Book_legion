@@ -6,7 +6,7 @@ use std::path::Path;
 use tempfile::tempdir;
 
 
-pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:bool) -> Result<(), Box<dyn std::error::Error>> {
     info!("Scanning library at {}", root.display());
     fs::create_dir_all(processed_dir)?;
     fs::create_dir_all(err_dir)?;
@@ -47,14 +47,23 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path) -> Res
                 // Only copy EPUBs to processed_dir
                 let file_name = epub_path.file_name().unwrap();
                 let dest_path = processed_dir.join(file_name);
-                fs::copy(&epub_path, &dest_path)?;
+                if copy{
+                    fs::copy(&epub_path, &dest_path)?;
+                }else{
+                    fs::rename(&epub_path, &dest_path)?;
+                }
                 info!("Copied processed file to {}", dest_path.display());
             }
             Err(e) => {
                 // Move original file to err_dir
                 let file_name = path.file_name().unwrap();
                 let dest_path = err_dir.join(file_name);
-                fs::copy(path, &dest_path)?;
+                if copy{
+                    fs::copy(&path, &dest_path)?;
+                }else{
+                    fs::rename(&path, &dest_path)?;
+                }
+                
                 error!("Failed to process {}: {}", path.display(), e);
             }
         }

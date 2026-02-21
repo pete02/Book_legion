@@ -464,20 +464,51 @@ async fn handle_successful_book(
     data: &BookData,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
-    // Ensure output directory exists
-    fs::create_dir_all(output_dir).await?;
+    // Sanitize components
+    let author = sanitize_component(&data.author);
+    let title = sanitize_component(&data.title);
+    let series = sanitize_component(&data.series);
 
-    let file_name = source_path
-        .file_name()
-        .ok_or("Invalid source filename")?;
+    // Build directory path
+    let mut target_dir = output_dir.join(&author);
 
-    let destination = output_dir.join(file_name);
+    if !series.is_empty() {
+        target_dir = target_dir.join(series);
+    }
 
-    // Move file
-    fs::rename(source_path, &destination).await?;
+    
+    // Ensure directories exist
+    fs::create_dir_all(&target_dir).await?;
+
+    // Construct filename
+    let filename = format!("{}.epub", title);
+    let destination = target_dir.join(filename);
+
+    // Collision handling (simple incremental suffix)
+    let mut final_destination = destination.clone();
+    let mut counter = 1;
+
+    while final_destination.exists() {
+        let new_name = format!("{} ({}){}.epub",
+            title,
+            counter,
+            ""
+        );
+        final_destination = target_dir.join(new_name);
+        counter += 1;
+    }
+
+    // Move file (fallback-safe version)
+    match fs::rename(source_path, &final_destination).await {
+        Ok(_) => {}
+        Err(_) => {
+            fs::copy(source_path, &final_destination).await?;
+            fs::remove_file(source_path).await?;
+        }
+    }
 
     info!(
-        "Title: {}, Author: {}, Series: {}, Pos: {}",
+        "Moved → Title: {}, Author: {}, Series: {}, Pos: {}",
         data.title,
         data.author,
         data.series,
@@ -485,4 +516,14 @@ async fn handle_successful_book(
     );
 
     Ok(())
+}
+
+fn sanitize_component(input: &str) -> String {
+    let invalid = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+    input
+        .chars()
+        .filter(|c| !invalid.contains(c))
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
