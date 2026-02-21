@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package version="2.0" xmlns="http://www.idpf.org/2007/opf">
+    <metadata>
+        <title>No TOC</title>
+    </metadata>
+        <manifest>
+            <item id="c1.xhtml" href="c1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2.xhtml" href="c2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="toc.ncx">
+  </spine>
+</package>
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<package version="2.0" xmlns="http://www.idpf.org/2007/opf">
+    <metadata>
+        <title>Happy Book</title>
+    </metadata>
+    <manifest>
+        <item id="c1.xhtml" href="c1.xhtml" media-type="application/xhtml+xml"/>
+        <item id="c2.xhtml" href="c2.xhtml" media-type="application/xhtml+xml"/>
+     </manifest>
+  <spine toc="toc.ncx">
+    <itemref idref="c1.xhtml"/>
+    <itemref idref="c2.xhtml"/>
+  </spine>
+</package>

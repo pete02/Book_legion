@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod zip_safety_tests{
 use anyhow::Result;
 use zip::{ZipWriter, write::SimpleFileOptions, CompressionMethod};
 use tempfile::tempdir;
@@ -9,7 +11,6 @@ use std::io::Write;
 const MAX_FILES: usize = 2000;
 const MAX_TOTAL_UNCOMPRESSED: u64 = 512 * 1024 * 1024; // 512MB
 const MAX_SINGLE_FILE: u64 = 50 * 1024 * 1024; // 50MB
-const MAX_COMPRESSION_RATIO: f64 = 100.0;
 
 
 use crate::lib::verifiers::validate_zip_safety;
@@ -171,4 +172,5 @@ fn zip_safety_zero_compressed_size() {
     });
 
     assert!(validate_zip_safety(&zip_path).is_ok());
+}
 }

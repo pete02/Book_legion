@@ -1,13 +1,15 @@
 use std::fs::File;
-use std::io::{Write, Cursor};
+use std::io::Write;
 use std::path::Path;
-use zip::write::{FileOptions, SimpleFileOptions};
+use zip::write::SimpleFileOptions;
 
+#[allow(dead_code)]
 pub struct TestEpub {
     title: String,
     chapters: Vec<String>,
     toc: Option<Vec<TocItem>>,
     spine: Vec<String>,
+    generate_nav: bool,
     remove_files: Vec<String>, // for simulating missing files
     create_container: bool
 }
@@ -15,29 +17,37 @@ pub struct TestEpub {
 #[derive(Clone)]
 pub struct TocItem {
     pub href: String,
+    pub text: String,
     pub play_order: Option<String>,
 }
 
+#[allow(dead_code)]
 impl TocItem {
     pub fn chapter(href: &str) -> Self {
-        Self { href: href.to_string(), play_order: None }
+        Self { href: href.to_string(), text: href.to_string(), play_order: None }
     }
 
-    pub fn chapter_with_playorder(href: &str, play_order: &str) -> Self {
-        Self { href: href.to_string(), play_order: Some(play_order.to_string()) }
+    pub fn chapter_with_playorder(href: &str, text: &str,play_order: &str) -> Self {
+        Self { href: href.to_string(), text: text.to_string(), play_order: Some(play_order.to_string()) }
     }
 }
 
+#[allow(dead_code)]
 impl TestEpub {
     pub fn new(title: &str, create:bool) -> Self {
         Self {
             title: title.to_string(),
             chapters: vec![],
             toc: None,
+            generate_nav: false,
             spine: vec![],
             remove_files: vec![],
             create_container: create
         }
+    }
+    pub fn with_nav(mut self) -> Self {
+        self.generate_nav = true;
+        self
     }
 
     pub fn chapters(mut self, files: Vec<&str>) -> Self {
@@ -98,6 +108,10 @@ impl TestEpub {
             self.title
         ));
 
+        if self.toc.is_some() && !self.generate_nav{
+            opf.push_str(r#"<item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>"#);
+        }
+
         for chapter in &self.chapters {
             opf.push_str(&format!(
                 r#"    <item id="{0}" href="{0}" media-type="application/xhtml+xml"/>"#,
@@ -106,7 +120,12 @@ impl TestEpub {
             opf.push('\n');
         }
 
-        opf.push_str("  </manifest>\n  <spine toc=\"toc.ncx\">\n");
+        if self.toc.is_some() && self.generate_nav{
+            opf.push_str(r#"<item href="nav.xhtml" id="nav.xhtml" media-type="application/x-dtbncx+xml"/>"#);
+        }
+        
+
+        opf.push_str("  </manifest>\n  <spine toc=\"ncx\">\n");
 
         for itemref in &self.spine {
             opf.push_str(&format!("    <itemref idref=\"{}\"/>\n", itemref));
@@ -127,8 +146,56 @@ impl TestEpub {
             zip.write_all(b"<html><body><p>Test chapter</p></body></html>")?;
         }
 
+
+        if self.generate_nav {
+            zip.start_file("nav.xhtml", options)?;
+
+            let mut nav = String::new();
+            nav.push_str(&format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml" 
+            xmlns:epub="http://www.idpf.org/2007/ops">
+        <head><title>{}</title></head>
+        <body>
+            <nav epub:type="toc">
+            <h1>Table of Contents</h1>
+            <ol>
+        "#,
+                self.title
+            ));
+
+            // Use either TOC items or spine to populate nav
+            let items = if let Some(toc_items) = &self.toc {
+                toc_items.clone()
+            } else {
+                // fallback: generate from spine
+                self.spine
+                    .iter()
+                    .map(|s| TocItem::chapter(s))
+                    .collect()
+            };
+
+            for item in items {
+                nav.push_str(&format!(
+                    r#"        <li><a href="{}">{}</a></li>"#,
+                    item.href, item.text
+                ));
+                nav.push('\n');
+            }
+
+            nav.push_str(
+                r#"      </ol>
+            </nav>
+        </body>
+        </html>"#,
+            );
+
+            zip.write_all(nav.as_bytes())?;
+        }
+
         // write toc.ncx if any
-        if let Some(toc_items) = &self.toc {
+        if let Some(toc_items) = &self.toc && !self.generate_nav {
             zip.start_file("toc.ncx", options)?;
             let mut ncx = String::from(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -146,7 +213,7 @@ impl TestEpub {
         <navLabel><text>{}</text></navLabel>
         <content src="{}"/>
     </navPoint>"#,
-                    play_order_counter, play_order, item.href, item.href
+                    play_order_counter, play_order, item.text, item.href
                 ));
                 play_order_counter += 1;
             }
