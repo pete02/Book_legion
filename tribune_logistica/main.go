@@ -133,6 +133,11 @@ func FromEnv() (*Config, error) {
 		return nil, fmt.Errorf("DB_TYPE is required")
 	}
 
+	library := os.Getenv("LIBRARY_ROOT")
+	if library == "" {
+		return nil, fmt.Errorf("LIBRARY_ROOT is required")
+	}
+
 	adminToken := os.Getenv("ADMIN_TOKEN")
 	if adminToken == "" {
 		return nil, fmt.Errorf("Admin token must be set")

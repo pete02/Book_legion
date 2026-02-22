@@ -3,6 +3,7 @@ package library
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
@@ -34,35 +35,6 @@ func SaveBook(store storage.Storage, b Book) error {
 
 	return store.Insert("books", "id", row)
 }
-func LoadBooks(store storage.Storage, seriesID string) ([]Book, error) {
-	rows, err := store.Query("books", map[string]interface{}{
-		"series_id": seriesID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query books: %w", err)
-	}
-
-	books := make([]Book, 0, len(rows))
-	for _, row := range rows {
-		seriesOrder, err := asInt(row["series_order"])
-		if err != nil {
-			return nil, fmt.Errorf("invalid series_order for book %v: %w", row["id"], err)
-		}
-
-		book := Book{
-			ID:          row["id"].(string),
-			Title:       row["title"].(string),
-			AuthorID:    row["author_id"].(string),
-			SeriesID:    row["series_id"].(string),
-			SeriesName:  row["series_name"].(string),
-			SeriesOrder: seriesOrder,
-			FilePath:    row["file_path"].(string),
-		}
-		books = append(books, book)
-	}
-
-	return books, nil
-}
 
 func LoadBook(store storage.Storage, id string) (Book, error) {
 	rows, err := store.Query("books", map[string]interface{}{
@@ -82,6 +54,8 @@ func LoadBook(store storage.Storage, id string) (Book, error) {
 		return Book{}, fmt.Errorf("invalid series_order for book %s: %w", id, err)
 	}
 
+	resolved := GetAbsolutePath(row["file_path"].(string))
+
 	return Book{
 		ID:          row["id"].(string),
 		Title:       row["title"].(string),
@@ -89,8 +63,53 @@ func LoadBook(store storage.Storage, id string) (Book, error) {
 		SeriesID:    row["series_id"].(string),
 		SeriesName:  row["series_name"].(string),
 		SeriesOrder: seriesOrder,
-		FilePath:    row["file_path"].(string),
+		FilePath:    resolved,
 	}, nil
+}
+
+func GetAbsolutePath(stored string) string {
+	libraryRoot := os.Getenv("LIBRARY_ROOT")
+
+	var resolved string
+	if filepath.IsAbs(stored) {
+		resolved = stored
+	} else {
+		resolved = filepath.Join(libraryRoot, stored)
+	}
+
+	return resolved
+}
+
+func LoadBooks(store storage.Storage, seriesID string) ([]Book, error) {
+	rows, err := store.Query("books", map[string]interface{}{
+		"series_id": seriesID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query books: %w", err)
+	}
+
+	books := make([]Book, 0, len(rows))
+	for _, row := range rows {
+		seriesOrder, err := asInt(row["series_order"])
+		if err != nil {
+			return nil, fmt.Errorf("invalid series_order for book %v: %w", row["id"], err)
+		}
+
+		resolved := GetAbsolutePath(row["file_path"].(string))
+
+		book := Book{
+			ID:          row["id"].(string),
+			Title:       row["title"].(string),
+			AuthorID:    row["author_id"].(string),
+			SeriesID:    row["series_id"].(string),
+			SeriesName:  row["series_name"].(string),
+			SeriesOrder: seriesOrder,
+			FilePath:    resolved,
+		}
+		books = append(books, book)
+	}
+
+	return books, nil
 }
 
 func ValidateBooks(store storage.Storage) error {

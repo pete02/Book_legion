@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
@@ -340,6 +341,71 @@ func TestLoadBooks(t *testing.T) {
 				if gotIDs[i] != id {
 					t.Errorf("book %d: got %v, want %v", i, gotIDs[i], id)
 				}
+			}
+		})
+	}
+}
+
+func TestGetAbsolutePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		libraryRoot string
+		stored      string
+		expected    string
+	}{
+		{
+			name:        "absolute path unchanged",
+			libraryRoot: "/library",
+			stored:      "/other/place/book.epub",
+			expected:    "/other/place/book.epub",
+		},
+		{
+			name:        "relative path joined",
+			libraryRoot: "/library",
+			stored:      "Author/Book.epub",
+			expected:    filepath.Join("/library", "Author/Book.epub"),
+		},
+		{
+			name:        "nested relative path joined",
+			libraryRoot: "/library",
+			stored:      "Author/Series/Book.epub",
+			expected:    filepath.Join("/library", "Author/Series/Book.epub"),
+		},
+		{
+			name:        "empty library root",
+			libraryRoot: "",
+			stored:      "Author/Book.epub",
+			expected:    filepath.Join("", "Author/Book.epub"),
+		},
+		{
+			name:        "empty stored path",
+			libraryRoot: "/library",
+			stored:      "",
+			expected:    filepath.Join("/library", ""),
+		},
+		{
+			name:        "library root with trailing slash",
+			libraryRoot: "/library/",
+			stored:      "Author/Book.epub",
+			expected:    filepath.Join("/library/", "Author/Book.epub"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// isolate environment per test
+			old := os.Getenv("LIBRARY_ROOT")
+			defer os.Setenv("LIBRARY_ROOT", old)
+
+			err := os.Setenv("LIBRARY_ROOT", tt.libraryRoot)
+			if err != nil {
+				t.Fatalf("failed to set env: %v", err)
+			}
+
+			result := library.GetAbsolutePath(tt.stored)
+
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
 		})
 	}

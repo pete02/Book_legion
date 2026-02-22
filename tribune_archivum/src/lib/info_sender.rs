@@ -1,4 +1,4 @@
-use log::{debug, error, info};
+use log::{debug, error};
 use serde_json::Value;
 use thiserror::Error;
 use reqwest::Client;
@@ -432,7 +432,7 @@ pub async fn scan_epub_folder<P: AsRef<Path>>(
                 match get_book_data(epub_path.to_str().unwrap()).await {
                     Ok(data) => {
                         if let Err(e) =
-                            handle_successful_book(&epub_path, &output_dir, &data).await
+                            handle_successful_book(&epub_path, &output_dir, data).await
                         {
                             error!(
                                 "Failed to move {}: {}",
@@ -461,7 +461,7 @@ pub async fn scan_epub_folder<P: AsRef<Path>>(
 async fn handle_successful_book(
     source_path: &Path,
     output_dir: &Path,
-    data: &BookData,
+    mut data: BookData,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     // Sanitize components
@@ -506,13 +506,28 @@ async fn handle_successful_book(
             fs::remove_file(source_path).await?;
         }
     }
+    if data.series.len()==0{
+        data.series=data.title.clone();
+        data.pos=1;
+    }
 
-    info!(
-        "Moved → Title: {}, Author: {}, Series: {}, Pos: {}",
-        data.title,
-        data.author,
-        data.series,
-        data.pos
+    let relative_path = final_destination
+        .strip_prefix(output_dir)?
+        .to_path_buf();
+
+    let sending=json!({
+        "id": remove_whitespace(&data.author)+&remove_whitespace(&data.title),
+        "title": data.title,
+        "author_id": remove_whitespace(&data.author),
+        "series_id": remove_whitespace(&data.series),
+        "series_name": data.series,
+        "series_order": data.pos,
+        "file_path": relative_path
+    });
+
+    println!(
+        "Moved → data: {}"
+        , sending.to_string()
     );
 
     Ok(())
@@ -526,4 +541,10 @@ fn sanitize_component(input: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+fn remove_whitespace(s: &String)->String {
+    let mut edit=s.to_owned();
+    edit.retain(|c| c.is_ascii_alphabetic() && !c.is_whitespace() );
+    return edit.to_lowercase();
 }

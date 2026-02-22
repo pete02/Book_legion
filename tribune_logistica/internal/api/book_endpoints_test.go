@@ -456,7 +456,7 @@ func TestGetChunks(t *testing.T) {
 	defer close(stopChan)
 
 	reqBody := map[string]interface{}{
-		"usercursor": map[string]interface{}{
+		"user_cursor": map[string]interface{}{
 			"user_id": "pete",
 			"book_id": bookID,
 			"cursor":  map[string]int{"Chapter": 0, "Chunk": 0},
