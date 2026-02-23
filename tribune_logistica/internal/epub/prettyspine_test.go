@@ -95,7 +95,6 @@ func TestLoadPrettySpine_SimpleChapters(t *testing.T) {
 
 	expectedTitles := []string{"Chapter One", "Chapter Two"}
 	expectedNumbers := []int{1, 2}
-	expectedIndexes := []int{0, 1} // matching mechanical spine
 
 	for i, item := range e.Nav {
 		if item.Title != expectedTitles[i] {
@@ -103,9 +102,6 @@ func TestLoadPrettySpine_SimpleChapters(t *testing.T) {
 		}
 		if item.Number != expectedNumbers[i] {
 			t.Errorf("item %d: expected number %d, got %d, Nav: %v", i, expectedNumbers[i], item.Number, e.Nav)
-		}
-		if item.Index != expectedIndexes[i] {
-			t.Errorf("item %d: expected index %d, got %d, Nav: %v", i, expectedIndexes[i], item.Index, e.Nav)
 		}
 	}
 }

@@ -25,7 +25,6 @@ EXPOSE 8000
 
 ENV DB_TYPE=sqlite
 ENV DB_PATH=/data/storage.db
-ENV ADMIN_TOKEN=changeme
 ENV TTS_BACKEND=mock
 
 # Set entrypoint

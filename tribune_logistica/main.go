@@ -138,9 +138,9 @@ func FromEnv() (*Config, error) {
 		return nil, fmt.Errorf("LIBRARY_ROOT is required")
 	}
 
-	adminToken := os.Getenv("ADMIN_TOKEN")
+	adminToken := os.Getenv("TRIBUNE_LOGISTICA_ADMIN_TOKEN")
 	if adminToken == "" {
-		return nil, fmt.Errorf("Admin token must be set")
+		return nil, fmt.Errorf("TRIBUNE_LOGISTICA_ADMIN_TOKEN must be set")
 	}
 
 	switch DBType(dbType) {

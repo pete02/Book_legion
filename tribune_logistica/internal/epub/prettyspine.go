@@ -13,6 +13,7 @@ import (
 type PrettySpineItem struct {
 	Index  int    `json:"index"`
 	Number int    `json:"number"`
+	Href   string `json: href`
 	Title  string `json:"title"`
 }
 type NavToc struct {
@@ -37,7 +38,7 @@ func (e *Epub) LoadPrettySpine() ([]PrettySpineItem, error) {
 		return nil, err
 	}
 	defer r.Close()
-
+	var toc_folder = ""
 	var navData []byte
 	// 2. locate nav.toc in ZIP
 	for _, f := range r.File {
@@ -48,6 +49,7 @@ func (e *Epub) LoadPrettySpine() ([]PrettySpineItem, error) {
 			}
 			defer rc.Close()
 			navData, err = io.ReadAll(rc)
+			toc_folder = filepath.Dir(f.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -83,16 +85,6 @@ func (e *Epub) LoadPrettySpine() ([]PrettySpineItem, error) {
 	number := 1
 	for _, np := range flat {
 		href := strings.Split(np.Content.Src, "#")[0] // ignore fragment
-		var spineIndex = -1
-		for idx, si := range e.Spine {
-			if filepath.Base(si.Href) == filepath.Base(href) {
-				spineIndex = idx
-				break
-			}
-		}
-		if spineIndex == -1 {
-			return nil, fmt.Errorf("Could not match spine index with the nav index")
-		}
 		playOrderInt, err := strconv.Atoi(np.PlayOrder)
 		if err != nil {
 			// handle invalid number
@@ -100,9 +92,10 @@ func (e *Epub) LoadPrettySpine() ([]PrettySpineItem, error) {
 		}
 
 		item := PrettySpineItem{
-			Index:  spineIndex,
+			Index:  playOrderInt,
 			Number: playOrderInt + 1,
 			Title:  np.Label,
+			Href:   toc_folder + "/" + href,
 		}
 		pretty = append(pretty, item)
 		number++

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -136,9 +137,10 @@ func (api *API) GetChapterProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("test ok?")
 	progress, err := epub.ChapterProgress(cursor, api.Policy)
-
 	if err != nil {
+		log.Printf("Error with Chapter progress: %v\n", err)
 		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
 		return
 	}
@@ -439,6 +441,7 @@ func (api *API) GetCover(w http.ResponseWriter, r *http.Request) {
 
 	coverData, coverName, err := epub.ExtractCover()
 	if err != nil {
+		fmt.Printf("Error in getting cover: %v\n", err)
 		http.Error(w, "Could not get cover", http.StatusInternalServerError)
 		return
 	}

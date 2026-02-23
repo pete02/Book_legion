@@ -150,12 +150,15 @@ func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
 }
 
 func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
-	if navIndex < 0 || navIndex >= len(e.Spine) {
-		return nil, fmt.Errorf("spine index %d out of range", navIndex)
+	if e.Nav == nil {
+		return nil, fmt.Errorf("Nav cannot be Nil")
+	}
+
+	if navIndex < 0 || navIndex >= len(e.Nav) {
+		return nil, fmt.Errorf("Nav index %d out of range", navIndex)
 	}
 
 	nav := e.Nav[navIndex]
-	item := e.Spine[nav.Index]
 
 	zr, err := zip.OpenReader(e.Path)
 	if err != nil {
@@ -164,7 +167,7 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 	defer zr.Close()
 
 	for _, f := range zr.File {
-		if f.Name != item.Href {
+		if f.Name != nav.Href {
 			continue
 		}
 
@@ -186,7 +189,7 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 
 		body := findBodyNode(doc)
 		if body == nil {
-			return nil, fmt.Errorf("no <body> found in chapter %s", item.Href)
+			return nil, fmt.Errorf("no <body> found in chapter %s", nav.Href)
 		}
 
 		removeWhitespaceTextNodes(body)
@@ -201,7 +204,7 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 		return buf.Bytes(), nil
 	}
 
-	return nil, fmt.Errorf("chapter href not found in epub: %s", item.Href)
+	return nil, fmt.Errorf("chapter href not found in epub: %s", nav.Href)
 }
 
 func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (string, error) {

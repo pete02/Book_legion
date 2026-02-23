@@ -757,7 +757,7 @@ func TestChapterProgress(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 OK, got %d: %v", resp.StatusCode, resp)
 	}
 
 	type progressResponse struct {

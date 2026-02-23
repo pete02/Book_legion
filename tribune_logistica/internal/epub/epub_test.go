@@ -60,19 +60,14 @@ func TestExtractChapter_HappyPath(t *testing.T) {
 	})
 
 	e := &Epub{
-		Path: epubPath,
-		Spine: []SpineItem{
-			{
-				Index: 0,
-				ID:    "chap1",
-				Href:  "OEBPS/chapter1.xhtml",
-			},
-		},
+		Path:  epubPath,
+		Spine: nil,
 		Nav: []PrettySpineItem{
 			{
 				Index:  0,
 				Number: 1,
 				Title:  "test",
+				Href:   "OEBPS/chapter1.xhtml",
 			},
 		},
 	}
@@ -113,6 +108,7 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 						Index:  0,
 						Number: 1,
 						Title:  "test",
+						Href:   "OEBPS/chapter1.xhtml",
 					},
 				},
 			},
@@ -135,6 +131,7 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 			epub: &Epub{
 				Path:  validEpubPath,
 				Spine: nil,
+				Nav:   nil,
 			},
 			index:     0,
 			expectErr: true,
@@ -151,6 +148,7 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 						Index:  0,
 						Number: 1,
 						Title:  "test",
+						Href:   "chapter.xhtml",
 					},
 				},
 			},
@@ -169,6 +167,7 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 						Index:  0,
 						Number: 1,
 						Title:  "test",
+						Href:   "OEBPS/missing.xhtml",
 					},
 				},
 			},
@@ -216,10 +215,12 @@ func TestEpub_ExtractChunk(t *testing.T) {
 				Index:  0,
 				Number: 1,
 				Title:  "test",
+				Href:   "chapter1.xhtml",
 			}, {
 				Index:  1,
 				Number: 2,
 				Title:  "test2",
+				Href:   "chapter2.xhtml",
 			},
 		},
 	}
@@ -295,10 +296,12 @@ func TestEpub_ExtractCover(t *testing.T) {
 				Index:  0,
 				Number: 1,
 				Title:  "test",
+				Href:   "OEBPS/chapter1.xhtml",
 			}, {
 				Index:  1,
 				Number: 2,
 				Title:  "test2",
+				Href:   "OEBPS/chapter2.xhtml",
 			},
 		},
 	}
@@ -369,6 +372,7 @@ func TestEpub_ExtractCSS(t *testing.T) {
 				Index:  0,
 				Number: 1,
 				Title:  "test",
+				Href:   "OEBPS/chapter1.xhtml",
 			},
 		},
 	}
@@ -414,6 +418,7 @@ func TestEpub_MaxChunkIndex(t *testing.T) {
 				Index:  0,
 				Number: 1,
 				Title:  "test",
+				Href:   "chapter1.xhtml",
 			},
 		},
 	}
