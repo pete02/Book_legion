@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strings"
 	"unicode"
@@ -167,7 +168,7 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 	defer zr.Close()
 
 	for _, f := range zr.File {
-		if f.Name != nav.Href {
+		if path.Clean(f.Name) != path.Clean(nav.Href) {
 			continue
 		}
 
@@ -204,7 +205,7 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 		return buf.Bytes(), nil
 	}
 
-	return nil, fmt.Errorf("chapter href not found in epub: %s", nav.Href)
+	return nil, fmt.Errorf("extract chapter error: chapter href not found in epub: %s\n", nav.Href)
 }
 
 func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
