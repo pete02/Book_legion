@@ -44,7 +44,7 @@ func setupAPI(t *testing.T) api.API {
 func setupRegister(t *testing.T, api api.API, username, password string) *http.Response {
 	t.Helper()
 	token := "Long Token"
-	os.Setenv("ADMIN_TOKEN", token)
+	os.Setenv("TRIBUNE_LOGISTICA_ADMIN_TOKEN", token)
 
 	// Prepare request body
 	registerBody := map[string]string{"username": username, "password": password}

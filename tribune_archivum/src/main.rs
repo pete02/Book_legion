@@ -8,7 +8,7 @@ mod tests;
 async fn main() {
     dotenvy::dotenv().ok();
     env_logger::init();
-    let input=Path::new("./data");
+    let input=Path::new("./data2");
     let output=Path::new("./out");
     let onboarded=Path::new("./onboard");
     let errs=Path::new("./errs");

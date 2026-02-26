@@ -6,3 +6,4 @@ pub mod helpers;
 pub mod nav_model;
 pub mod orchestrator;
 pub mod info_sender;
+pub mod gate;

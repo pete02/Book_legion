@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize};
 use std::path::Path;
-use crate::lib::helpers;
+use crate::lib::{gate, helpers};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::Read;
@@ -113,11 +113,17 @@ struct Results {
 struct Hit {
     document: Document,
 }
+#[derive(Deserialize)]
+struct FeaturedSeries {
+    featured: Option<bool>,
+    // series, position, etc. can be added if needed
+}
 
 #[derive(Deserialize)]
 struct Document {
     alternative_titles: Option<Vec<String>>,
     author_names: Option<Vec<String>>,
+    featured_series: Option<FeaturedSeries>,
 }
 
 const TITLE_AND_AUTHOR:&str = r#"
@@ -177,6 +183,8 @@ pub async fn query_api(
             "query": query,
             "variables": variables
         });
+
+    debug!("variable: {}",variables.to_string());
     let response = client
         .post(endpoint)
         .bearer_auth(bearer_token)
@@ -194,13 +202,26 @@ fn extract_from_search_json(
 ) -> Result<(Option<String>, Option<String>), Box<dyn std::error::Error>> {
 
     let parsed: SearchResponse = serde_json::from_str(json)?;
-
-    let first_hit = parsed
+    // Prefer hits that have a featured series
+    let mut first_hit = parsed
         .data
         .search
         .results
         .hits
-        .get(0);
+        .iter()
+        .find(|hit| {
+            hit.document
+                .featured_series
+                .as_ref()
+                .map(|fs| fs.featured.is_some())
+                .unwrap_or(false)
+        });
+
+    // If none are featured, fallback to the first hit
+    if first_hit.is_none() {
+        first_hit = parsed.data.search.results.hits.get(0);
+        debug!("no series were found")
+    }
 
     if let Some(hit) = first_hit {
         let alt_title = hit
@@ -222,8 +243,6 @@ fn extract_from_search_json(
 
     Ok((None, None))
 }
-
-
 
 use std::env;
 pub async fn get_series_title(
@@ -367,8 +386,15 @@ async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Err
                 }
             },
             Err(_)=>{
+                let search_query = bd
+                    .title
+                    .split(" (")           // cut off anything in parentheses
+                    .next()
+                    .unwrap_or(&bd.title)
+                    .trim();
+
                 let variables=json!({
-                    "query": bd.title
+                    "query": search_query
                 });
                 let txt=query_api(SEARCH, variables).await?;
                 let res=extract_from_search_json(&txt)?;
@@ -466,14 +492,16 @@ async fn handle_successful_book(
 
     // Sanitize components
     let author = sanitize_component(&data.author);
+    let authorid=remove_whitespace(&data.author);
     let title = sanitize_component(&data.title);
     let series = sanitize_component(&data.series);
+    let seriesid=remove_whitespace(&data.series);
 
     // Build directory path
-    let mut target_dir = output_dir.join(&author);
+    let mut target_dir = output_dir.join(&authorid);
 
     if !series.is_empty() {
-        target_dir = target_dir.join(series);
+        target_dir = target_dir.join(&seriesid);
     }
 
     
@@ -518,12 +546,16 @@ async fn handle_successful_book(
     let sending=json!({
         "id": remove_whitespace(&data.author)+&remove_whitespace(&data.title),
         "title": data.title,
-        "author_id": remove_whitespace(&data.author),
-        "series_id": remove_whitespace(&data.series),
+        "author_id": authorid,
+        "series_id": seriesid,
         "series_name": data.series,
         "series_order": data.pos,
         "file_path": relative_path
     });
+
+    let auth=gate::refresh_auth_token().await?;
+    gate::post_new_book(&auth, &sending).await?;
+
 
     println!(
         "Moved → data: {}"

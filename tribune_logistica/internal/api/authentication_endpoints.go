@@ -41,7 +41,7 @@ func (api *API) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	authHeader := r.Header.Get("Authorization")
-	expectedToken := os.Getenv("ADMIN_TOKEN")
+	expectedToken := os.Getenv("TRIBUNE_LOGISTICA_ADMIN_TOKEN")
 
 	if !strings.HasPrefix(authHeader, "Bearer ") || len(authHeader) <= 7 {
 		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)

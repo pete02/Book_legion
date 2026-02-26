@@ -15,7 +15,7 @@ import (
 
 func TestFailRegisterUserWithoutCorrectToken(t *testing.T) {
 	token := "Long Token"
-	os.Setenv("ADMIN_TOKEN", token)
+	os.Setenv("TRIBUNE_LOGISTICA_ADMIN_TOKEN", token)
 	api := setupAPI(t)
 	registerBody := map[string]string{"username": "username", "password": "password"}
 	buf, _ := json.Marshal(registerBody)
