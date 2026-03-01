@@ -169,7 +169,11 @@ func createTestEpub(t *testing.T, api api.API) string {
 
 		"OEBPS/content.opf": `
 <package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <metadata>
+        <meta name="cover" content="cover"/>
+  </metadata>
   <manifest>
+    <item id="cover" href="cover.png" media-type="image/png"/>
     <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
     <item id="chap2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
   </manifest>

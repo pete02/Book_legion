@@ -376,6 +376,14 @@ POST /api/v1/savebook   //works
 #### Handler Responsibilities
 Save the posted cursor
 
+### 5.5 Delete Books
+DELETE /api/v1/deletebook/{ID}
+**Response**: 200
+
+
+### 5.5 Delete Books
+DELETE /api/v1/deleteseries/{ID}
+**Response**: 200
 
 ## 6. Notes
 All endpoints require auth token except registration and login and cover

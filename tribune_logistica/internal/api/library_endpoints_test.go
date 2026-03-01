@@ -156,4 +156,64 @@ func TestLibraryEndpoints(t *testing.T) {
 			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
 		}
 	})
+
+	t.Run("DeleteBook_Unathorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/deletebooks/"+bookID, nil)
+		req.Header.Set("Authorization", "Bearer bad_token")
+		w := httptest.NewRecorder()
+
+		api.DeleteBook(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("DeleteBook_Authorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/deletebooks/"+bookID, nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		w := httptest.NewRecorder()
+
+		api.DeleteBook(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("DeleteSeries_Unathorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/deleteseries/"+seriesID, nil)
+		req.Header.Set("Authorization", "Bearer bad_token")
+		w := httptest.NewRecorder()
+
+		api.DeleteBook(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("DeleteSeries_Authorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/deleteseries/"+seriesID, nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		w := httptest.NewRecorder()
+
+		api.DeleteBook(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 Ok, got %d", resp.StatusCode)
+		}
+	})
 }

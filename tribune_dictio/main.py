@@ -65,6 +65,10 @@ def tts():
         raise HTTPResponse(status_code=400, detail=f"Voice '{audio}' not found")
 
     start = time.perf_counter()
+
+    debug = os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
+    if debug:
+        print(text)
     sentences = split_text_into_sentences(text)
 
     wav_segments = [model.generate(s,

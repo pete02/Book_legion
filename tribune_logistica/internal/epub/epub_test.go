@@ -271,13 +271,24 @@ func TestEpub_ExtractChunk(t *testing.T) {
 }
 
 func TestEpub_ExtractCover(t *testing.T) {
-	// dummy image bytes
-	coverData := []byte{0x89, 0x50, 0x4E, 0x47} // just the PNG signature
+	coverData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG signature (dummy)
 	otherData := []byte("not the cover")
 
-	// in-memory EPUB with a cover image
+	// EPUB with OPF metadata declaring cover
 	files := map[string]string{
-		"OEBPS/cover.png":      string(coverData),
+		"OEBPS/cover.png": string(coverData),
+
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <meta name="cover" content="cover"/>
+          </metadata>
+          <manifest>
+            <item id="cover" href="cover.png" media-type="image/png"/>
+          </manifest>
+          <spine></spine>
+        </package>`,
+
 		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
 		"OEBPS/chapter2.xhtml": "<html><body>Chapter 2 content</body></html>",
 		"OEBPS/other.jpg":      string(otherData),
@@ -285,26 +296,7 @@ func TestEpub_ExtractCover(t *testing.T) {
 
 	path := createTestEpub(t, files)
 
-	epub := Epub{
-		Path: path,
-		Spine: []SpineItem{
-			{Index: 0, ID: "c1", Href: "OEBPS/chapter1.xhtml"},
-			{Index: 1, ID: "c2", Href: "OEBPS/chapter2.xhtml"},
-		},
-		Nav: []PrettySpineItem{
-			{
-				Index:  0,
-				Number: 1,
-				Title:  "test",
-				Href:   "OEBPS/chapter1.xhtml",
-			}, {
-				Index:  1,
-				Number: 2,
-				Title:  "test2",
-				Href:   "OEBPS/chapter2.xhtml",
-			},
-		},
-	}
+	epub := Epub{Path: path}
 
 	tests := []struct {
 		name     string
@@ -313,7 +305,7 @@ func TestEpub_ExtractCover(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "find PNG cover",
+			name:     "find cover via metadata",
 			wantData: coverData,
 			wantName: "OEBPS/cover.png",
 			wantErr:  false,
@@ -323,31 +315,40 @@ func TestEpub_ExtractCover(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotData, gotName, err := epub.ExtractCover()
+
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ExtractCover() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			if tt.wantErr {
+				return
+			}
 			if !bytes.Equal(gotData, tt.wantData) {
-				t.Errorf("ExtractCover() data mismatch, got %v, want %v", gotData, tt.wantData)
+				t.Errorf("data mismatch: got %v, want %v", gotData, tt.wantData)
 			}
 			if gotName != tt.wantName {
-				t.Errorf("ExtractCover() name = %v, want %v", gotName, tt.wantName)
+				t.Errorf("name mismatch: got %v, want %v", gotName, tt.wantName)
 			}
 		})
 	}
 
-	// Test missing cover
+	// Test missing cover metadata (should error)
 	filesNoCover := map[string]string{
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+          <metadata></metadata>
+          <manifest></manifest>
+          <spine></spine>
+        </package>`,
+
 		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
 	}
-	noCoverPath := createTestEpub(t, filesNoCover)
 
-	epubNoCover := Epub{
-		Path: noCoverPath,
-	}
+	noCoverPath := createTestEpub(t, filesNoCover)
+	epubNoCover := Epub{Path: noCoverPath}
+
 	t.Run("no cover present", func(t *testing.T) {
-		_, _, err := epubNoCover.ExtractCover()
-		if err == nil {
-			t.Errorf("ExtractCover() expected error, got nil")
+		if _, _, err := epubNoCover.ExtractCover(); err == nil {
+			t.Errorf("expected error when cover metadata missing")
 		}
 	})
 }

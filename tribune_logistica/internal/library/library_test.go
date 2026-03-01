@@ -410,3 +410,163 @@ func TestGetAbsolutePath(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteSeries_Success(t *testing.T) {
+	tmpFile := "test_manifest_delete.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	manifest := library.Manifest{
+		Series: []library.SeriesEntry{
+			{SeriesID: "s1", SeriesName: "Series 1", FirstBookID: "b1"},
+			{SeriesID: "s2", SeriesName: "Series 2", FirstBookID: "b2"},
+		},
+	}
+
+	book := library.Book{
+		ID:          "b1",
+		SeriesID:    "s1",
+		SeriesName:  "Series 1",
+		SeriesOrder: 1,
+		FilePath:    "file.epub",
+	}
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	if err := library.SaveManifest(store, manifest); err != nil {
+		t.Fatalf("SaveManifest failed: %v", err)
+	}
+
+	// delete series s1 (no books exist referencing it)
+	if err := library.DeleteSeries(store, "s2"); err != nil {
+		t.Fatalf("DeleteSeries failed: %v", err)
+	}
+
+	loaded, err := library.LoadManifest(store)
+	t.Logf("manifest: %+v", loaded)
+	if err != nil {
+		t.Fatalf("LoadManifest failed: %v", err)
+	}
+	if len(loaded.Series) != 1 {
+		t.Fatalf("expected 1 entry after delete, got %d", len(loaded.Series))
+	}
+
+	if loaded.Series[0].SeriesID != "s1" {
+		t.Fatalf("expected remaining series to be s1, got %s", loaded.Series[0].SeriesID)
+	}
+}
+
+func TestDeleteSeriesNoBooks(t *testing.T) {
+	tmpFile := "test_manifest_delete.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	manifest := library.Manifest{
+		Series: []library.SeriesEntry{
+			{SeriesID: "s1", SeriesName: "Series 1", FirstBookID: "b1"},
+			{SeriesID: "s2", SeriesName: "Series 2", FirstBookID: "b2"},
+		},
+	}
+
+	if err := library.SaveManifest(store, manifest); err != nil {
+		t.Fatalf("SaveManifest failed: %v", err)
+	}
+
+	// delete series s1 (no books exist referencing it)
+	if err := library.DeleteSeries(store, "s2"); err != nil {
+		t.Fatalf("DeleteSeries failed: %v", err)
+	}
+
+	loaded, err := library.LoadManifest(store)
+	t.Logf("manifest: %+v", loaded)
+	if err != nil {
+		t.Fatalf("LoadManifest failed: %v", err)
+	}
+	if len(loaded.Series) != 1 {
+		t.Fatalf("expected 1 entry after delete, got %d", len(loaded.Series))
+	}
+
+	if loaded.Series[0].SeriesID != "s1" {
+		t.Fatalf("expected remaining series to be s1, got %s", loaded.Series[0].SeriesID)
+	}
+}
+
+func TestDeleteSeries_RefuseWhenBooksExist(t *testing.T) {
+	tmpFile := "test_manifest_delete_books.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	// create a book referencing series
+	book := library.Book{
+		ID:          "b1",
+		SeriesID:    "s1",
+		SeriesName:  "Series 1",
+		SeriesOrder: 1,
+		FilePath:    "file.epub",
+	}
+
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	// attempt delete (should fail)
+	if err := library.DeleteSeries(store, "s1"); err == nil {
+		t.Fatalf("expected error deleting non-empty series")
+	}
+}
+
+func TestDeleteSeries_NotInManifest(t *testing.T) {
+	tmpFile := "test_manifest_delete_missing.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	manifest := library.Manifest{Series: []library.SeriesEntry{}}
+	if err := library.SaveManifest(store, manifest); err != nil {
+		t.Fatalf("SaveManifest failed: %v", err)
+	}
+
+	// delete non-existing series
+	if err := library.DeleteSeries(store, "nope"); err == nil {
+		t.Fatalf("expected error when series not in manifest")
+	}
+}
+
+func TestDeleteBook(t *testing.T) {
+	tmpFile := "test_delete_book.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	book := library.Book{
+		ID:          "b1",
+		SeriesID:    "s1",
+		SeriesName:  "Series 1",
+		SeriesOrder: 1,
+		FilePath:    "file.epub",
+	}
+
+	if err := library.SaveBook(store, book); err != nil {
+		t.Fatalf("SaveBook failed: %v", err)
+	}
+
+	// delete it
+	if err := library.DeleteBook(store, "b1"); err != nil {
+		t.Fatalf("DeleteBook failed: %v", err)
+	}
+
+	// ensure it’s gone
+	rows, err := store.Query("books", map[string]interface{}{
+		"id": "b1",
+	})
+	if err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected book to be deleted")
+	}
+}

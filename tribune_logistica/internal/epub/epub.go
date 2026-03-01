@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -291,16 +292,103 @@ func (e *Epub) ExtractCover() ([]byte, string, error) {
 	}
 	defer zr.Close()
 
+	// Step 1: Find the OPF file (package document)
+	var opfPath string
 	for _, f := range zr.File {
-		lower := strings.ToLower(f.Name)
-		if strings.Contains(lower, "cover") &&
-			(strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") ||
-				strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".gif")) {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".opf") {
+			opfPath = f.Name
+			break
+		}
+	}
+	if opfPath == "" {
+		return nil, "", fmt.Errorf("OPF file not found")
+	}
+
+	// Step 2: Read OPF
+	var opfData []byte
+	{
+		f, err := zr.Open(opfPath)
+		if err != nil {
+			return nil, "", err
+		}
+		defer f.Close()
+		opfData, err = io.ReadAll(f)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Step 3: Parse OPF to find cover ID
+	var coverID string
+	{
+		type Meta struct {
+			Name    string `xml:"name,attr"`
+			Content string `xml:"content,attr"`
+		}
+		type Metadata struct {
+			Metas []Meta `xml:"meta"`
+		}
+		type Package struct {
+			Metadata Metadata `xml:"metadata"`
+		}
+
+		var pkg Package
+		if err := xml.Unmarshal(opfData, &pkg); err == nil {
+			for _, m := range pkg.Metadata.Metas {
+				if m.Name == "cover" {
+					coverID = m.Content
+					break
+				}
+			}
+		}
+	}
+
+	if coverID == "" {
+		return nil, "", fmt.Errorf("cover metadata not found")
+	}
+
+	// Step 4: Find manifest item with that ID
+	type Item struct {
+		ID   string `xml:"id,attr"`
+		Href string `xml:"href,attr"`
+	}
+	type Manifest struct {
+		Items []Item `xml:"item"`
+	}
+	type Package2 struct {
+		Manifest Manifest `xml:"manifest"`
+	}
+
+	var manifest Package2
+	if err := xml.Unmarshal(opfData, &manifest); err != nil {
+		return nil, "", err
+	}
+
+	var coverHref string
+	for _, it := range manifest.Manifest.Items {
+		if it.ID == coverID {
+			coverHref = it.Href
+			break
+		}
+	}
+
+	if coverHref == "" {
+		return nil, "", fmt.Errorf("cover item not found in manifest")
+	}
+
+	// Step 5: Extract the image
+	// OPF href is relative to OPF location
+	baseDir := path.Dir(opfPath)
+	coverPath := path.Join(baseDir, coverHref)
+
+	for _, f := range zr.File {
+		if f.Name == coverPath {
 			rc, err := f.Open()
 			if err != nil {
 				return nil, "", err
 			}
 			defer rc.Close()
+
 			data, err := io.ReadAll(rc)
 			if err != nil {
 				return nil, "", err
@@ -308,8 +396,8 @@ func (e *Epub) ExtractCover() ([]byte, string, error) {
 			return data, f.Name, nil
 		}
 	}
-
-	return nil, "", fmt.Errorf("cover image not found")
+	fmt.Printf("Cover image path: %v", coverPath)
+	return nil, "", fmt.Errorf("cover image file not found")
 }
 
 func (e *Epub) ExtractCSS() ([]byte, error) {
