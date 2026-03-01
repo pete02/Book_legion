@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::infra::auth::get_with_auth;
+use crate::infra::auth::{get_with_auth,delete_with_auth};
 
 
 
@@ -28,6 +28,27 @@ pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std
     let books = resp.json::<Vec<BookEntry>>().await?;
     Ok(books)
 }
+
+
+#[cfg(not(feature = "mock"))]
+pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let url = format!("/api/v1/deleteseries/{}", series_id);
+    let resp = delete_with_auth(&url).await?;
+    
+    if !resp.ok() {
+        return Err(format!("series request failed: {}", resp.status()).into());
+    }
+
+    Ok(())
+}
+
+
+#[cfg(feature = "mock")]
+pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    info!("deleted the series");
+    Ok(())
+}
+
 
 #[cfg(feature = "mock")]
 pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std::error::Error>> {

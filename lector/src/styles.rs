@@ -69,19 +69,17 @@ pub const LOGIN_BUTTON: &str = "
 
 pub const TOPBAR: &str = "
     display: flex;
-    justify-content: flex-start;
-    align-items: center; 
-    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
     padding: 8px 16px;
     background-color: #1d273eff;
-    width: 100%;          /* take the full width of the viewport */
-    position: sticky;     /* stay at the top when scrolling */
-    top: 0;               /* stick to top */
+    width: 100%;
+    position: sticky;
+    top: 0;
     left: 0;
     box-sizing: border-box;
-    z-index: 100;         /* ensure it stays above other content */
+    z-index: 100;
 ";
-
 
 pub const CHAPTER_BUTTON: &str="
     all: unset;

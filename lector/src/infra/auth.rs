@@ -36,6 +36,41 @@ pub async fn get_with_auth(
     Ok(retry_resp)
 }
 
+pub async fn delete_with_auth(
+    url: &str
+) -> Result<reqwasm::http::Response, String> {
+    let auth_token = domain::login::current_auth();
+    let refresh_token = domain::login::current_refresh();
+
+    let resp = Request::delete(url)
+        .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status() != 401 {
+        return Ok(resp);
+    }
+
+    let refresh_token = refresh_token.ok_or("No refresh token available")?;
+    let new_auth = refresh_auth_token(&refresh_token).await?;
+    domain::login::set_auth(Some(new_auth.clone()));
+
+    let retry_resp = Request::get(url)
+        .header("Authorization", &format!("Bearer {}", new_auth))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if retry_resp.status() == 401 {
+        domain::login::set_refresh(None);
+        return Err("Unauthorized after refresh".into());
+    }
+
+    Ok(retry_resp)
+}
+
+
 pub async fn post_with_auth(
     url: &str,
     body: String,

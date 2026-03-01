@@ -48,6 +48,11 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
                 "series_id": "s2",
                 "series_name": "Series two",
                 "first_book_id": "b2"
+            },
+            {
+                "series_id": "s3",
+                "series_name": "Series three",
+                "first_book_id": "b5"
             }
         ]
     });

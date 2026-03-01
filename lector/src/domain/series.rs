@@ -1,6 +1,6 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::infra::series;
+use crate::infra::{self, series};
 use crate::domain::cover::{CardData, create_cover_path};
 
 async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
@@ -30,6 +30,15 @@ async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardD
 }
 
 
+
+pub fn delete_series(series_id:String){
+    spawn(async move{
+        match infra::series::delete_series(&series_id).await{
+            Ok(_)=>{}
+            Err(_)=>error!("Could not delete the series")
+        }
+    });
+}
 
 pub fn use_series(book_id: String, title: Signal<String>) -> Signal<Vec<CardData>> {
     let mut books = use_signal(Vec::new);

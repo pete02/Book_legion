@@ -88,6 +88,8 @@ func main() {
 
 	r.Post("/api/v1/cursors/save", api.SaveCursor)
 	r.Post("/api/v1/savebook", api.SaveBook)
+	r.Delete("/api/v1/deleteseries/{SeriesID}", api.DeleteSeries)
+	r.Delete("/api/v1/deletebook/{SeriesID}", api.DeleteBook)
 
 	fmt.Println("Server listening on http://localhost:8000")
 	if err := http.ListenAndServe(":8000", r); err != nil {

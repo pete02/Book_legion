@@ -65,6 +65,5 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Stri
     Ok(LoginResponse {
         auth_token: "mock_auth_token".into(),
         refresh_token: "mock_refresh_token".into(),
-        expires_in: 900,
     })
 }

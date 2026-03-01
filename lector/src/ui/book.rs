@@ -8,6 +8,7 @@ use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::compo
 pub fn Book(book_id: String) -> Element {
     let book = use_book(book_id.clone());
     let cover_path = domain::cover::create_cover_path(book_id.clone());
+
     let top_entries = vec![
         TopBarEntry {
             name: "Library".into(),
@@ -30,7 +31,7 @@ pub fn Book(book_id: String) -> Element {
     return rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",
-            TopBar { entries: top_entries }
+            TopBar { entries: top_entries, show_delete: Signal::new(false) }
 
             div {
                 style: "
