@@ -14,18 +14,23 @@ pub fn Series(series_id:String) -> Element {
         },
     ];
 
-    let books=domain::series::use_series(series_id.clone(),title);
+    let books: Signal<Vec<domain::cover::CardData>>=domain::series::use_series(series_id.clone(),title);
     use_effect(move||{
         if books().len() == 0{
             delete_signal.set(true);
         }else{
             delete_signal.set(false);
         }
+
+        if books().len()==1{
+            let book=&books()[0];
+            use_navigator().push(book.path.clone());
+        }
     });
 
     return rsx! {
         div { style: styles::CONTAINER_STYLE,
-            TopBar{ entries: entries, show_delete: delete_signal, on_delete: Some(Callback::new(move |_| {delete_series(series_id.clone());}))}
+            TopBar{ entries: entries, show_extra: delete_signal, text_extra: Some("Delete".to_string()),on_extra: Some(Callback::new(move |_| {delete_series(series_id.clone());}))}
             h1 { style: styles::HEADER_STYLE, "{title}" }
 
             div { 

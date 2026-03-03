@@ -1,11 +1,11 @@
-use log::{debug, error};
+use log::{debug, error, info};
 use serde_json::Value;
 use thiserror::Error;
 use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize};
 use std::path::Path;
-use crate::lib::{gate, helpers};
+use crate::lib::{gate, helpers, orchestrator};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::Read;
@@ -419,13 +419,14 @@ async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Err
 }
 
 /// Scans a folder (and subfolders) for `.epub` files and returns a vector of BookData
-pub async fn scan_epub_folder<P: AsRef<Path>>(
-    folder: P,
-    output_dir: P,
+pub async fn scan_epub_folder(
+    folder: &Path,
+    output_dir: &Path,
+    err_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut epubs = Vec::new();
-    let mut stack = vec![folder.as_ref().to_path_buf()];
+    let mut stack = vec![folder.to_path_buf()];
 
     // --- Recursive collection ---
     while let Some(path) = stack.pop() {
@@ -448,7 +449,7 @@ pub async fn scan_epub_folder<P: AsRef<Path>>(
         }
     }
 
-    let output_dir = output_dir.as_ref().to_path_buf();
+    let output_dir = output_dir.to_path_buf();
 
     // --- Concurrent processing ---
     stream::iter(epubs)
@@ -468,11 +469,8 @@ pub async fn scan_epub_folder<P: AsRef<Path>>(
                         }
                     }
                     Err(err) => {
-                        error!(
-                            "Failed to read {}: {}",
-                            epub_path.display(),
-                            err
-                        );
+
+                        let _=orchestrator::handle_err("onboarding".to_string(),&err_dir, &epub_path, err, false);
                     }
                 }
             }
@@ -491,7 +489,6 @@ async fn handle_successful_book(
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     // Sanitize components
-    let author = sanitize_component(&data.author);
     let authorid=remove_whitespace(&data.author);
     let title = sanitize_component(&data.title);
     let series = sanitize_component(&data.series);
@@ -557,7 +554,7 @@ async fn handle_successful_book(
     gate::post_new_book(&auth, &sending).await?;
 
 
-    println!(
+    info!(
         "Moved → data: {}"
         , sending.to_string()
     );

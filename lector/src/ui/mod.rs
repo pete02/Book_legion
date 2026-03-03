@@ -16,3 +16,6 @@ pub use audio::Audio;
 
 mod text;
 pub use text::Text;
+
+mod bookedit;
+pub use bookedit::BookEdit;

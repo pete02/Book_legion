@@ -8,7 +8,7 @@ pub struct TopBarEntry {
 }
 
 #[component]
-pub fn TopBar(entries: Vec<TopBarEntry>, show_delete: Signal<bool>, on_delete: Option<Callback<()>>) -> Element {
+pub fn TopBar(entries: Vec<TopBarEntry>, show_extra: Signal<bool>,text_extra: Option<String>, on_extra: Option<Callback<()>>) -> Element {
     return rsx! {
         div {
             style: styles::TOPBAR, // we will tweak this to justify space-between
@@ -38,16 +38,16 @@ pub fn TopBar(entries: Vec<TopBarEntry>, show_delete: Signal<bool>, on_delete: O
             }
 
             // Right side: delete button (pushed to end)
-            if show_delete() {
-                if let Some(on_delete) = on_delete {
+            if show_extra() {
+                if let Some(on_extra) = on_extra && let Some(text)=text_extra {
                     button {
                         class: "
                             bg-red-600 hover:bg-red-700 active:bg-red-800
                             text-white font-semibold py-2 px-4
                             rounded-lg transition-colors duration-150
                         ",
-                        onclick: move |_| on_delete.call(()),
-                        "Delete"
+                        onclick: move |_| on_extra.call(()),
+                        {text}
                     }
                 }
             }

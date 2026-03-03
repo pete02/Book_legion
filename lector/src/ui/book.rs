@@ -1,13 +1,14 @@
 use dioxus::{logger::tracing, prelude::*};
 
 
-use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::components::{TopBar, TopBarEntry, card::Cover}};
+use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{BookEdit, components::{TopBar, TopBarEntry, card::Cover}}};
 
 
 #[component]
 pub fn Book(book_id: String) -> Element {
     let book = use_book(book_id.clone());
     let cover_path = domain::cover::create_cover_path(book_id.clone());
+    let edit_path=format!("/book/{}/edit",book_id.clone());
 
     let top_entries = vec![
         TopBarEntry {
@@ -31,7 +32,7 @@ pub fn Book(book_id: String) -> Element {
     return rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",
-            TopBar { entries: top_entries, show_delete: Signal::new(false) }
+            TopBar { entries: top_entries, show_extra: Signal::new(true), text_extra: Some("Edit".to_string()), on_extra: Callback::new(move |_| {use_navigator().push(edit_path.clone());}) }
 
             div {
                 style: "

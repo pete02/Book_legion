@@ -1,7 +1,7 @@
 use walkdir::WalkDir;
 use crate::lib::{generator::generate_toc, verifiers::{verify_toc_integrity, verify_zip_integrity}};
 use log::{info, warn, error, debug};
-use std::fs;
+use std::{error::Error, fs};
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -33,7 +33,7 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
 
                 // Generate in temp folder, not in input folder
                 let temp_epub_path = temp_dir.path().join(path.file_stem().unwrap()).with_extension("epub");
-                convert_to_epub_to(path, &temp_epub_path)?; // new function taking output path
+                convert_to_epub_to(path, &temp_epub_path, copy)?; // new function taking output path
 
                 process_epub(&temp_epub_path)?;
                 
@@ -50,21 +50,14 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
                 if copy{
                     fs::copy(&epub_path, &dest_path)?;
                 }else{
-                    fs::rename(&epub_path, &dest_path)?;
+                    fs::copy(&epub_path, &dest_path)?;
+                    fs::remove_file(&epub_path)?;
                 }
                 info!("Copied processed file to {}", dest_path.display());
             }
             Err(e) => {
                 // Move original file to err_dir
-                let file_name = path.file_name().unwrap();
-                let dest_path = err_dir.join(file_name);
-                if copy{
-                    fs::copy(&path, &dest_path)?;
-                }else{
-                    fs::rename(&path, &dest_path)?;
-                }
-                
-                error!("Failed to process {}: {}", path.display(), e);
+                handle_err("prcoessor".to_string(),err_dir, path, e, copy)?;
             }
         }
     }
@@ -75,19 +68,40 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
 
 use std::process::Command;
 
-pub fn convert_to_epub_to(input: &Path, output: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn handle_err(originator: String,err_dir: &Path, file: &Path, e: Box<dyn Error>, copy:bool)-> Result<(),Box< dyn Error>>{
+    let file_name = file.file_name().unwrap();
+    let dest_path = err_dir.join(file_name);
+    if copy{
+        fs::copy(&file, &dest_path)?;
+    }else{
+        fs::rename(&file, &dest_path)?;
+    }
+    let err_file = err_dir.join(format!(
+            "{}.err",
+            file_name.to_string_lossy()
+        ));
+    fs::write(&err_file, format!("Error in {}:  {}:\n{}", originator, file.display(), e))?;
+    error!("Error in {}: {}: {}", originator,file.display(), e);
+    Ok(())
+}
+
+pub fn convert_to_epub_to(input: &Path, output: &Path, copy:bool) -> Result<(), Box<dyn std::error::Error>> {
     use std::process::Stdio;
 
     let status = Command::new("ebook-convert")
         .arg(input)
         .arg(output)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .status()?;
 
     if !status.success() {
         error!("Calibre conversion failed: {}", input.display());
         return Err("Calibre conversion failed".into());
+    }
+
+    if !copy{
+        fs::remove_file(input)?;
     }
 
     info!("Converted → {}", output.display());

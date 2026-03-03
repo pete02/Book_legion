@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{domain, infra};
+use crate::{domain, infra::{self, book::BookInfo}};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BookData{
@@ -19,6 +19,18 @@ fn error_book(err: String)->BookData{
         current_chapter: 0,
     }
 }
+
+
+pub fn get_book_info(book_id: String)-> Signal<BookInfo>{
+    let info=use_signal(|| BookInfo::new());
+
+    return info;
+}
+
+pub fn update_book(info: BookInfo){
+    info!("call for update");
+}
+
 
 pub async fn load_book(book_id: String,)->BookData{
     let mut chs=Vec::new();

@@ -16,7 +16,18 @@ pub struct BookInfo {
     pub series_order: usize,
     pub file_path: String,
 }
-
+impl BookInfo {
+    pub fn new()->BookInfo{
+        BookInfo{
+            id: "".to_string(),
+            title: "".to_string(),
+            author_id: "".to_string(),
+            series_id: "".to_string(),
+            series_order: 0,
+            file_path: "".to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProgressResponse {

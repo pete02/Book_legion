@@ -23,7 +23,7 @@ pub fn Audio(book_id: String)->Element{
     return rsx!{
         div {
         style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",            
-            TopBar{ entries: top_entries, show_delete: Signal::new(false) }
+            TopBar{ entries: top_entries, show_extra: Signal::new(false) }
             h1{ 
                 style: styles::HEADER_STYLE,
                 "{audio.name}"
