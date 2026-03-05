@@ -1,7 +1,9 @@
 #[cfg(feature = "mock")]
 use std::sync::Mutex;
 
-use crate::infra::auth::get_with_auth;
+use crate::infra::auth::{delete_with_auth, get_with_auth};
+#[cfg(feature = "mock")]
+use dioxus::prelude::info;
 #[cfg(feature = "mock")]
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -33,10 +35,56 @@ impl BookInfo {
 pub struct ProgressResponse {
     pub progress: f64,
 }
+#[cfg(not(feature = "mock"))]
+pub async fn delete_book(book_id: &str)-> Result<(),String>{
+    let url = format!("/api/v1/deletebook/{}", book_id);
+    let resp=delete_with_auth(&url).await;
+    if resp.is_ok(){
+        return Ok(());
+    }else{
+        return Err(resp.unwrap_err());
+    }
+
+}
+
+#[cfg(feature = "mock")]
+pub async fn delete_book(book_id: &str)-> Result<(),String>{
+    info!("delete a booK: {}", book_id);
+    Ok(())
+}
 
 
 #[cfg(not(feature = "mock"))]
+pub async fn save_book(book: &BookInfo) -> Result<(), String> {
+    use crate::infra::auth::post_with_auth;
 
+    let url = "/api/v1/savebook";
+    let body = serde_json::json!({
+        "id": book.id,
+        "title": book.title,
+        "author_id": book.author_id,
+        "series_id": book.series_id,
+        "series_order": book.series_order,
+        "series_name": "",
+        "file_path": book.file_path,
+    }).to_string();
+
+    let resp = post_with_auth(url, body).await;
+    if resp.is_ok() {
+        Ok(())
+    } else {
+        Err(resp.unwrap_err())
+    }
+}
+#[cfg(feature = "mock")]
+pub async fn save_book(book: &BookInfo) -> Result<(), String> {
+    info!("save book: {:?}", book);
+    Ok(())
+}
+
+
+
+#[cfg(not(feature = "mock"))]
 pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
     let url = format!("/api/v1/books/{}", book_id);
 

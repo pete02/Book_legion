@@ -1,6 +1,6 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::infra::manifest;
+use crate::infra::manifest::{self, ManifestEntry};
 use crate::domain::cover::{CardData, create_cover_path};
 
 async fn load_library() -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
@@ -22,6 +22,12 @@ async fn load_library() -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
 }
 
 
+
+pub fn get_library() -> Resource<Vec<ManifestEntry>> {
+    use_resource(move || async move {
+        manifest::fetch_manifest().await.unwrap_or_default()
+    })
+}
 
 pub fn use_library() -> Signal<Vec<CardData>> {
     let mut books = use_signal(Vec::new);

@@ -7,6 +7,7 @@ use crate::{Route, domain::{self, series::delete_series}, styles, ui::components
 pub fn Series(series_id:String) -> Element {
     let title=use_signal(||"".to_owned());
     let mut delete_signal=Signal::new(false);
+    let nav=use_navigator();
     let entries = vec![
         TopBarEntry {
             name: "Library".into(),
@@ -24,7 +25,7 @@ pub fn Series(series_id:String) -> Element {
 
         if books().len()==1{
             let book=&books()[0];
-            use_navigator().push(book.path.clone());
+            nav.push(book.path.clone());
         }
     });
 

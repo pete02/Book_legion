@@ -45,7 +45,7 @@ pub fn Text(book_id: String) -> Element {
                 min-height: 0;
                 overflow: hidden;
             ",
-            TopBar{ entries: top_entries, show_extra: Signal::new(false) }
+            TopBar{ entries: top_entries, show_extra: use_signal(||false) }
 
             div {
                 style: "

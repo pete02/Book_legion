@@ -12,7 +12,7 @@ pub async fn refresh_auth_token() -> Result<String, String> {
         .map_err(|_| "missing env: TRIBUNE_LOGISTICA_URL")?;
     let body = serde_json::json!({ "refresh_token": bearer_token });
 
-    let url = Url::parse(&format!("https://{}/api/v1/refreshtoken",base_url))
+    let url = Url::parse(&format!("{}/api/v1/refreshtoken",base_url))
         .map_err(|_| "Url const is wrong".to_string())?;
 
     let client = Client::new();
@@ -25,7 +25,7 @@ pub async fn refresh_auth_token() -> Result<String, String> {
         .send()
         .await
         .map_err(|e| {
-            error!("Error in refreshing: {}", e);
+            error!("Error in refreshing: {:?}", e);
             e.to_string()
         })?;
 
@@ -49,7 +49,7 @@ pub async fn post_new_book(auth_token: &str, data: &Value)->Result<(),String>{
     let base_url=env::var("TRIBUNE_LOGISTICA_URL")
         .map_err(|_| "missing env: TRIBUNE_LOGISTICA_URL")?;
 
-    let url = Url::parse(&format!("https://{}/api/v1/savebook",base_url))
+    let url = Url::parse(&format!("{}/api/v1/savebook",base_url))
         .map_err(|_| "Url const is wrong".to_string())?;
     debug!("posting to {}", url);
     debug!(" with: {}", data);

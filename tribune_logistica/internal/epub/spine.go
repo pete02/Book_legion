@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"strings"
 )
 
 type SpineItem struct {
@@ -29,13 +30,13 @@ func LoadSpine(epubPath string) ([]SpineItem, error) {
 	}
 
 	// Step 1: locate OPF via container.xml
-	opfPath, err := findOPFPath(files)
+	opfPath, err := FindOPFPath(zr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 2: parse OPF
-	opf, err := parseOPF(files, opfPath)
+	opf, err := ParseOPF(files, opfPath)
 	if err != nil {
 		return nil, err
 	}
@@ -84,32 +85,39 @@ func LoadSpine(epubPath string) ([]SpineItem, error) {
 }
 
 /* ---------- Internal helpers ---------- */
-
-func findOPFPath(files map[string]*zip.File) (string, error) {
-	f, ok := files["META-INF/container.xml"]
-	if !ok {
-		return "", errors.New("META-INF/container.xml not found")
+func FindOPFPath(zr *zip.ReadCloser) (string, error) {
+	containerData, err := readZipFile(zr, "META-INF/container.xml")
+	if err == nil {
+		type RootFile struct {
+			FullPath  string `xml:"full-path,attr"`
+			MediaType string `xml:"media-type,attr"`
+		}
+		type RootFiles struct {
+			RootFiles []RootFile `xml:"rootfile"`
+		}
+		type Container struct {
+			RootFiles RootFiles `xml:"rootfiles"`
+		}
+		var container Container
+		if err := xml.Unmarshal(containerData, &container); err == nil {
+			for _, rf := range container.RootFiles.RootFiles {
+				if rf.MediaType == "application/oebps-package+xml" || strings.HasSuffix(rf.FullPath, ".opf") {
+					return rf.FullPath, nil
+				}
+			}
+		}
 	}
 
-	rc, err := f.Open()
-	if err != nil {
-		return "", err
+	// Fallback
+	for _, f := range zr.File {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".opf") {
+			return f.Name, nil
+		}
 	}
-	defer rc.Close()
-
-	var c containerXML
-	if err := xml.NewDecoder(rc).Decode(&c); err != nil {
-		return "", fmt.Errorf("parse container.xml: %w", err)
-	}
-
-	if len(c.Rootfiles) == 0 {
-		return "", errors.New("no rootfile entry in container.xml")
-	}
-
-	return c.Rootfiles[0].FullPath, nil
+	return "", fmt.Errorf("OPF file not found")
 }
 
-func parseOPF(files map[string]*zip.File, opfPath string) (*opfPackage, error) {
+func ParseOPF(files map[string]*zip.File, opfPath string) (*opfPackage, error) {
 	f, ok := files[opfPath]
 	if !ok {
 		return nil, fmt.Errorf("opf file %q not found", opfPath)
@@ -134,6 +142,27 @@ func parseOPF(files map[string]*zip.File, opfPath string) (*opfPackage, error) {
 	return &pkg, nil
 }
 
+func BuildFileMap(zr *zip.ReadCloser) map[string]*zip.File {
+	files := make(map[string]*zip.File, len(zr.File))
+	for _, f := range zr.File {
+		files[f.Name] = f
+	}
+	return files
+}
+
+func ReadFromMap(files map[string]*zip.File, name string) ([]byte, error) {
+	f, ok := files[name]
+	if !ok {
+		return nil, fmt.Errorf("file not found in epub: %s", name)
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
+}
+
 /* ---------- XML structures ---------- */
 
 type containerXML struct {
@@ -143,11 +172,21 @@ type containerXML struct {
 }
 
 type opfPackage struct {
+	Metadata struct {
+		Metas []struct {
+			Name     string `xml:"name,attr"`
+			Content  string `xml:"content,attr"`
+			Property string `xml:"property,attr"`
+			CharData string `xml:",chardata"`
+		} `xml:"meta"`
+	} `xml:"metadata"`
+
 	Manifest struct {
 		Items []struct {
-			ID        string `xml:"id,attr"`
-			Href      string `xml:"href,attr"`
-			MediaType string `xml:"media-type,attr"`
+			ID         string `xml:"id,attr"`
+			Href       string `xml:"href,attr"`
+			MediaType  string `xml:"media-type,attr"`
+			Properties string `xml:"properties,attr"` // EPUB3 cover-image
 		} `xml:"item"`
 	} `xml:"manifest"`
 
@@ -157,8 +196,14 @@ type opfPackage struct {
 			Linear string `xml:"linear,attr"`
 		} `xml:"itemref"`
 	} `xml:"spine"`
-}
 
+	Guide struct {
+		References []struct {
+			Type string `xml:"type,attr"`
+			Href string `xml:"href,attr"`
+		} `xml:"reference"`
+	} `xml:"guide"`
+}
 type manifestItem struct {
 	Href      string
 	MediaType string

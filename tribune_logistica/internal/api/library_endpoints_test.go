@@ -207,7 +207,7 @@ func TestLibraryEndpoints(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+validToken)
 		w := httptest.NewRecorder()
 
-		api.DeleteBook(w, req)
+		api.DeleteSeries(w, req)
 
 		resp := w.Result()
 		defer resp.Body.Close()

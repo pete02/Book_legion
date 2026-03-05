@@ -524,7 +524,7 @@ async fn handle_successful_book(
     let authorid=remove_whitespace(&data.author);
     let title = sanitize_component(&data.title);
     let series = sanitize_component(&data.series);
-    let seriesid=remove_whitespace(&data.series);
+    let mut seriesid=remove_whitespace(&data.series);
 
     // Build directory path
     let mut target_dir = output_dir.join(&authorid);
@@ -571,6 +571,10 @@ async fn handle_successful_book(
     let relative_path = final_destination
         .strip_prefix(output_dir)?
         .to_path_buf();
+
+    if seriesid.len()==0{
+        seriesid=remove_whitespace(&data.title);
+    }
 
     let sending=json!({
         "id": remove_whitespace(&data.author)+&remove_whitespace(&data.title),

@@ -30,6 +30,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, "BookID incorrect, or book missing", http.StatusNoContent)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

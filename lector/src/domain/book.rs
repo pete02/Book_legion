@@ -21,16 +21,35 @@ fn error_book(err: String)->BookData{
 }
 
 
-pub fn get_book_info(book_id: String)-> Signal<BookInfo>{
-    let info=use_signal(|| BookInfo::new());
-
-    return info;
+pub fn get_book_info(book_id: String) -> Resource<BookInfo> {
+    use_resource(move || {
+        let id = book_id.clone();
+        async move {
+            infra::book::fetch_book(&id).await.unwrap_or_else(|_| BookInfo::new())
+        }
+    })
 }
 
-pub fn update_book(info: BookInfo){
-    info!("call for update");
+pub fn update_book(info: BookInfo) {
+    spawn(async move {
+        if let Err(e) = infra::book::save_book(&info).await {
+            error!("failed to save book: {}", e);
+        }
+    });
 }
-
+pub fn delete_book(book_id: String) {
+    info!("delete_book called for: {}", book_id);
+    use_effect(move ||{
+        let b=book_id.clone();
+            info!("triggered1");
+        spawn(async move {
+            info!("triggered");
+            if let Err(e) = infra::book::delete_book(&b).await {
+                error!("failed to delete book: {}", e);
+            }
+        });
+    });
+}
 
 pub async fn load_book(book_id: String,)->BookData{
     let mut chs=Vec::new();

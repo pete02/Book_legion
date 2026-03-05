@@ -3,7 +3,6 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -292,112 +291,117 @@ func (e *Epub) ExtractCover() ([]byte, string, error) {
 	}
 	defer zr.Close()
 
-	// Step 1: Find the OPF file (package document)
-	var opfPath string
-	for _, f := range zr.File {
-		if strings.HasSuffix(strings.ToLower(f.Name), ".opf") {
-			opfPath = f.Name
-			break
-		}
-	}
-	if opfPath == "" {
-		return nil, "", fmt.Errorf("OPF file not found")
+	files := BuildFileMap(zr)
+
+	opfPath, err := FindOPFPath(zr)
+	if err != nil {
+		return nil, "", err
 	}
 
-	// Step 2: Read OPF
-	var opfData []byte
-	{
-		f, err := zr.Open(opfPath)
+	pkg, err := ParseOPF(files, opfPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	baseDir := path.Dir(opfPath)
+
+	loadImage := func(href string) ([]byte, string, error) {
+		href = strings.SplitN(href, "#", 2)[0]
+		coverPath := path.Join(baseDir, href)
+		data, err := ReadFromMap(files, coverPath)
 		if err != nil {
 			return nil, "", err
 		}
-		defer f.Close()
-		opfData, err = io.ReadAll(f)
-		if err != nil {
-			return nil, "", err
+		return data, coverPath, nil
+	}
+
+	isImageType := func(mediaType string) bool {
+		return strings.HasPrefix(mediaType, "image/")
+	}
+
+	// Strategy 1: EPUB3 properties="cover-image"
+	for _, item := range pkg.Manifest.Items {
+		if strings.Contains(item.Properties, "cover-image") && isImageType(item.MediaType) {
+			if data, p, err := loadImage(item.Href); err == nil {
+				return data, p, nil
+			}
 		}
 	}
 
-	// Step 3: Parse OPF to find cover ID
-	var coverID string
-	{
-		type Meta struct {
-			Name    string `xml:"name,attr"`
-			Content string `xml:"content,attr"`
-		}
-		type Metadata struct {
-			Metas []Meta `xml:"meta"`
-		}
-		type Package struct {
-			Metadata Metadata `xml:"metadata"`
-		}
-
-		var pkg Package
-		if err := xml.Unmarshal(opfData, &pkg); err == nil {
-			for _, m := range pkg.Metadata.Metas {
-				if m.Name == "cover" {
-					coverID = m.Content
-					break
+	// Strategy 2: EPUB2 <meta name="cover" content="item-id">
+	for _, meta := range pkg.Metadata.Metas {
+		if strings.EqualFold(meta.Name, "cover") && meta.Content != "" {
+			for _, item := range pkg.Manifest.Items {
+				if item.ID == meta.Content {
+					if isImageType(item.MediaType) {
+						if data, p, err := loadImage(item.Href); err == nil {
+							return data, p, nil
+						}
+					} else if strings.Contains(item.MediaType, "html") {
+						if data, p, err := extractImageFromHTML(files, path.Join(baseDir, item.Href)); err == nil {
+							return data, p, nil
+						}
+					}
 				}
 			}
 		}
 	}
 
-	if coverID == "" {
-		return nil, "", fmt.Errorf("cover metadata not found")
+	// Strategy 3: <guide type="cover">
+	for _, ref := range pkg.Guide.References {
+		if strings.EqualFold(ref.Type, "cover") {
+			if data, p, err := extractImageFromHTML(files, path.Join(baseDir, ref.Href)); err == nil {
+				return data, p, nil
+			}
+		}
 	}
 
-	// Step 4: Find manifest item with that ID
-	type Item struct {
-		ID   string `xml:"id,attr"`
-		Href string `xml:"href,attr"`
-	}
-	type Manifest struct {
-		Items []Item `xml:"item"`
-	}
-	type Package2 struct {
-		Manifest Manifest `xml:"manifest"`
+	// Strategy 4: Heuristic — href contains "cover"
+	for _, item := range pkg.Manifest.Items {
+		if isImageType(item.MediaType) && strings.Contains(strings.ToLower(item.Href), "cover") {
+			if data, p, err := loadImage(item.Href); err == nil {
+				return data, p, nil
+			}
+		}
 	}
 
-	var manifest Package2
-	if err := xml.Unmarshal(opfData, &manifest); err != nil {
+	return nil, "", fmt.Errorf("cover image not found")
+}
+
+func extractImageFromHTML(files map[string]*zip.File, htmlPath string) ([]byte, string, error) {
+	htmlPath = strings.SplitN(htmlPath, "#", 2)[0]
+	htmlData, err := ReadFromMap(files, htmlPath)
+	if err != nil {
 		return nil, "", err
 	}
 
-	var coverHref string
-	for _, it := range manifest.Manifest.Items {
-		if it.ID == coverID {
-			coverHref = it.Href
-			break
-		}
+	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
+	matches := re.FindSubmatch(htmlData)
+	if matches == nil {
+		return nil, "", fmt.Errorf("no img found in %s", htmlPath)
 	}
 
-	if coverHref == "" {
-		return nil, "", fmt.Errorf("cover item not found in manifest")
+	imgPath := path.Join(path.Dir(htmlPath), string(matches[1]))
+	data, err := ReadFromMap(files, imgPath)
+	if err != nil {
+		return nil, "", err
 	}
+	return data, imgPath, nil
+}
 
-	// Step 5: Extract the image
-	// OPF href is relative to OPF location
-	baseDir := path.Dir(opfPath)
-	coverPath := path.Join(baseDir, coverHref)
-
+// readZipFile reads a file from the zip by exact path.
+func readZipFile(zr *zip.ReadCloser, name string) ([]byte, error) {
 	for _, f := range zr.File {
-		if f.Name == coverPath {
+		if f.Name == name {
 			rc, err := f.Open()
 			if err != nil {
-				return nil, "", err
+				return nil, err
 			}
 			defer rc.Close()
-
-			data, err := io.ReadAll(rc)
-			if err != nil {
-				return nil, "", err
-			}
-			return data, f.Name, nil
+			return io.ReadAll(rc)
 		}
 	}
-	fmt.Printf("Cover image path: %v", coverPath)
-	return nil, "", fmt.Errorf("cover image file not found")
+	return nil, fmt.Errorf("file not found in epub: %s", name)
 }
 
 func (e *Epub) ExtractCSS() ([]byte, error) {

@@ -15,7 +15,7 @@ async fn main() {
     let output = Path::new("/out");
     let onboarded = Path::new("/onboard");
     let errs = Path::new("/errs");
-    let copy = true;
+    let copy = false;
 
     let shutdown = tokio::signal::ctrl_c();
     let mut shutdown = std::pin::pin!(shutdown);

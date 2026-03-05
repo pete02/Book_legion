@@ -7,7 +7,9 @@ use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{Book
 #[component]
 pub fn Book(book_id: String) -> Element {
     let book = use_book(book_id.clone());
+    let b=book_id.clone();
     let cover_path = domain::cover::create_cover_path(book_id.clone());
+    let nav = use_navigator();
     let edit_path=format!("/book/{}/edit",book_id.clone());
 
     let top_entries = vec![
@@ -32,7 +34,7 @@ pub fn Book(book_id: String) -> Element {
     return rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",
-            TopBar { entries: top_entries, show_extra: Signal::new(true), text_extra: Some("Edit".to_string()), on_extra: Callback::new(move |_| {use_navigator().push(edit_path.clone());}) }
+            TopBar { entries: top_entries, show_extra: use_signal(||true), text_extra: Some("Edit".to_string()), on_extra: Callback::new(move |_| {nav.push(Route::BookEdit { book_id: b.clone() });}) }
 
             div {
                 style: "

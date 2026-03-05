@@ -8,44 +8,39 @@ pub struct TopBarEntry {
 }
 
 #[component]
-pub fn TopBar(entries: Vec<TopBarEntry>, show_extra: Signal<bool>,text_extra: Option<String>, on_extra: Option<Callback<()>>) -> Element {
-    return rsx! {
+pub fn TopBar(
+    entries: Vec<TopBarEntry>,
+    show_extra: Signal<bool>,
+    text_extra: Option<String>,
+    on_extra: Option<Callback<()>>,
+) -> Element {
+    rsx! {
         div {
-            style: styles::TOPBAR, // we will tweak this to justify space-between
-
-            // Left side: all links grouped
+            style: styles::TOPBAR,
             div {
                 style: "display: flex; align-items: center; gap: 12px;",
-                {
-                    entries.iter().map(|entry| {
-                        let path = entry.path.clone();
-                        let name = entry.name.clone();
-                        rsx!(
-                            Link {
-                                to: path,
-                                button {
-                                    class: "
-                                        bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+                { entries.iter().map(|entry| {
+                    let path = entry.path.clone();
+                    let name = entry.name.clone();
+                    rsx!(
+                        Link {
+                            to: path,
+                            button {
+                                class: "bg-blue-600 hover:bg-blue-700 active:bg-blue-800
                                         text-white font-semibold py-2 px-4
-                                        rounded-lg transition-colors duration-150
-                                    ",
-                                    "{name}"
-                                }
+                                        rounded-lg transition-colors duration-150",
+                                "{name}"
                             }
-                        )
-                    })
-                }
+                        }
+                    )
+                })}
             }
-
-            // Right side: delete button (pushed to end)
             if show_extra() {
-                if let Some(on_extra) = on_extra && let Some(text)=text_extra {
+                if let Some(on_extra) = on_extra && let Some(text) = text_extra {
                     button {
-                        class: "
-                            bg-red-600 hover:bg-red-700 active:bg-red-800
-                            text-white font-semibold py-2 px-4
-                            rounded-lg transition-colors duration-150
-                        ",
+                        class: "bg-red-600 hover:bg-red-700 active:bg-red-800
+                                text-white font-semibold py-2 px-4
+                                rounded-lg transition-colors duration-150",
                         onclick: move |_| on_extra.call(()),
                         {text}
                     }

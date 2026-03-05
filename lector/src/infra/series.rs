@@ -15,6 +15,7 @@ pub struct BookEntry {
     pub file_path: String,
 }
 
+
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std::error::Error>> {
 
