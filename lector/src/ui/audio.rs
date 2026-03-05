@@ -7,7 +7,7 @@ use crate::{Route, assets, domain::{self, audio::{AudioData, skip_backward, skip
 pub fn Audio(book_id: String)->Element{
     let audio=use_audio(book_id.clone());
     let cover_path=domain::cover::create_cover_path(book_id.clone());
-
+    let show_extra=use_signal(||false);
 
     let top_entries = vec![
         TopBarEntry {
@@ -23,7 +23,7 @@ pub fn Audio(book_id: String)->Element{
     return rsx!{
         div {
         style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",            
-            TopBar{ entries: top_entries, show_extra: use_signal(||false) }
+            TopBar{ entries: top_entries, show_extra: show_extra }
             h1{ 
                 style: styles::HEADER_STYLE,
                 "{audio.name}"

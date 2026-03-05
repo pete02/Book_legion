@@ -12,16 +12,16 @@ pub fn Text(book_id: String) -> Element {
     let mut align=use_signal(||Align::None);
     let mut text_handler = use_renderer(book_id.clone(), align.clone());
     
-    
+    let show_extra = use_signal(|| false);  
 
 
-    render(&text_handler, align, book_id.clone());
     use_effect(move ||{
         tracing::debug!("here");
         domain::text::fetch_and_apply_book_css(b_signal(),css_ready);
     });
 
 
+    render(&text_handler, align, book_id.clone());
     let top_entries = vec![
         TopBarEntry {
             name: "Library".into(),
@@ -45,7 +45,7 @@ pub fn Text(book_id: String) -> Element {
                 min-height: 0;
                 overflow: hidden;
             ",
-            TopBar{ entries: top_entries, show_extra: use_signal(||false) }
+            TopBar{ entries: top_entries, show_extra: show_extra }
 
             div {
                 style: "
@@ -61,7 +61,7 @@ pub fn Text(book_id: String) -> Element {
                 // Paged chapter display
                 div {
                     id: "book-renderer",
-                    style: "height: 90dvh; overflow: hidden; position: relative;width: 90%;margin-left: 5%; margin-bottom:0%;padding-bottom:10px;",
+                    style: "height: 90dvh; overflow: hidden; position: relative;width: 90%;margin-left: 5%; margin-bottom:0%;padding-bottom:10px; text-align: left !important;",
                     dangerous_inner_html: "{text_handler.visible_text}"
                 }
 
