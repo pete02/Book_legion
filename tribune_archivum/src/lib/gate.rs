@@ -1,5 +1,6 @@
 use std::env;
 
+use log::{debug,error};
 use reqwest::{Client, Url};
 use serde_json::Value;
 
@@ -15,6 +16,7 @@ pub async fn refresh_auth_token() -> Result<String, String> {
         .map_err(|_| "Url const is wrong".to_string())?;
 
     let client = Client::new();
+    debug!("refreshing from {}", url);
 
     let resp = client
         .post(url)
@@ -22,7 +24,10 @@ pub async fn refresh_auth_token() -> Result<String, String> {
         .json(&body) // handles serde_json serialization
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            error!("Error in refreshing: {}", e);
+            e.to_string()
+        })?;
 
 
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
@@ -46,6 +51,8 @@ pub async fn post_new_book(auth_token: &str, data: &Value)->Result<(),String>{
 
     let url = Url::parse(&format!("https://{}/api/v1/savebook",base_url))
         .map_err(|_| "Url const is wrong".to_string())?;
+    debug!("posting to {}", url);
+    debug!(" with: {}", data);
 
     let client = Client::new();
 
@@ -56,7 +63,10 @@ pub async fn post_new_book(auth_token: &str, data: &Value)->Result<(),String>{
         .json(data) // handles serde_json serialization
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            error!("Error in saving book: {}",e);
+            e.to_string()
+        })?;
 
     Ok(())
 }

@@ -4,7 +4,7 @@ use thiserror::Error;
 use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize};
-use std::path::Path;
+use std::{fmt::format, path::Path};
 use crate::lib::{gate, helpers, orchestrator};
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -67,6 +67,8 @@ pub enum ApiError {
 
     #[error("Missing configuration: {0}")]
     MissingConfig(String),
+    #[error("Url parsing error: {0}")]
+    Url(String),
 }
 
 
@@ -178,21 +180,42 @@ pub async fn query_api(
     let endpoint = env::var("HARDCOVER_API_ENDPOINT")
         .unwrap_or_else(|_| "https://api.hardcover.app/v1/graphql".to_string());
 
-    let client = Client::new();
+    debug!("using endpoint: {:?}", endpoint);
+    let url = reqwest::Url::parse(&endpoint)
+    .map_err(|e| {
+        error!("invalid URL {}: {}", endpoint, e);
+        ApiError::Url(e.to_string())
+    })?;
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| {
+            error!("client build failed: {}", e);
+            e
+        })?;
+
     let body =json!({
             "query": query,
             "variables": variables
         });
 
-    debug!("variable: {}",variables.to_string());
+    debug!("variable to query: {}",variables.to_string());
     let response = client
-        .post(endpoint)
+        .post(url)
         .bearer_auth(bearer_token)
         .json(&body)
         .send()
-        .await?
-        .error_for_status()?;
+        .await.map_err(|e|{
+            error!(" failed to send: {:?}",e);
+            e
+        })?
+        .error_for_status()
+        .map_err(|e| {
+        error!("request error: {:?}", e);
+        ApiError::Http( e)
+        })?;
 
+    debug!("queried");
     let text = response.text().await?;
     Ok(text)
 }
@@ -274,7 +297,10 @@ pub async fn get_series_title(
             Ok(series_tuple)
         }
         Err(ApiError::NoResults) => Err(ApiError::NoResults),
-        Err(e) => Err(e),
+        Err(e) => {
+            error!("Query api replied with err: {}",e);
+            return Err(e)
+        },
     }
 }
 
@@ -396,7 +422,13 @@ async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Err
                 let variables=json!({
                     "query": search_query
                 });
-                let txt=query_api(SEARCH, variables).await?;
+                let txt=match query_api(SEARCH, variables).await{
+                    Ok(t)=>t,
+                    Err(e)=>{
+                        error!(" query api responded with err: {}", e);
+                        return Err(Box::new(e))
+                    }
+                };
                 let res=extract_from_search_json(&txt)?;
                 debug!("res: {:?}",res);
                 if let (Some(title),Some(author))=res{
@@ -550,7 +582,8 @@ async fn handle_successful_book(
         "file_path": relative_path
     });
 
-    let auth=gate::refresh_auth_token().await?;
+    let auth=gate::refresh_auth_token().await.map_err(|e|format!("Error in getting refresh token: {}", e))?;
+    debug!(" auth ok");
     gate::post_new_book(&auth, &sending).await?;
 
 

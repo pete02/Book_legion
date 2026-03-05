@@ -8,8 +8,8 @@ use tempfile::tempdir;
 
 pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:bool) -> Result<(), Box<dyn std::error::Error>> {
     info!("Scanning library at {}", root.display());
-    fs::create_dir_all(processed_dir)?;
-    fs::create_dir_all(err_dir)?;
+    fs::create_dir_all(processed_dir).map_err(|e|format!("could not create process dir: {}",e))?;
+    fs::create_dir_all(err_dir).map_err(|e|format!("could not create err dir: {}",e))?;
 
     for entry in WalkDir::new(root)
         .into_iter()
@@ -37,7 +37,7 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
 
                 process_epub(&temp_epub_path)?;
                 
-                Ok(temp_epub_path) // return temp EPUB path for copying
+                Ok(temp_epub_path.to_path_buf()) // return temp EPUB path for copying
             }
             _ => continue,
         };
@@ -47,17 +47,15 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
                 // Only copy EPUBs to processed_dir
                 let file_name = epub_path.file_name().unwrap();
                 let dest_path = processed_dir.join(file_name);
-                if copy{
-                    fs::copy(&epub_path, &dest_path)?;
-                }else{
-                    fs::copy(&epub_path, &dest_path)?;
-                    fs::remove_file(&epub_path)?;
+                fs::copy(&epub_path, &dest_path).map_err(|e|format!("Could not remove file: {}",e))?;
+                if !copy{
+                    fs::remove_file(&epub_path).map_err(|e|format!("Could not remove file: {}",e))?;
                 }
                 info!("Copied processed file to {}", dest_path.display());
             }
             Err(e) => {
                 // Move original file to err_dir
-                handle_err("prcoessor".to_string(),err_dir, path, e, copy)?;
+                handle_err("processor".to_string(),err_dir, path, e, copy)?;
             }
         }
     }

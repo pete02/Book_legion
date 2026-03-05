@@ -145,6 +145,7 @@ func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	newAuthToken, err := login.GenerateAuthToken(api.DB, req.RefreshToken)
 	if err != nil {
 		http.Error(w, "Could not generate auth token", http.StatusUnauthorized)
+		return
 
 	}
 
