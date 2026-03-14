@@ -11,9 +11,9 @@ async fn main() {
     dotenvy::dotenv().ok();
     env_logger::init();
 
-    let input = Path::new("/data");
+    let input = Path::new("/onboard");
     let output = Path::new("/out");
-    let onboarded = Path::new("/onboard");
+    let onboarded = Path::new("/data");
     let errs = Path::new("/errs");
     let copy = false;
 

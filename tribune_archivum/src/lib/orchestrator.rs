@@ -55,7 +55,7 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
             }
             Err(e) => {
                 // Move original file to err_dir
-                handle_err("processor".to_string(),err_dir, path, e, copy)?;
+                handle_err("processor".to_string(),err_dir, path, e)?;
             }
         }
     }
@@ -66,19 +66,21 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
 
 use std::process::Command;
 
-pub fn handle_err(originator: String,err_dir: &Path, file: &Path, e: Box<dyn Error>, copy:bool)-> Result<(),Box< dyn Error>>{
+pub fn handle_err(originator: String,err_dir: &Path, file: &Path, e: Box<dyn Error>)-> Result<(),Box< dyn Error>>{
     let file_name = file.file_name().unwrap();
     let dest_path = err_dir.join(file_name);
-    if copy{
-        fs::copy(&file, &dest_path)?;
-    }else{
-        fs::rename(&file, &dest_path)?;
+    if let Err(e)=fs::rename(&file, &dest_path){
+        debug!("Error in the handle error renaming: {}", e);
+        return Err(Box::new(e));
     }
     let err_file = err_dir.join(format!(
             "{}.err",
             file_name.to_string_lossy()
         ));
-    fs::write(&err_file, format!("Error in {}:  {}:\n{}", originator, file.display(), e))?;
+    if let Err(e)=fs::write(&err_file, format!("Error in {}:  {}:\n{}", originator, file.display(), e)){
+        debug!("error in writing the error to file in handle error: {}",e);
+        return Err(Box::new(e));
+    }
     error!("Error in {}: {}: {}", originator,file.display(), e);
     Ok(())
 }

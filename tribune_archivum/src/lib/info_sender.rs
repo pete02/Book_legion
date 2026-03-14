@@ -123,6 +123,7 @@ struct FeaturedSeries {
 
 #[derive(Deserialize)]
 struct Document {
+    title: Option<String>,               // ← add this
     alternative_titles: Option<Vec<String>>,
     author_names: Option<Vec<String>>,
     featured_series: Option<FeaturedSeries>,
@@ -247,12 +248,10 @@ fn extract_from_search_json(
     }
 
     if let Some(hit) = first_hit {
-        let alt_title = hit
+        let title = hit
             .document
-            .alternative_titles
-            .as_ref()
-            .and_then(|v| v.get(0))
-            .cloned();
+            .title
+            .clone();
 
         let author = hit
             .document
@@ -261,7 +260,7 @@ fn extract_from_search_json(
             .and_then(|v| v.get(0))
             .cloned();
 
-        return Ok((alt_title, author));
+        return Ok((title, author));
     }
 
     Ok((None, None))
@@ -307,7 +306,7 @@ pub async fn get_series_title(
 
 pub fn extract_title_author(
     epub_path: &str,
-) -> Result<(Option<String>, Option<String>), Box<dyn std::error::Error>> {
+) -> Result<(Option<String>, Option<String>, Option<String>, Option<f32>), Box<dyn std::error::Error>> {
 
     let mut archive = helpers::get_zip(Path::new(epub_path))?;
     let opf_path = helpers::read_container_opf_path(&mut archive)?;
@@ -317,12 +316,12 @@ pub fn extract_title_author(
     opf_file.read_to_string(&mut opf_xml)?;
 
     let mut reader = Reader::from_str(&opf_xml);
-    
-
     let mut buf = Vec::new();
 
     let mut title: Option<String> = None;
     let mut author: Option<String> = None;
+    let mut series: Option<String> = None;
+    let mut series_index: Option<f32> = None;
 
     let mut inside_title = false;
     let mut inside_creator = false;
@@ -331,24 +330,47 @@ pub fn extract_title_author(
         match reader.read_event_into(&mut buf)? {
             Event::Start(ref e) => {
                 let name = e.name();
-
-                // Match local names only (ignore namespace prefix)
                 if name.as_ref().ends_with(b"title") && title.is_none() {
                     inside_title = true;
                 }
-
                 if name.as_ref().ends_with(b"creator") && author.is_none() {
                     inside_creator = true;
                 }
             }
 
+            // Calibre series info lives in self-closing <meta name="..." content="..."/> tags
+            Event::Empty(ref e) => {
+                let name = e.name();
+                if name.as_ref().ends_with(b"meta") {
+                    let attrs: std::collections::HashMap<_, _> = e
+                        .attributes()
+                        .flatten()
+                        .filter_map(|a| {
+                            let key = std::str::from_utf8(a.key.as_ref()).ok()?.to_string();
+                            let val = a.decode_and_unescape_value(reader.decoder()).ok()?.to_string();
+                            Some((key, val))
+                        })
+                        .collect();
+
+                    match attrs.get("name").map(String::as_str) {
+                        Some("calibre:series") => {
+                            series = attrs.get("content").cloned();
+                        }
+                        Some("calibre:series_index") => {
+                            series_index = attrs
+                                .get("content")
+                                .and_then(|v| v.parse::<f32>().ok());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             Event::Text(e) => {
                 let text = e.decode()?;
-
                 if inside_title && title.is_none() {
                     title = Some(text.to_string());
                 }
-
                 if inside_creator && author.is_none() {
                     author = Some(text.to_string());
                 }
@@ -356,24 +378,17 @@ pub fn extract_title_author(
 
             Event::End(ref e) => {
                 let name = e.name();
-
-                if name.as_ref().ends_with(b"title") {
-                    inside_title = false;
-                }
-
-                if name.as_ref().ends_with(b"creator") {
-                    inside_creator = false;
-                }
+                if name.as_ref().ends_with(b"title") { inside_title = false; }
+                if name.as_ref().ends_with(b"creator") { inside_creator = false; }
             }
 
             Event::Eof => break,
             _ => {}
         }
-
         buf.clear();
     }
 
-    Ok((title, author))
+    Ok((title, author, series, series_index))
 }
 
 fn clean_title(title: &str, author: &Option<String>) -> String {
@@ -398,20 +413,30 @@ fn clean_title(title: &str, author: &Option<String>) -> String {
 
 async fn get_book_data(epub_path: &str)->Result<BookData,Box<dyn std::error::Error>>{
     let mut bd=BookData::new();
-    let (title_o,author_o)=extract_title_author(epub_path)?;
+    let (title_o, author_o, opf_series, opf_series_index) = extract_title_author(epub_path)?;
     if let Some(title)=title_o && let Some(author)=author_o{
         let cleaned=clean_title(&title, &Some(author.clone()));
         bd.title=cleaned;
         bd.author=author;
 
+        if let (Some(series), Some(idx)) = (opf_series, opf_series_index) {
+            debug!("Using series info from OPF: {} #{}", series, idx);
+            bd.series = series;
+            bd.pos = idx.floor() as u32;
+            return Ok(bd);
+        }
+
+        debug!(" start get  series title");
         match get_series_title(&bd.title, &bd.author).await{
             Ok(series_o)=>{
+                debug!(" Series title ok");
                 if let Some((series, Some(pos)))=series_o{
                     bd.series=series;
                     bd.pos=pos.floor() as u32;
                 }
             },
-            Err(_)=>{
+            Err(e)=>{
+                debug!(" Series title err: {}",e);
                 let search_query = bd
                     .title
                     .split(" (")           // cut off anything in parentheses
@@ -501,8 +526,8 @@ pub async fn scan_epub_folder(
                         }
                     }
                     Err(err) => {
-
-                        let _=orchestrator::handle_err("onboarding".to_string(),&err_dir, &epub_path, err, false);
+                        debug!("Error in the book_data");
+                        let _=orchestrator::handle_err("onboarding".to_string(),&err_dir, &epub_path, err);
                     }
                 }
             }
@@ -521,7 +546,7 @@ async fn handle_successful_book(
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     // Sanitize components
-    let authorid=remove_whitespace(&data.author);
+    let authorid=aslugify(&remove_whitespace(&data.author));
     let title = sanitize_component(&data.title);
     let series = sanitize_component(&data.series);
     let mut seriesid=remove_whitespace(&data.series);
@@ -568,16 +593,17 @@ async fn handle_successful_book(
         data.pos=1;
     }
 
-    let relative_path = final_destination
-        .strip_prefix(output_dir)?
+    let relative_path = final_destination 
         .to_path_buf();
 
     if seriesid.len()==0{
         seriesid=remove_whitespace(&data.title);
     }
+    let id = slugify(&(data.author.clone() + &data.title));
+
 
     let sending=json!({
-        "id": authorid.clone()+&remove_whitespace(&data.title),
+        "id": id,
         "title": data.title,
         "author_id": authorid,
         "series_id": seriesid,
@@ -613,4 +639,50 @@ fn remove_whitespace(s: &String)->String {
     let mut edit=s.to_owned();
     edit.retain(|c| c.is_ascii_alphabetic() && !c.is_whitespace() );
     return edit.to_lowercase();
+}
+
+
+pub fn aslugify(input: &str) -> String {
+    let slug = input
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+        .to_lowercase();
+
+    if slug.is_empty() {
+        // Fall back to a stable hash of the original input
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        format!("author-{:x}", hasher.finish())
+    } else {
+        slug
+    }
+}
+pub fn slugify(input: &str) -> String {
+    let slug = input
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+        .to_lowercase();
+
+    if slug.is_empty() {
+        // Fall back to a stable hash of the original input
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        format!("book-{:x}", hasher.finish())
+    } else {
+        slug
+    }
 }
