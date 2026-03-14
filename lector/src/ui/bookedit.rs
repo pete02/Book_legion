@@ -9,14 +9,12 @@ use crate::{
 #[component]
 pub fn BookEdit(book_id: String) -> Element {
     let book = get_book_info(book_id.clone());
-    let series_list = get_library(); // Signal<Vec<SeriesInfo>>
+    let series_list = get_library();
 
-    // Only initialize draft once book has actually loaded (non-empty id)
     let mut draft = use_signal(|| None::<BookInfo>);
 
-    // Watch book signal — set draft when real data arrives
     use_effect(move || {
-        if let Some(b) = book(){
+        if let Some(b) = book() {
             if !b.id.is_empty() {
                 draft.set(Some(b));
             }
@@ -31,27 +29,56 @@ pub fn BookEdit(book_id: String) -> Element {
         },
     ];
 
-    let book_id_save = book_id.clone();
-
     rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",
 
             TopBar {
                 entries: top_entries,
-                show_extra: use_signal(||false),
+                show_extra: use_signal(|| false),
                 text_extra: None,
                 on_extra: Callback::new(|_| {}),
             }
 
-            // Loading state
             if draft().is_none() {
                 div {
                     style: "display: flex; align-items: center; justify-content: center; flex: 1;",
                     p { style: "color: #6b7280;", "Loading…" }
+                    button {
+                        style: "
+                            padding: 10px 24px;
+                            background: transparent;
+                            color: #ef4444;
+                            border: 1px solid #ef4444;
+                            border-radius: 6px;
+                            font-size: 1rem;
+                            cursor: pointer;
+                            margin-right: auto;
+                        ",
+                        onclick: {
+                            let book_id=book_id.clone();
+                            move |_| {
+                            let id = book_id.clone();
+                            let nav = navigator();
+                            if web_sys::window()
+                                .and_then(|w| w.confirm_with_message("Delete this book? This cannot be undone.").ok())
+                                .unwrap_or(false)
+                            {
+
+                                spawn(async move {
+                                    if let Err(e) = infra::book::delete_book(&id).await {
+                                        error!("failed to delete book: {}", e);
+                                    }
+                                    nav.push(Route::Library {});
+                                });
+                            }
+                        }
+                        },
+                        "Delete"
+                    }
+                    
                 }
             } else {
-                // Unwrap is safe — we checked above
                 {
                     let d = draft().unwrap();
                     rsx! {
@@ -70,7 +97,6 @@ pub fn BookEdit(book_id: String) -> Element {
                                 "Edit — {d.title}"
                             }
 
-                            // Title
                             Field {
                                 label: "Title",
                                 child: rsx! {
@@ -82,7 +108,6 @@ pub fn BookEdit(book_id: String) -> Element {
                                 }
                             }
 
-                            // Author (read-only for now — you could make this a lookup too)
                             Field {
                                 label: "Author ID",
                                 child: rsx! {
@@ -94,7 +119,6 @@ pub fn BookEdit(book_id: String) -> Element {
                                 }
                             }
 
-                            // Series — dropdown
                             Field {
                                 label: "Series",
                                 child: rsx! {
@@ -121,7 +145,6 @@ pub fn BookEdit(book_id: String) -> Element {
                                 }
                             }
 
-                            // Series order — only shown when a series is selected
                             if !d.series_id.is_empty() {
                                 Field {
                                     label: "Order in Series",
@@ -141,51 +164,10 @@ pub fn BookEdit(book_id: String) -> Element {
                                 }
                             }
 
-                            // Save button
                             div {
                                 style: "display: flex; gap: 10px; justify-content: flex-end;",
-                                button {
-                                    style: "
-                                        padding: 10px 24px;
-                                        background: #3b82f6;
-                                        color: white;
-                                        border: none;
-                                        border-radius: 6px;
-                                        font-size: 1rem;
-                                        cursor: pointer;
-                                    ",
-                                    onclick: move |_| {
-                                        if let Some(b) = draft() {
-                                            spawn(async move {
-                                                if let Err(e) = infra::book::save_book(&b).await {
-                                                    error!("failed to save book: {}", e);
-                                                }
-                                                use_navigator().push(Route::Library {});
-                                            });
-                                        }
-                                    },
-                                    "Save"
-                                }
-                                button {
-                                    style: "
-                                        padding: 10px 24px;
-                                        background: transparent;
-                                        color: #6b7280;
-                                        border: 1px solid #d1d5db;
-                                        border-radius: 6px;
-                                        font-size: 1rem;
-                                        cursor: pointer;
-                                    ",
-                                    onclick: {
-                                        let b=book_id.clone();
-                                        move |_| {
-                                            use_navigator().push(
-                                                Route::Book { book_id: b.clone() }
-                                            );
-                                        }
-                                    },
-                                    "Cancel"
-                                }
+
+                                // Delete — left side, always available once draft is Some
                                 button {
                                     style: "
                                         padding: 10px 24px;
@@ -197,28 +179,71 @@ pub fn BookEdit(book_id: String) -> Element {
                                         cursor: pointer;
                                         margin-right: auto;
                                     ",
-                                    
                                     onclick: {
-                                        let b=book_id.clone();
+                                        let book_id=book_id.clone();
                                         move |_| {
-                                        // margin-right: auto pushes this to the left, away from Save/Cancel
-                                            if web_sys::window()
-                                                .and_then(|w| w.confirm_with_message("Delete this book? This cannot be undone.").ok())
-                                                .unwrap_or(false)
-                                            {
-                                                let id = book_id.clone();
+                                        let id = book_id.clone();
+                                        let nav = navigator();
+                                        if web_sys::window()
+                                            .and_then(|w| w.confirm_with_message("Delete this book? This cannot be undone.").ok())
+                                            .unwrap_or(false)
+                                        {
 
-                                                spawn(async move {
-                                                    if let Err(e) = infra::book::delete_book(&id).await {
-                                                        error!("failed to delete book: {}", e);
-                                                    }
-                                                    use_navigator().push(Route::Library {});
-                                                });
-                                            }
+                                            spawn(async move {
+                                                if let Err(e) = infra::book::delete_book(&id).await {
+                                                    error!("failed to delete book: {}", e);
+                                                }
+                                                nav.push(Route::Library {});
+                                            });
                                         }
-
+                                    }
                                     },
                                     "Delete"
+                                }
+
+                                button {
+                                    style: "
+                                        padding: 10px 24px;
+                                        background: transparent;
+                                        color: #6b7280;
+                                        border: 1px solid #d1d5db;
+                                        border-radius: 6px;
+                                        font-size: 1rem;
+                                        cursor: pointer;
+                                    ",
+                                    onclick: {
+                                        let b = book_id.clone();
+                                        move |_| {
+                                            navigator().push(Route::Book { book_id: b.clone() });
+                                        }
+                                    },
+                                    "Cancel"
+                                }
+
+                                button {
+                                    style: "
+                                        padding: 10px 24px;
+                                        background: #3b82f6;
+                                        color: white;
+                                        border: none;
+                                        border-radius: 6px;
+                                        font-size: 1rem;
+                                        cursor: pointer;
+                                    ",
+                                    onclick: move |_| {
+                                        let nav = navigator();
+                                        if let Some(b) = draft() {
+                                            spawn(async move {
+                                                if let Err(e) = infra::book::save_book(&b).await {
+                                                    error!("failed to save book: {}", e);
+                                                }
+                                                nav.push(Route::Library {});
+                                            });
+                                        }else{
+                                            info!("No draft");
+                                        }
+                                    },
+                                    "Save"
                                 }
                             }
                         }

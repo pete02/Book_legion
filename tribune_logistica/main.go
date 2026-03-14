@@ -88,6 +88,7 @@ func main() {
 
 	r.Post("/api/v1/cursors/save", api.SaveCursor)
 	r.Post("/api/v1/savebook", api.SaveBook)
+	r.Post("/api/v1/uupdateseries/{id}", api.UpdateSeriesName)
 	r.Delete("/api/v1/deleteseries/{SeriesID}", api.DeleteSeries)
 	r.Delete("/api/v1/deletebook/{SeriesID}", api.DeleteBook)
 

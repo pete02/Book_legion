@@ -12,6 +12,7 @@ pub fn Book(book_id: String) -> Element {
     let nav = use_navigator();
     let edit_path=format!("/book/{}/edit",book_id.clone());
 
+
     let top_entries = vec![
         TopBarEntry {
             name: "Library".into(),

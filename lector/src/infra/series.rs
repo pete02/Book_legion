@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::infra::auth::{get_with_auth,delete_with_auth};
+use crate::infra::auth::post_with_auth;
 
 
 
@@ -50,6 +51,26 @@ pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+
+#[cfg(not(feature = "mock"))]
+pub async fn update_series_name(series_id: &str, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+
+    let url = format!("/api/v1/updateseries/{}", series_id);
+    let body = serde_json::json!({ "name": name }).to_string();
+    let resp = post_with_auth(&url, body).await?;
+
+    if !resp.ok() {
+        return Err(format!("update series request failed: {}", resp.status()).into());
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "mock")]
+pub async fn update_series_name(series_id: &str, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    info!("updated series {} name to {}", series_id, name);
+    Ok(())
+}
 
 #[cfg(feature = "mock")]
 pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std::error::Error>> {

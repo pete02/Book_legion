@@ -31,7 +31,7 @@ pub fn Series(series_id:String) -> Element {
 
     return rsx! {
         div { style: styles::CONTAINER_STYLE,
-            TopBar{ entries: entries, show_extra: delete_signal, text_extra: Some("Delete".to_string()),on_extra: Some(Callback::new(move |_| {delete_series(series_id.clone());}))}
+            TopBar { entries: entries, show_extra: use_signal(||true), text_extra: Some("Edit".to_string()), on_extra: Callback::new(move |_| {nav.push(Route::SeriesEdit{ series_id: series_id.clone() });}) }
             h1 { style: styles::HEADER_STYLE, "{title}" }
 
             div { 

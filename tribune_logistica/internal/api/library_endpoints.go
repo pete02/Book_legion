@@ -139,3 +139,41 @@ func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(manifest)
 }
+
+func (api *API) UpdateSeriesName(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	_, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	seriesID := r.PathValue("id")
+	if seriesID == "" {
+		http.Error(w, "Missing series ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := library.UpdateSeriesName(api.DB, seriesID, req.Name); err != nil {
+		log.Printf("Failed to update series name: %v", err)
+		http.Error(w, "Failed to update series name", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

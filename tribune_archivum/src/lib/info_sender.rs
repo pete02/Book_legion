@@ -577,7 +577,7 @@ async fn handle_successful_book(
     }
 
     let sending=json!({
-        "id": remove_whitespace(&data.author)+&remove_whitespace(&data.title),
+        "id": authorid.clone()+&remove_whitespace(&data.title),
         "title": data.title,
         "author_id": authorid,
         "series_id": seriesid,

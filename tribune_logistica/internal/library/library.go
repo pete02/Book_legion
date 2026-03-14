@@ -138,6 +138,26 @@ func DeleteSeries(store storage.Storage, seriesID string) error {
 	return SaveManifest(store, manifest)
 }
 
+func UpdateSeriesName(store storage.Storage, seriesID string, newName string) error {
+	if seriesID == "" {
+		return fmt.Errorf("seriesID is required")
+	}
+
+	manifest, err := LoadManifest(store)
+	if err != nil {
+		return fmt.Errorf("failed to load manifest: %w", err)
+	}
+
+	for i, entry := range manifest.Series {
+		if entry.SeriesID == seriesID {
+			manifest.Series[i].SeriesName = newName
+			return SaveManifest(store, manifest)
+		}
+	}
+
+	return fmt.Errorf("series %s not found in manifest", seriesID)
+}
+
 func AddBookToManifest(store storage.Storage, book Book) error {
 	fmt.Printf("saving: %v\n", book)
 	manifest, err := LoadManifest(store)
@@ -171,10 +191,9 @@ func AddBookToManifest(store storage.Storage, book Book) error {
 		bookID := manifest.Series[index].FirstBookID
 		firstBook, err := LoadBook(store, bookID)
 		if err != nil {
-			return fmt.Errorf("failed to load other book: %w", err)
-		}
-
-		if book.SeriesOrder < firstBook.SeriesOrder {
+			// First book no longer exists or hasn't been saved yet — claim the spot
+			manifest.Series[index].FirstBookID = book.ID
+		} else if book.SeriesOrder < firstBook.SeriesOrder {
 			manifest.Series[index].FirstBookID = book.ID
 		}
 	}

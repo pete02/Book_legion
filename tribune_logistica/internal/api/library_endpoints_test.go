@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
@@ -154,6 +155,70 @@ func TestLibraryEndpoints(t *testing.T) {
 
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("UpdateSeriesName_Unauthorized", func(t *testing.T) {
+		body := strings.NewReader(`{"name":"New Name"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/updateseries/"+seriesID, body)
+		req.Header.Set("Authorization", "Bearer bad_token")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		api.UpdateSeriesName(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("UpdateSeriesName_Authorized", func(t *testing.T) {
+		body := strings.NewReader(`{"name":"New Name"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/updateseries/"+seriesID, body)
+		req.SetPathValue("id", seriesID)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		api.UpdateSeriesName(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
+		}
+
+		// Verify the name actually changed in the store
+		manifest, err := library.LoadManifest(api.DB)
+		if err != nil {
+			t.Fatalf("LoadManifest failed: %v", err)
+		}
+		for _, e := range manifest.Series {
+			if e.SeriesID == seriesID && e.SeriesName != "New Name" {
+				t.Fatalf("expected series name 'New Name', got %q", e.SeriesName)
+			}
+		}
+	})
+
+	t.Run("UpdateSeriesName_MissingName", func(t *testing.T) {
+		body := strings.NewReader(`{}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/updateseries/"+seriesID, body)
+		req.SetPathValue("id", seriesID)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		api.UpdateSeriesName(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("Expected 400 Bad Request, got %d", resp.StatusCode)
 		}
 	})
 

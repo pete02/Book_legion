@@ -570,3 +570,74 @@ func TestDeleteBook(t *testing.T) {
 		t.Fatalf("expected book to be deleted")
 	}
 }
+
+func TestUpdateSeriesName(t *testing.T) {
+	tmpFile := "test_manifest_update_series_name.json"
+	defer os.Remove(tmpFile)
+
+	store, _ := storage.NewJSONStorage(tmpFile)
+
+	// Seed manifest with two series
+	manifest := library.Manifest{
+		Series: []library.SeriesEntry{
+			{SeriesID: "s1", SeriesName: "Old Name", FirstBookID: "b1"},
+			{SeriesID: "s2", SeriesName: "Other Series", FirstBookID: "b2"},
+		},
+	}
+	if err := library.SaveManifest(store, manifest); err != nil {
+		t.Fatalf("SaveManifest failed: %v", err)
+	}
+
+	// Add two books belonging to s1
+	b1 := library.Book{ID: "b1", Title: "Book One", AuthorID: "a1", SeriesID: "s1", SeriesOrder: 1, FilePath: "/tmp/b1.epub"}
+	b2 := library.Book{ID: "b2", Title: "Book Two", AuthorID: "a1", SeriesID: "s1", SeriesOrder: 2, FilePath: "/tmp/b2.epub"}
+	if err := library.SaveBook(store, b1); err != nil {
+		t.Fatalf("SaveBook b1 failed: %v", err)
+	}
+	if err := library.SaveBook(store, b2); err != nil {
+		t.Fatalf("SaveBook b2 failed: %v", err)
+	}
+
+	// Rename s1
+	if err := library.UpdateSeriesName(store, "s1", "New Name"); err != nil {
+		t.Fatalf("UpdateSeriesName failed: %v", err)
+	}
+
+	// Verify manifest entry was updated
+	loaded, err := library.LoadManifest(store)
+	if err != nil {
+		t.Fatalf("LoadManifest failed: %v", err)
+	}
+	var found *library.SeriesEntry
+	for i, e := range loaded.Series {
+		if e.SeriesID == "s1" {
+			found = &loaded.Series[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("series s1 not found in manifest after update")
+	}
+	if found.SeriesName != "New Name" {
+		t.Fatalf("expected series name 'New Name', got %q", found.SeriesName)
+	}
+
+	// Verify s2 was untouched
+	for _, e := range loaded.Series {
+		if e.SeriesID == "s2" && e.SeriesName != "Other Series" {
+			t.Fatalf("s2 series name was unexpectedly changed to %q", e.SeriesName)
+		}
+	}
+
+	// Verify both books reflect the new series name when loaded
+	for _, id := range []string{"b1", "b2"} {
+		book, err := library.LoadBook(store, id)
+		if err != nil {
+			t.Fatalf("LoadBook %s failed: %v", id, err)
+		}
+		if book.SeriesName != "New Name" {
+			t.Fatalf("book %s: expected SeriesName 'New Name', got %q", id, book.SeriesName)
+		}
+		t.Logf("book %s SeriesName = %q ✓", id, book.SeriesName)
+	}
+}

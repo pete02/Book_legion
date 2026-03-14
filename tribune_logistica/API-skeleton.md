@@ -380,10 +380,16 @@ Save the posted cursor
 DELETE /api/v1/deletebook/{ID}
 **Response**: 200
 
+### 5.6 Update Series Name
+POST /api/v1/uupdateseries/{ID}
 
-### 5.5 Delete Books
+
+### 5.7 Delete Series
 DELETE /api/v1/deleteseries/{ID}
 **Response**: 200
+
+
+
 
 ## 6. Notes
 All endpoints require auth token except registration and login and cover

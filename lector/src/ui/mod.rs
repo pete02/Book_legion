@@ -19,3 +19,6 @@ pub use text::Text;
 
 mod bookedit;
 pub use bookedit::BookEdit;
+
+mod seriesedit;
+pub use seriesedit::SeriesEdit;
