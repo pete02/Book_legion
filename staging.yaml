@@ -4,10 +4,13 @@ services:
     image: lumilukko/tribune_logistica-staging:latest
     container_name: tribune_logistica-staging
     volumes:
-      - ./tribune_logistica/data:/data
+      - /mnt/private/Serversetup/data/staging:/data
     environment:
       - TTS_BACKEND=http
-      - TTS_API_URL=http://192.168.88.244:8888/tts
+      - LIBRARY_ROOT=/data
+      - TTS_API_URL=http://booklegion-tribune_dictio:8000/tts
+    env_file:
+      - .env
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -17,6 +20,24 @@ services:
 
       # Service port inside container
       - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
+  onboarder:
+    image: lumilukko/tribune_archivum-staging
+    container_name: tribune_archivum-staging
+    depends_on:
+      - staging-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - HARDCOVER_API_ENDPOINT=https://api.hardcover.app/v1/graphql
+      - TRIBUNE_LOGISTICA_URL=http://tribune_logistica-staging:8000
+      - RUST_LOG=debug
+    volumes:
+      - /mnt/private/Serversetup/data/staging:/data
+      - /mnt/private/onboard-staging:/onboard
+      - /mnt/private/onboard-staging-errors:/errs
+    networks:
+      - web
 
   frontend:
     image: lumilukko/lector-staging:latest
