@@ -1,4 +1,4 @@
-data
+data*
 target
 .direnv
 *.wav
@@ -6,3 +6,4 @@ target
 test.mp3
 investigation
 temp
+.env
