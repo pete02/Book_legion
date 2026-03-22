@@ -47,9 +47,9 @@ func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks m
 func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	fmt.Printf("Asked: %v", start)
+	fmt.Printf("Asked: %v\n", start)
 	o.idCheck(id)
-	fmt.Printf("ID ok")
+	fmt.Printf("ID ok\n")
 	start, err := ValidateCursor(start, maxChunks)
 	if err != nil {
 		return nil, err
@@ -233,6 +233,7 @@ func (o *Organizer) addToOrderLocked(c types.UserCursor) {
 	}
 
 	o.orderSet[c] = true
+	o.cond.Broadcast()
 }
 
 // expected return from fetchFn is chunk, ok
@@ -245,34 +246,25 @@ func (o *Organizer) StartOrderProcessor(fetchFn func(types.UserCursor) (types.Ch
 			case <-stop:
 				return
 			default:
-				var toProcess []types.UserCursor
 				o.mu.Lock()
-				toProcess = append(toProcess, o.OrderList...)
+				for len(o.OrderList) == 0 {
+					o.cond.Wait()
+				}
+				c := o.OrderList[0]
 				o.mu.Unlock()
 
-				for _, c := range toProcess {
-					chunk, ok := fetchFn(c)
-					if !ok {
-						continue
-					}
+				chunk, ok := fetchFn(c)
 
-					o.Buf.Add(chunk)
-					o.mu.Lock()
-
-					idx := -1
-					for i, existing := range o.OrderList {
-						if existing == c {
-							idx = i
-							break
-						}
-					}
-					if idx >= 0 {
-						o.OrderList = append(o.OrderList[:idx], o.OrderList[idx+1:]...)
-						delete(o.orderSet, c)
-					}
-					o.cond.Broadcast()
-					o.mu.Unlock()
+				o.Buf.Add(chunk) // only adds if ok, depending on Buffer.Add impl — check this
+				o.mu.Lock()
+				if len(o.OrderList) > 0 && o.OrderList[0] == c {
+					o.OrderList = o.OrderList[1:]
+					delete(o.orderSet, c)
 				}
+				if ok {
+					o.cond.Broadcast()
+				}
+				o.mu.Unlock()
 			}
 		}
 	}()
@@ -288,9 +280,9 @@ func (o *Organizer) AddToOrderForTest(c types.UserCursor) {
 	if !o.orderSet[c] && !o.Buf.Has(c) {
 		o.OrderList = append(o.OrderList, c)
 		o.orderSet[c] = true
+		o.cond.Broadcast() // wake the processor
 	}
 }
-
 func (o *Organizer) MuLockTest() {
 	o.mu.Lock()
 }

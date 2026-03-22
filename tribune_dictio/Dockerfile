@@ -10,7 +10,7 @@ COPY init.py .
 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget ca-certificates g++ make python3.11-dev python3.11-distutils python3.11-venv \
+    wget ca-certificates g++ make python3.11-dev python3.11-distutils python3.11-venv curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN uv sync --python 3.11
@@ -21,5 +21,7 @@ RUN uv run python -c "import setuptools; print(setuptools.__version__);import pk
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=5s --retries=20 --start-period=60s --timeout=3s \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["uv", "run", "main.py"]

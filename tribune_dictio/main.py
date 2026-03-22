@@ -1,7 +1,7 @@
 import perth
 from perth.perth_net.perth_net_implicit.perth_watermarker import PerthImplicitWatermarker
 
-perth.PerthImplicitWatermarker =PerthImplicitWatermarker
+perth.PerthImplicitWatermarker = PerthImplicitWatermarker
 
 import io
 import torch
@@ -12,88 +12,99 @@ import os
 import sys
 import re
 import time
-
+import contextlib
 
 app = Bottle()
 
-# Load model once
-
 device = "cuda"
-print("using: "+device)
+print("using: " + device)
 model = ChatterboxTTS.from_pretrained(device=device)
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 torch.set_grad_enabled(False)
 
-
 print(f"PyTorch using {torch.get_num_threads()} threads")
 VOICEACTOR_DIR = "/voiceactors"
-VOICEACTOR_DIR = "/voiceactors"
-CUMULATIVE_AUDIO_GEN_TIME=0.0
+CUMULATIVE_AUDIO_GEN_TIME = 0.0
+MODEL_READY = False
+
 
 def split_text_into_sentences(text: str) -> list[str]:
-    """
-    Split text into sentences using ., !, or ? as delimiters.
-    Keeps the punctuation at the end of each sentence.
-    """
     sentence_endings = re.compile(r'(?<=[.!?])\s+')
     sentences = sentence_endings.split(text.strip())
+    return [s.strip() for s in sentences if s.strip()]
 
-    sentences = [s.strip() for s in sentences if s.strip()]
-    
-    return sentences
+
+@app.get("/health")
+def health():
+    if not MODEL_READY:
+        return HTTPResponse("Model loading", status=503)
+    return HTTPResponse("OK", status=200)
+
 
 @app.post("/tts")
 def tts():
-    global CUMULATIVE_AUDIO_GEN_TIME 
+    global CUMULATIVE_AUDIO_GEN_TIME
+
+    if not MODEL_READY:
+        return HTTPResponse("Model not ready", status=503)
+
+    print("[tts] Audio requested")
+
     req = request.json
     if not req:
+        print("[tts] Error: Missing JSON body")
         return HTTPResponse("Missing JSON body", status=400)
-    
-    torch.cuda.empty_cache()
-    
-    text= req.get("text")
 
+    text = req.get("text")
     audio = req.get("voice")
     cfg_weight = float(req.get("cfg_weight", 0.5))
     exaggeration = float(req.get("exaggeration", 0.5))
     temperature = float(req.get("temperature", 0.8))
 
+    if os.getenv("DEBUG", "").lower() in ("1", "true", "yes"):
+        print(f"[tts] Text: {text}")
+
     audio_prompt_path = os.path.join(VOICEACTOR_DIR, f"{audio}.wav")
-    print(audio_prompt_path)
     if not os.path.exists(audio_prompt_path):
-        raise HTTPResponse(status_code=400, detail=f"Voice '{audio}' not found")
+        print(f"[tts] Error: Voice '{audio}' not found at {audio_prompt_path}")
+        return HTTPResponse(f"Voice '{audio}' not found", status=400)
 
-    start = time.perf_counter()
+    try:
+        torch.cuda.empty_cache()
+        sentences = split_text_into_sentences(text)
 
-    debug = os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
-    if debug:
-        print(text)
-    sentences = split_text_into_sentences(text)
+        print(f"[tts] Generating ({len(sentences)} sentence(s))...")
+        start = time.perf_counter()
 
-    wav_segments = [model.generate(s,
-        audio_prompt_path=audio_prompt_path,
-        cfg_weight=cfg_weight,
-        temperature=temperature,
-        exaggeration=exaggeration
-        ) for s in sentences]
+        with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
+            wav_segments = [
+                model.generate(
+                    s,
+                    audio_prompt_path=audio_prompt_path,
+                    cfg_weight=cfg_weight,
+                    temperature=temperature,
+                    exaggeration=exaggeration,
+                )
+                for s in sentences
+            ]
 
-    wav = torch.cat(wav_segments, dim=-1)
+        wav = torch.cat(wav_segments, dim=-1)
 
-    # Stream audio back
-    buffer = io.BytesIO()
-    wav16 = (wav * 32767.0).clamp(-32768, 32767).short()
-    ta.save(buffer, wav16.cpu(), model.sr, format="mp3", encoding="MP3")
-    buffer.seek(0)
-    end = time.perf_counter()
-    CUMULATIVE_AUDIO_GEN_TIME += (end - start)
+        buffer = io.BytesIO()
+        wav16 = (wav * 32767.0).clamp(-32768, 32767).short()
+        ta.save(buffer, wav16.cpu(), model.sr, format="mp3", encoding="MP3")
+        buffer.seek(0)
 
-    print(
-        f"[tribune_dictio] cumulative_audio_gen_time="
-        f"{CUMULATIVE_AUDIO_GEN_TIME:.4f}s"
-    )
-    
-    return HTTPResponse(body=buffer.read(), content_type="audio/mp3")
+        end = time.perf_counter()
+        CUMULATIVE_AUDIO_GEN_TIME += end - start
+        print(f"[tts] Responding (took {end - start:.2f}s, cumulative={CUMULATIVE_AUDIO_GEN_TIME:.2f}s)")
+
+        return HTTPResponse(body=buffer.read(), content_type="audio/mp3")
+
+    except Exception as e:
+        print(f"[tts] Error during generation: {e}")
+        return HTTPResponse(f"Generation failed: {e}", status=500)
 
 
 def check_voiceactors_dir():
@@ -110,5 +121,6 @@ def check_voiceactors_dir():
 if __name__ == "__main__":
     print("starting")
     check_voiceactors_dir()
+    MODEL_READY = True
+    print("[tts] Model ready, accepting requests")
     run(app, host="0.0.0.0", port=8000, server="paste")
-

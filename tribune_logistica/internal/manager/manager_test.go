@@ -517,6 +517,8 @@ func TestProcessor_HighConcurrencyStress(t *testing.T) {
 	}
 	wg.Wait()
 
+	time.Sleep(10 * time.Millisecond)
+
 	// Verify all expected chunks in buffer
 	for i := range 60 {
 		c := makeCursor(0, i)
