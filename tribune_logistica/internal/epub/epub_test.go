@@ -804,3 +804,46 @@ func TestCalculateCursorPlace_DifferentQuotes(t *testing.T) {
 		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
 	}
 }
+
+func TestExtractChapter_SelfClosingScript(t *testing.T) {
+	epubPath := createTestEpub(t, map[string]string{
+		"OEBPS/chapter1.xhtml": `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<title>Chapter 1</title>
+		<script type="text/javascript" src="js/kobo.js"/>
+		<style type="text/css" id="kobostylehacks">div#book-inner p { font-size: 1.0em; }</style>
+	</head>
+	<body>
+		<p>Chapter 1 content</p>
+	</body>
+</html>`,
+	})
+
+	e := &Epub{
+		Path: epubPath,
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "Chapter 1",
+				Href:   "OEBPS/chapter1.xhtml",
+			},
+		},
+	}
+
+	data, err := e.ExtractChapter(0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := string(data)
+	if got == "" {
+		t.Fatal("extracted chapter body is empty: self-closing <script/> likely caused HTML parser to consume <body> as script text")
+	}
+
+	want := "<p>Chapter 1 content</p>"
+	if got != want {
+		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
+	}
+}

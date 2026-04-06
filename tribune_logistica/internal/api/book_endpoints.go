@@ -89,6 +89,7 @@ func (api *API) GetChapter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error in loading chapter", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("chapter %d: extracted %d bytes", chapterIndex, len(chapterText))
 
 	// If the extracted chapter is XHTML/HTML, this is the correct MIME type.
 	// Use text/plain if you explicitly want no markup semantics.

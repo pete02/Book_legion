@@ -183,6 +183,8 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 			return nil, err
 		}
 
+		data = fixSelfClosingTags(data)
+
 		doc, err := html.Parse(bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse chapter HTML: %w", err)
@@ -200,6 +202,10 @@ func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
 			if err := html.Render(&buf, c); err != nil {
 				return nil, err
 			}
+		}
+
+		if buf.Len() == 0 {
+			return nil, fmt.Errorf("chapter %s parsed to empty body", nav.Href)
 		}
 
 		return buf.Bytes(), nil
@@ -506,4 +512,10 @@ func buildNormalizedMapping(orig string) (string, []int) {
 		// optionally include space if you want normalized spacing
 	}
 	return norm.String(), mapping
+}
+
+var selfClosingTagRe = regexp.MustCompile(`(?i)<(script|style)(\s[^>]*)?\s*/>`)
+
+func fixSelfClosingTags(data []byte) []byte {
+	return selfClosingTagRe.ReplaceAll(data, []byte("<$1$2></$1>"))
 }
