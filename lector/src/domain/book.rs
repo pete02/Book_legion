@@ -29,7 +29,7 @@ pub fn get_book_info(book_id: String) -> Resource<BookInfo> {
         }
     })
 }
-
+#[allow(dead_code)]
 pub fn update_book(info: BookInfo) {
     spawn(async move {
         if let Err(e) = infra::book::save_book(&info).await {
@@ -37,6 +37,7 @@ pub fn update_book(info: BookInfo) {
         }
     });
 }
+#[allow(dead_code)]
 pub fn delete_book(book_id: String) {
     info!("delete_book called for: {}", book_id);
     use_effect(move ||{

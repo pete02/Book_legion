@@ -1,10 +1,9 @@
 use log::{debug, error, info};
 use serde_json::Value;
 use thiserror::Error;
-use reqwest::Client;
 use serde_json::json;
 use serde::{Deserialize};
-use std::{fmt::format, path::Path};
+use std::path::Path;
 use crate::lib::{gate, helpers, orchestrator};
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -124,6 +123,7 @@ struct FeaturedSeries {
 #[derive(Deserialize)]
 struct Document {
     title: Option<String>,               // ← add this
+    #[allow(dead_code)]
     alternative_titles: Option<Vec<String>>,
     author_names: Option<Vec<String>>,
     featured_series: Option<FeaturedSeries>,

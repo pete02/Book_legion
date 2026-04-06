@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{Route, domain::{self, series::delete_series}, styles, ui::components::{Card, TopBar, TopBarEntry}};
+use crate::{Route, domain, styles, ui::components::{Card, TopBar, TopBarEntry}};
 
 
 #[component]

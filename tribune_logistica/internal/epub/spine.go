@@ -165,12 +165,6 @@ func ReadFromMap(files map[string]*zip.File, name string) ([]byte, error) {
 
 /* ---------- XML structures ---------- */
 
-type containerXML struct {
-	Rootfiles []struct {
-		FullPath string `xml:"full-path,attr"`
-	} `xml:"rootfiles>rootfile"`
-}
-
 type opfPackage struct {
 	Metadata struct {
 		Metas []struct {

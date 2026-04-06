@@ -1,7 +1,7 @@
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::prelude::*;
 use crate::{
     Route, domain::{
-        book::{delete_book, get_book_info, update_book},
+        book::{ get_book_info},
         library::get_library
     }, infra, ui::components::{TopBar, TopBarEntry}
 };

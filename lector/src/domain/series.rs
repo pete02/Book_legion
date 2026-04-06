@@ -30,7 +30,7 @@ async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardD
 }
 
 
-
+#[allow(dead_code)]
 pub fn delete_series(series_id:String){
     spawn(async move{
         match infra::series::delete_series(&series_id).await{

@@ -1,4 +1,4 @@
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::prelude::*;
 use crate::{
     Route,
     domain,
@@ -165,12 +165,7 @@ pub fn SeriesEdit(series_id: String) -> Element {
         }
     }
 }
-fn update_draft(mut draft: Signal<Option<String>>, f: impl FnOnce(&mut String)) {
-    if let Some(mut s) = draft() {
-        f(&mut s);
-        draft.set(Some(s));
-    }
-}
+
 
 const INPUT_STYLE: &str = "
     padding: 8px 12px;

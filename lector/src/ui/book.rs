@@ -1,7 +1,7 @@
 use dioxus::{logger::tracing, prelude::*};
 
 
-use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{BookEdit, components::{TopBar, TopBarEntry, card::Cover}}};
+use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{ components::{TopBar, TopBarEntry, card::Cover}}};
 
 
 #[component]
@@ -10,7 +10,6 @@ pub fn Book(book_id: String) -> Element {
     let b=book_id.clone();
     let cover_path = domain::cover::create_cover_path(book_id.clone());
     let nav = use_navigator();
-    let edit_path=format!("/book/{}/edit",book_id.clone());
 
 
     let top_entries = vec![

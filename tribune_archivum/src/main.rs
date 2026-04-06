@@ -1,6 +1,5 @@
 use std::{fs, path::Path};
-use log::{debug, error, info};
-use tokio::signal;
+use log::{ error, info};
 
 pub mod lib;
 mod tests;
