@@ -10,7 +10,7 @@ mod tests;
 
 #[tokio::main]
 async fn main() {
-   println!("{:?}",test());
+    let _=run_main().await;
 }
 
 
