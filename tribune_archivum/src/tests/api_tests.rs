@@ -1,4 +1,4 @@
-
+#[cfg(test)]
 use crate::lib;
 
 #[allow(dead_code)]

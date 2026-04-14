@@ -108,6 +108,7 @@ pub fn validate_zip_safety(path: &Path) -> Result<()> {
 }
 
 pub fn repair_epub_if_needed<P: AsRef<Path>>(path: P) -> Result<bool, Box<dyn Error>> {
+    debug!("start repair check");
     let path = path.as_ref();
 
     // --- Step 1: Try opening + validating ---
@@ -307,7 +308,7 @@ fn validate_playorder(play_order: &str) -> Result<u32, String> {
 
 
 fn repair_epub(path: &Path) -> Result<bool, Box<dyn Error>> {
-    println!("Attempting EPUB repair: {:?}", path);
+    debug!("Attempting EPUB repair: {:?}", path);
 
     let parent = path.parent().ok_or("Invalid path")?;
 
@@ -334,7 +335,7 @@ fn repair_epub(path: &Path) -> Result<bool, Box<dyn Error>> {
 
     // --- Step 3: rezip ---
     // IMPORTANT: EPUB requires mimetype first + uncompressed
-    let mimetype_path = tmp_dir.join("mimetype");
+    
     let zip_status = Command::new("zip")
         .current_dir(&tmp_dir)
         .arg("-X0")
@@ -359,7 +360,7 @@ fn repair_epub(path: &Path) -> Result<bool, Box<dyn Error>> {
         return Err("zip failed; cannot repair epub".into());
     }
 
-    println!("Fixed path: {:?}", fixed_path);
+    debug!("Fixed path: {:?}", fixed_path);
 
     // --- Step 4: replace original atomically ---
     fs::rename(&fixed_path, path).map_err(|e|format!("Repair_epub: Error in replacing the original: {}",e))?;
@@ -367,7 +368,7 @@ fn repair_epub(path: &Path) -> Result<bool, Box<dyn Error>> {
     // --- Cleanup ---
     fs::remove_dir_all(&tmp_dir).map_err(|_|"Repair_epub: Failed in the cleanup")?;
 
-    println!("EPUB repaired successfully.");
+    debug!("EPUB repaired successfully.");
 
     Ok(true)
 }

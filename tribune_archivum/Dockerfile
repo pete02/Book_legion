@@ -18,7 +18,7 @@ FROM ubuntu:24.04
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
-    calibre curl iputils-ping \
+    calibre curl iputils-ping zip unzip\
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/tribune_archivum /app/tribune_archivum

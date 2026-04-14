@@ -1,10 +1,10 @@
-use std::{error::Error, fs::{self, File}, io::Seek, path::Path};
+use std::{error::Error, fs, path::Path};
 use log::{ error, info};
-use zip::ZipArchive;
+
 
 use crate::lib::verifiers;
 
-pub mod lib;
+mod lib;
 mod tests;
 
 
