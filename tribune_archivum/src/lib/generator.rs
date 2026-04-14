@@ -148,7 +148,7 @@ pub fn rewrite_epub_with_new_file(
     writer.finish()?;
 
     // Replace original
-    fs::rename(tmp_path, path)?;
+    helpers::move_file(&tmp_path, path)?;
 
     Ok(())
 }

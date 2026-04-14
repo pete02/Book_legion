@@ -1,5 +1,5 @@
 use walkdir::WalkDir;
-use crate::lib::{generator::generate_toc, verifiers::{verify_toc_integrity, verify_zip_integrity}};
+use crate::lib::{generator::generate_toc, helpers, verifiers::{verify_toc_integrity, verify_zip_integrity}};
 use log::{info, warn, error, debug};
 use std::{error::Error, fs};
 use std::path::Path;
@@ -44,6 +44,7 @@ pub fn process_library(root: &Path, processed_dir: &Path, err_dir: &Path, copy:b
 
         match result {
             Ok(epub_path) => {
+                debug!("copying the epub ");
                 // Only copy EPUBs to processed_dir
                 let file_name = epub_path.file_name().unwrap();
                 let dest_path = processed_dir.join(file_name);
@@ -69,9 +70,10 @@ use std::process::Command;
 pub fn handle_err(originator: String,err_dir: &Path, file: &Path, e: Box<dyn Error>)-> Result<(),Box< dyn Error>>{
     let file_name = file.file_name().unwrap();
     let dest_path = err_dir.join(file_name);
-    if let Err(e)=fs::rename(&file, &dest_path){
+    error!("Error in {}: {}: {}", originator,file.display(), e);
+    if let Err(e)=helpers::move_file(&file, &dest_path){
         debug!("Error in the handle error renaming: {}", e);
-        return Err(Box::new(e));
+        return Err("error failed".into());
     }
     let err_file = err_dir.join(format!(
             "{}.err",
@@ -81,7 +83,6 @@ pub fn handle_err(originator: String,err_dir: &Path, file: &Path, e: Box<dyn Err
         debug!("error in writing the error to file in handle error: {}",e);
         return Err(Box::new(e));
     }
-    error!("Error in {}: {}: {}", originator,file.display(), e);
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use crate::lib::verifiers::validate_zip_safety;
 use std::{fs::File, io::{BufReader, Read}, path::Path};
 
+use log::debug;
 use regex::Regex;
 use zip::{ZipArchive, read::ZipFile};
 use anyhow::Result;
@@ -53,7 +54,23 @@ pub fn get_opf_struct(archive:&mut ZipArchive<File>)->Result<Package,Box<dyn std
 }
 
 pub fn get_zip(path:&Path)->Result<ZipArchive<File>,Box<dyn std::error::Error>>{
+    debug!("Get zip: {:?}", path);
     validate_zip_safety(path)?;
+    debug!("zip {:?} is safe",path);
     let file=File::open(path)?;
+    debug!("zip {:?} opened",path);
     return Ok(ZipArchive::new(file)?)
+}
+
+pub fn move_file(src: &Path, dst: &Path) -> Result<()> {
+    match std::fs::rename(src, dst) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
+            debug!("rename crossed devices, falling back to copy+delete");
+            std::fs::copy(src, dst)?;
+            std::fs::remove_file(src)?;
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
 }

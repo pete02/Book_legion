@@ -13,7 +13,7 @@ import (
 type PrettySpineItem struct {
 	Index  int    `json:"index"`
 	Number int    `json:"number"`
-	Href   string `json: href`
+	Href   string `json:"href"`
 	Title  string `json:"title"`
 }
 type NavToc struct {

@@ -581,13 +581,8 @@ async fn handle_successful_book(
     }
 
     // Move file (fallback-safe version)
-    match fs::rename(source_path, &final_destination).await {
-        Ok(_) => {}
-        Err(_) => {
-            fs::copy(source_path, &final_destination).await?;
-            fs::remove_file(source_path).await?;
-        }
-    }
+    helpers::move_file(source_path, &final_destination)?;
+
     if data.series.len()==0{
         data.series=data.title.clone();
         data.pos=1;

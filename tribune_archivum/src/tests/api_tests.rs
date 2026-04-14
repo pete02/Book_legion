@@ -1,4 +1,6 @@
+
 use crate::lib;
+
 #[allow(dead_code)]
 fn load_env() {
     let _ = dotenvy::dotenv();
