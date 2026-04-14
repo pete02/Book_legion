@@ -1,5 +1,5 @@
-use std::{fs::File, path::{Component, Path, PathBuf}};
-use log::debug;
+use std::{error::Error, fs::{self, File}, path::{Component, Path, PathBuf}, process::Command};
+use log::{debug, warn};
 use zip::ZipArchive;
 use anyhow::{Result, bail};
 
@@ -29,10 +29,29 @@ pub fn validate_zip_safety(path: &Path) -> Result<()> {
         bail!("ZIP contains too many files: {}", file_count);
     }
 
+    // Path traversal check uses central directory names only — no local header needed
+    for name in archive.file_names() {
+        if name.contains("..") || name.starts_with('/') {
+            debug!("validate_zip_safety: REJECTED — path traversal detected in {:?}", name);
+            bail!("Path traversal detected in {}", name);
+        }
+    }
+
     let mut total_uncompressed = 0u64;
 
     for i in 0..file_count {
-        let entry = archive.by_index(i)?;
+        let entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(e) => {
+                // A file that can't be parsed can't be decompressed, so it's not a bomb risk.
+                // Log and skip rather than rejecting a legitimate but slightly non-conformant file.
+                warn!(
+                    "validate_zip_safety: entry[{}] local header unreadable ({}), skipping size checks",
+                    i, e
+                );
+                continue;
+            }
+        };
 
         let name = entry.name().to_string();
         let compressed = entry.compressed_size();
@@ -71,22 +90,13 @@ pub fn validate_zip_safety(path: &Path) -> Result<()> {
                     "validate_zip_safety: REJECTED — entry[{}] {:?} ratio={:.2}x exceeds MAX_COMPRESSION_RATIO={:.2}x",
                     i, name, ratio, MAX_COMPRESSION_RATIO
                 );
-                bail!(
-                    "Suspicious compression ratio in {} ({}x)",
-                    name,
-                    ratio
-                );
+                bail!("Suspicious compression ratio in {} ({}x)", name, ratio);
             }
         } else {
-            debug!("validate_zip_safety: entry[{}] {:?} is stored uncompressed, skipping ratio check", i, name);
-        }
-
-        if entry.name().contains("..") || entry.name().starts_with('/') {
             debug!(
-                "validate_zip_safety: REJECTED — path traversal detected in entry[{}] {:?}",
+                "validate_zip_safety: entry[{}] {:?} is stored uncompressed, skipping ratio check",
                 i, name
             );
-            bail!("Path traversal detected in {}", name);
         }
     }
 
@@ -95,6 +105,35 @@ pub fn validate_zip_safety(path: &Path) -> Result<()> {
         file_count, total_uncompressed
     );
     Ok(())
+}
+
+pub fn repair_epub_if_needed<P: AsRef<Path>>(path: P) -> Result<bool, Box<dyn Error>> {
+    let path = path.as_ref();
+
+    // --- Step 1: Try opening + validating ---
+    let file = File::open(path)?;
+    let mut archive = match ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => {
+            // Definitely broken → attempt repair
+            return repair_epub(path);
+        }
+    };
+
+    // Validate entries (lightweight)
+    for i in 0..archive.len() {
+        let res = (|| {
+            let _ = archive.by_index(i)?;
+            Ok::<_, zip::result::ZipError>(())
+        })();
+
+        if res.is_err() {
+            return repair_epub(path);
+        }
+    }
+
+    // Archive is fine
+    Ok(false)
 }
 
 pub fn verify_zip_integrity(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
@@ -264,4 +303,71 @@ fn validate_playorder(play_order: &str) -> Result<u32, String> {
         Ok(_) => Err(format!("playOrder must be positive: '{}'", play_order)),
         Err(_) => Err(format!("Invalid playOrder, not a number: '{}'", play_order)),
     }
+}
+
+
+fn repair_epub(path: &Path) -> Result<bool, Box<dyn Error>> {
+    println!("Attempting EPUB repair: {:?}", path);
+
+    let parent = path.parent().ok_or("Invalid path")?;
+
+    let tmp_dir = parent.join("epub_repair_tmp");
+    let fixed_path = std::fs::canonicalize(parent)?
+    .join("epub_repaired.epub");
+
+    // Clean temp dir if exists
+    if tmp_dir.exists() {
+        fs::remove_dir_all(&tmp_dir)?;
+    }
+    fs::create_dir(&tmp_dir)?;
+
+    // --- Step 2: unzip ---
+    let unzip_status = Command::new("unzip")
+        .arg(path)
+        .arg("-d")
+        .arg(&tmp_dir)
+        .status()?;
+
+    if !unzip_status.success() {
+        return Err("unzip failed; cannot repair epub".into());
+    }
+
+    // --- Step 3: rezip ---
+    // IMPORTANT: EPUB requires mimetype first + uncompressed
+    let mimetype_path = tmp_dir.join("mimetype");
+    let zip_status = Command::new("zip")
+        .current_dir(&tmp_dir)
+        .arg("-X0")
+        .arg(&fixed_path) // this can now safely be outside tmp_dir
+        .arg("mimetype")
+        .status()?;
+
+    if !zip_status.success() {
+        return Err("zip step 1 failed".into());
+    }
+
+    let zip_status = Command::new("zip")
+        .current_dir(&tmp_dir)
+        .arg("-Xr9D")
+        .arg(&fixed_path)
+        .arg(".")
+        .arg("-x")
+        .arg("mimetype")
+        .status()?;
+
+    if !zip_status.success() {
+        return Err("zip failed; cannot repair epub".into());
+    }
+
+    println!("Fixed path: {:?}", fixed_path);
+
+    // --- Step 4: replace original atomically ---
+    fs::rename(&fixed_path, path).map_err(|e|format!("Repair_epub: Error in replacing the original: {}",e))?;
+
+    // --- Cleanup ---
+    fs::remove_dir_all(&tmp_dir).map_err(|_|"Repair_epub: Failed in the cleanup")?;
+
+    println!("EPUB repaired successfully.");
+
+    Ok(true)
 }

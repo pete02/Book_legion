@@ -1,5 +1,8 @@
-use std::{fs, path::Path};
+use std::{error::Error, fs::{self, File}, io::Seek, path::Path};
 use log::{ error, info};
+use zip::ZipArchive;
+
+use crate::lib::verifiers;
 
 pub mod lib;
 mod tests;
@@ -7,6 +10,11 @@ mod tests;
 
 #[tokio::main]
 async fn main() {
+   println!("{:?}",test());
+}
+
+
+async fn run_main(){
     dotenvy::dotenv().ok();
     env_logger::init();
 
@@ -68,5 +76,15 @@ pub fn remove_empty_dirs(root: &Path) -> std::io::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+
+fn test()->Result<(), Box<dyn Error>>{
+    let path="./err.epub";
+    println!("{:?}",verifiers::repair_epub_if_needed(path));
+
+
+    println!("is ok");
     Ok(())
 }

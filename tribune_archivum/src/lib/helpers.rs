@@ -1,4 +1,4 @@
-use crate::lib::verifiers::validate_zip_safety;
+use crate::lib::verifiers::{self, validate_zip_safety};
 use std::{fs::File, io::{BufReader, Read}, path::Path};
 
 use log::debug;
@@ -16,7 +16,20 @@ pub fn read_toc(toc_file: ZipFile<'_, File>)->Result<Ncx,Box<dyn std::error::Err
 
 /// Checks that META-INF/container.xml exists and returns the OPF path
 pub fn read_container_opf_path(archive:&mut ZipArchive<File>) -> Result<String, Box<dyn std::error::Error>> {
-    let container_file =archive.by_name("META-INF/container.xml").map_err(|_|"container.xml does not exist")?;
+    debug!("reading container_opf path");
+    let mut container_path = None;
+
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        if file.name().ends_with("META-INF/container.xml") {
+            container_path = Some(file.name().to_string());
+            break;
+        }
+    }
+
+    let path = container_path.ok_or("container.xml not found")?;
+    let container_file = archive.by_name(&path)?;
+
     let mut reader = std::io::BufReader::new(container_file);
     let mut buf = Default::default();
     reader.read_to_string(&mut buf)?;
@@ -53,13 +66,28 @@ pub fn get_opf_struct(archive:&mut ZipArchive<File>)->Result<Package,Box<dyn std
     return Ok(opf_struct);
 }
 
-pub fn get_zip(path:&Path)->Result<ZipArchive<File>,Box<dyn std::error::Error>>{
+pub fn get_zip(path: &Path) -> Result<ZipArchive<File>, Box<dyn std::error::Error>> {
     debug!("Get zip: {:?}", path);
+
+    // Step 1: pre-validation (protect against zip bombs)
     validate_zip_safety(path)?;
-    debug!("zip {:?} is safe",path);
-    let file=File::open(path)?;
-    debug!("zip {:?} opened",path);
-    return Ok(ZipArchive::new(file)?)
+    debug!("zip {:?} passed pre-validation", path);
+
+    // Step 2: repair if needed (now safe to unzip)
+    let repaired = verifiers::repair_epub_if_needed(path)?;
+    if repaired {
+        debug!("zip {:?} was repaired", path);
+
+        // Step 3: re-validate AFTER mutation
+        validate_zip_safety(path)?;
+        debug!("zip {:?} passed post-repair validation", path);
+    }
+
+    // Step 4: open
+    let file = File::open(path)?;
+    debug!("zip {:?} opened", path);
+
+    Ok(ZipArchive::new(file)?)
 }
 
 pub fn move_file(src: &Path, dst: &Path) -> Result<()> {
