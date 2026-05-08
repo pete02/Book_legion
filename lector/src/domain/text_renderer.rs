@@ -169,63 +169,221 @@ pub fn cut_render(
         .dyn_into::<HtmlElement>()
         .unwrap();
 
-    
     match align {
         Align::Top => {
             container.set_scroll_top(0);
-            let mut end_offset = if let Some(child) = scan_children(&container, chapter_html, align) {
-                child
-            } else {
-                tracing::info!("found end");
-                chapter_html.len()-1
-            };
+            // Use our improved fallback mechanism
+            let end_offset = find_proper_cut_point(&container, chapter_html, align, start_offset);
+            
+            tracing::debug!("end offset:{}", end_offset);
 
-            tracing::debug!("end offset:{}",end_offset);
-
-            if start_offset>end_offset{
-                let temp=end_offset;
-                end_offset=start_offset;
-                start_offset=temp;
+            // Ensure proper bounds - make sure we don't exceed text length
+            let actual_end = end_offset.min(chapter_html.len());
+            let actual_start = start_offset.min(actual_end);
+            
+            // Make sure we don't render empty content
+            if actual_start >= actual_end {
+                tracing::warn!("Invalid cut range - returning start position");
+                return RenderResult {
+                    start_offset: actual_start,
+                    end_offset: actual_start,
+                    at_chapter_start: actual_start == 0,
+                    at_chapter_end: actual_start == chapter_html.len(),
+                };
             }
-
-            let html_fragment = &chapter_html[start_offset..end_offset];
+            
+            let html_fragment = &chapter_html[actual_start..actual_end];
             visible_text.set(html_fragment.to_owned());
 
             RenderResult {
-                start_offset,
-                end_offset,
-                at_chapter_start: start_offset == 0,
-                at_chapter_end: end_offset == chapter_html.len()-1,
+                start_offset: actual_start,
+                end_offset: actual_end,
+                at_chapter_start: actual_start == 0,
+                at_chapter_end: actual_end == chapter_html.len(),
             }
         }
-        Align::None => unreachable!("Cut renrer should never be called without alignment"),
+        Align::None => unreachable!("Cut render should never be called without alignment"),
         Align::Bottom => {
             container.set_scroll_top(container.scroll_height());
-            let mut start_offset_result = if let Some(child) = scan_children(&container, chapter_html, align) {
-                child
-            } else {
-                0
-            };
-            tracing::debug!("back_result: {}-{}", start_offset_result,start_offset);
+            // Use our improved fallback mechanism
+            let start_offset_result = find_proper_cut_point(&container, chapter_html, align, start_offset);
+            
+            tracing::debug!("back_result: {}-{}", start_offset_result, start_offset);
 
-            if start_offset_result>start_offset{
-                let temp=start_offset_result;
-                start_offset_result=start_offset;
-                start_offset=temp;
+            // Ensure proper bounds
+            let actual_start = start_offset_result.min(start_offset);
+            let actual_end = start_offset;
+            
+            // Make sure we don't render empty content
+            if actual_start >= actual_end {
+                tracing::warn!("Invalid cut range - returning start position");
+                return RenderResult {
+                    start_offset: actual_start,
+                    end_offset: actual_start,
+                    at_chapter_start: actual_start == 0,
+                    at_chapter_end: actual_start == chapter_html.len(),
+                };
             }
-            let html_fragment = &chapter_html[start_offset_result..start_offset];
+            
+            let html_fragment = &chapter_html[actual_start..actual_end];
             visible_text.set(html_fragment.to_owned());
 
             RenderResult {
-                start_offset: start_offset_result,
-                end_offset: start_offset,
-                at_chapter_start: start_offset_result == 0,
-                at_chapter_end: start_offset == chapter_html.len()-1,
+                start_offset: actual_start,
+                end_offset: actual_end,
+                at_chapter_start: actual_start == 0,
+                at_chapter_end: actual_end == chapter_html.len(),
             }
         }
     }
 }
 
+// Improved method to find cut points that handles HTML properly
+fn find_proper_cut_point(container: &HtmlElement, chapter_html: &str, align: Align, start_offset: usize) -> usize {
+    // First try the existing scanning logic
+    if let Some(offset) = scan_children(container, chapter_html, align) {
+        tracing::debug!("Found element-based cut point: {}", offset);
+        return offset;
+    }
+    
+    // Fallback to simple text-based cutting when element scanning fails
+    tracing::warn!("Element scanning failed, using fallback text cutting");
+    
+    // For Top alignment, we want to find the end of viewport content
+    if align == Align::Top {
+        // Try to find a reasonable cut point based on viewport height
+        let container_rect = container.get_bounding_client_rect();
+        let container_height = container_rect.height();
+        
+        // Estimate how many characters can fit in the viewport
+        // This is a rough estimate - in a real app, you'd measure actual text rendering
+        let estimated_chars_per_line = 80; // Average chars per line
+        let estimated_lines_per_viewport = (container_height / 20.0) as usize; // Rough estimation of 20px per line
+        let estimated_chars_in_viewport = estimated_chars_per_line * estimated_lines_per_viewport;
+        
+        // Find a reasonable boundary in the text
+        let mut end_offset = (start_offset + estimated_chars_in_viewport).min(chapter_html.len());
+        
+        // Try to find a sentence boundary or HTML tag boundary to avoid cutting in the middle of words or tags
+        end_offset = find_sentence_boundary(chapter_html, start_offset, end_offset);
+        
+        tracing::debug!("Text fallback cut point: {}", end_offset);
+        return end_offset;
+    } else if align == Align::Bottom {
+        // For bottom alignment, we want to start from the viewport bottom
+        let container_rect = container.get_bounding_client_rect();
+        let container_height = container_rect.height();
+        
+        // Estimate how many characters to go back
+        let estimated_chars_per_line = 80;
+        let estimated_lines_per_viewport = (container_height / 20.0) as usize;
+        let estimated_chars_in_viewport = estimated_chars_per_line * estimated_lines_per_viewport;
+        
+        let mut start_offset_result = (start_offset.saturating_sub(estimated_chars_in_viewport)).min(chapter_html.len());
+        
+        // Try to find a sentence boundary or HTML tag boundary
+        start_offset_result = find_sentence_boundary_backwards(chapter_html, start_offset_result, start_offset);
+        
+        tracing::debug!("Text fallback cut point (bottom): {}", start_offset_result);
+        return start_offset_result;
+    }
+    
+    // Fallback - return the start_offset if everything fails
+    start_offset
+}
+
+// Find sentence boundary (look for sentence-ending punctuation)
+fn find_sentence_boundary(text: &str, start: usize, max: usize) -> usize {
+    let mut end = max.min(text.len());
+    
+    // Look for sentence endings like periods, exclamation marks, question marks
+    let text_slice = &text[start..end];
+    
+    // Look for sentence endings backwards in the text slice
+    for i in (0..text_slice.len()).rev() {
+        let pos = start + i;
+        if pos < text.len() {
+            let ch = text.chars().nth(pos);
+            if let Some(c) = ch {
+                if c == '.' || c == '!' || c == '?' {
+                    // Make sure we're not inside an HTML tag
+                    let before_pos = pos.saturating_sub(20);
+                    let before_text = &text[before_pos..pos];
+                    if !before_text.contains('<') || !before_text.contains('>') {
+                        return pos + 1; // Include the punctuation
+                    }
+                }
+            }
+        }
+    }
+    
+    // If no sentence boundary found, look for a reasonable HTML tag boundary
+    for i in (0..text_slice.len()).rev() {
+        let pos = start + i;
+        if pos < text.len() && text[pos..].starts_with("</") {
+            return pos;
+        }
+    }
+    
+    // Fallback to simple cut at word boundary (but make sure we don't cut at the very start)
+    let mut cut_pos = end;
+    if cut_pos > start {
+        while cut_pos > start && !text.chars().nth(cut_pos).map_or(false, |c| c.is_whitespace()) {
+            cut_pos -= 1;
+        }
+        
+        if cut_pos == start && end > start {
+            // If we couldn't find whitespace, cut at a reasonable position
+            cut_pos = (start + (end - start) / 2).min(end);
+        }
+    }
+    
+    if cut_pos == start {
+        return end; // No space found, just cut at max
+    }
+    
+    cut_pos
+}
+
+// Find sentence boundary backwards (for bottom alignment)
+fn find_sentence_boundary_backwards(text: &str, start: usize, max: usize) -> usize {
+    // Search forward from start to max looking for sentence endings
+    let mut pos = start;
+    
+    while pos < max && pos < text.len() {
+        if pos > 0 {
+            let ch = text.chars().nth(pos);
+            if let Some(c) = ch {
+                if c == '.' || c == '!' || c == '?' {
+                    // Make sure we're not inside an HTML tag
+                    let after_pos = (pos + 20).min(text.len());
+                    let after_text = &text[pos..after_pos];
+                    if !after_text.contains('<') || !after_text.contains('>') {
+                        return pos + 1; // Include the punctuation
+                    }
+                }
+            }
+        }
+        pos += 1;
+    }
+    
+    // If no sentence boundary found, look for HTML tag boundary
+    pos = start;
+    while pos < max && pos < text.len() {
+        if text[pos..].starts_with('<') && text[pos..].starts_with("</") {
+            return pos;
+        }
+        pos += 1;
+    }
+    
+    // Fallback to reasonable cut point
+    let cut_pos = (start + (max - start) / 2).min(max);
+    if cut_pos > start {
+        cut_pos
+    } else {
+        start
+    }
+}
 
 fn save(chapter_html: String, book_id: String, index: usize, start: usize) {
     if start >= chapter_html.chars().count() {
@@ -264,7 +422,7 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
         let children = container.child_nodes(); 
         const EPSILON: f64 = 1.0;
 
-        tracing::debug!("children lengt: {}", children.length());
+        tracing::debug!("children length: {}", children.length());
 
         for i in 0..children.length(){
             let node = match children.item(i) {
@@ -315,7 +473,16 @@ fn scan_children(container: &HtmlElement, chapter_html: &str, align:Align)->Opti
                 let decoded_el=decode_html_entities(&el.outer_html()).to_string();
                 tracing::info!("el_decoded: {}", decoded_el);
                 tracing::info!("chapter_decooded: {}", chapter_html);
-                return chapter_html.find(&decoded_el);
+                // Try to find the actual position in the HTML
+                if let Some(pos) = chapter_html.find(&decoded_el) {
+                    return Some(pos);
+                } else {
+                    // If exact match not found, try to find where this element would be in the text
+                    // This is a fallback - when an element is found but no position is found in text, 
+                    // we return None to let fallback logic take over
+                    tracing::warn!("Found element but couldn't locate in text - falling back to text cutting");
+                    return None;
+                }
             }else{
                 tracing::info!("no measurement")
             }
@@ -363,9 +530,8 @@ pub fn save_cursor(book_id:String,index: usize, save_txt:String){
     spawn(async move{
         let cursor=infra::cursor::get_cursor_from_text(&book_id, index, &save_txt).await;
         match cursor {
-            Err(e)=>tracing::error!("No cursor founnd: {}",e),
+            Err(e)=>tracing::error!("No cursor found: {}",e),
             Ok(c)=>{domain::cursor::save_bookcursor(c).await;}
         }
     });
 }
-
