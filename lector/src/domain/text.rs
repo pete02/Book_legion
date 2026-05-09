@@ -52,8 +52,6 @@ fn normalize_char(c: &char) -> Option<char> {
     if c.is_ascii_alphanumeric() {
         return Some(c.to_ascii_lowercase());
     }
-
-
     None
 }
 

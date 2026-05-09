@@ -33,16 +33,6 @@ pub fn SeriesEdit(series_id: String) -> Element {
         },
     ];
 
-    let delete_style = format!(
-        "padding: 10px 24px;
-         background: transparent;
-         color: #ef4444;
-         border: 1px solid #ef4444;
-         border-radius: 6px;
-         font-size: 1rem;
-         cursor: pointer;",
-    );
-
     rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%; font-family: sans-serif;",
@@ -85,51 +75,8 @@ pub fn SeriesEdit(series_id: String) -> Element {
                     div {
                         style: "display: flex; gap: 10px; justify-content: flex-end;",
 
-                        button {
-                            style: "
-                                padding: 10px 24px;
-                                background: #3b82f6;
-                                color: white;
-                                border: none;
-                                border-radius: 6px;
-                                font-size: 1rem;
-                                cursor: pointer;
-                            ",
-                            onclick: {
-                                let series_id=series_id.clone();
-                                move |_| {
-                                let name = draft();
-                                let id = series_id.clone();
-                                let nav = navigator();
-                                spawn(async move {
-                                    if let Err(e) = infra::series::update_series_name(&id, &name).await {
-                                        error!("failed to save series: {}", e);
-                                    }
-                                    nav.push(Route::Library {});
-                                });
-                            }
-                            },
-                            "Save"
-                        }
-
-                        button {
-                            style: "
-                                padding: 10px 24px;
-                                background: transparent;
-                                color: #6b7280;
-                                border: 1px solid #d1d5db;
-                                border-radius: 6px;
-                                font-size: 1rem;
-                                cursor: pointer;
-                            ",
-                            onclick: {
-                                let sid = series_id.clone();
-                                move |_| {
-                                    navigator().push(Route::Series { series_id: sid.clone() });
-                                }
-                            },
-                            "Cancel"
-                        }
+                        SaveButton {  series_id: series_id.clone(), draft: draft.clone() }
+                        CancelButton { series_id: series_id.clone() }
                     }
                 } else {
                     // Series is empty — only deletion is allowed
@@ -140,25 +87,7 @@ pub fn SeriesEdit(series_id: String) -> Element {
 
                     div {
                         style: "display: flex; gap: 10px;",
-                        button {
-                            style: "{delete_style}",
-                            onclick: move |_| {
-                                let id = series_id.clone();
-                                let nav = navigator();
-                                if web_sys::window()
-                                    .and_then(|w| w.confirm_with_message("Delete this series? This cannot be undone.").ok())
-                                    .unwrap_or(false)
-                                {
-                                    spawn(async move {
-                                        if let Err(e) = infra::series::delete_series(&id).await {
-                                            error!("failed to delete series: {}", e);
-                                        }
-                                        nav.push(Route::Library {});
-                                    });
-                                }
-                            },
-                            "Delete"
-                        }
+                        DeleteButton { series_id: series_id.clone() }
                     }
                 }
             }
@@ -166,6 +95,87 @@ pub fn SeriesEdit(series_id: String) -> Element {
     }
 }
 
+
+#[component]
+fn SaveButton(series_id: String, draft: Signal<String>) -> Element {
+    rsx! {
+        button {
+            style: "
+                padding: 10px 24px;
+                background: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 1rem;
+                cursor: pointer;
+            ",
+            onclick: {
+                let series_id=series_id.clone();
+                move |_| {
+                let name = draft();
+                let id = series_id.clone();
+                let nav = navigator();
+                spawn(async move {
+                    if let Err(e) = infra::series::update_series_name(&id, &name).await {
+                        error!("failed to save series: {}", e);
+                    }
+                    nav.push(Route::Library {});
+                });
+            }
+            },
+            "Save"
+        }
+    }
+}
+
+#[component]
+fn CancelButton(series_id: String) -> Element {
+    rsx! {
+        button {
+            style: "
+                padding: 10px 24px;
+                background: transparent;
+                color: #6b7280;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 1rem;
+                cursor: pointer;
+            ",
+            onclick: {
+                let sid = series_id.clone();
+                move |_| {
+                    navigator().push(Route::Series { series_id: sid.clone() });
+                }
+            },
+            "Cancel"
+        }
+    }
+}
+
+#[component]
+fn DeleteButton(series_id: String) -> Element {
+    rsx! {
+        button {
+            style: "{DELETE_STYLE}",
+            onclick: move |_| {
+                let id = series_id.clone();
+                let nav = navigator();
+                if web_sys::window()
+                    .and_then(|w| w.confirm_with_message("Delete this series? This cannot be undone.").ok())
+                    .unwrap_or(false)
+                {
+                    spawn(async move {
+                        if let Err(e) = infra::series::delete_series(&id).await {
+                            error!("failed to delete series: {}", e);
+                        }
+                        nav.push(Route::Library {});
+                    });
+                }
+            },
+            "Delete"
+        }
+    }
+}
 
 const INPUT_STYLE: &str = "
     padding: 8px 12px;
@@ -177,6 +187,15 @@ const INPUT_STYLE: &str = "
     background: white;
     color: #111827;
 ";
+
+const DELETE_STYLE: &str = "
+    padding: 10px 24px;
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;";
 
 #[component]
 fn Field(label: String, child: Element) -> Element {
