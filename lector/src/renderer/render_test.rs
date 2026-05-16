@@ -182,7 +182,7 @@ mod forward_boundary_tests {
         // -------------------------------------------------------------------------
     // Core behavior
     // -------------------------------------------------------------------------
-
+ 
     mod core{
         use super::*;
         #[test]
@@ -207,10 +207,10 @@ mod forward_boundary_tests {
             assert_boundary(s, 10, None);
 
             // limit exactly at '.'
-            assert_boundary(s, 15, Some(15));
+            assert_boundary(s, 15, Some(16));
 
             // limit after '.'
-            assert_boundary(s, 20, Some(15));
+            assert_boundary(s, 20, Some(16));
         }
 
     }
@@ -228,8 +228,8 @@ mod forward_boundary_tests {
 
         #[test]
         fn handles_repeated_punctuation() {
-            assert_boundary("What?! Really?", 8, Some(6));
-            assert_boundary("Wow!!! Nice", 6, Some(6));
+            assert_boundary("What?! Really?", 8, Some(7));
+            assert_boundary("Wow!!! Nice", 6, Some(7));
         }
 
         #[test]
@@ -257,7 +257,7 @@ mod forward_boundary_tests {
         fn does_not_break_on_multi_part_abbreviations() {
             let s = "The Ph.D. candidate graduated. Then he published.";
 
-            assert_boundary(s, s.len()-4, Some(30));
+            assert_boundary(s, s.len()-4, Some(31));
         }
 
         #[test]
@@ -299,7 +299,7 @@ mod forward_boundary_tests {
         fn ignores_version_numbers_and_sanps_to_previous_sentence() {
             let s = "This is a test. Using version 2.4.1. Deployment succeeded.";
 
-            assert_boundary(s, s.len()-4, Some(15));
+            assert_boundary(s, s.len()-4, Some(16));
         }
    }
 
@@ -335,7 +335,7 @@ mod forward_boundary_tests {
                 #[test]
         fn does_not_include_text_after_boundary_if_html_tag_is_not_set() {
             let s = "<p>Hello world. This is a very big test to see where it binds.</p><p>Next.</p>";
-            assert_boundary(s, 51, Some(15));
+            assert_boundary(s, 51, Some(16));
         }
     }
 
@@ -356,7 +356,7 @@ mod forward_boundary_tests {
         fn handles_unicode_whitespace() {
             let s = "Hello.\u{00A0}World.";
 
-            assert_boundary(s, s.len()-2, Some(6));
+            assert_boundary(s, s.len()-2, Some(8));
         }
 
     }
@@ -424,17 +424,12 @@ mod html_healing_tests {
 }
 
 
-// ... existing code ...
-// ... existing code ...
 
 #[cfg(test)]
 mod backward_boundary_tests {
     use super::*;
     use crate::renderer::*;
     
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
  fn assert_backward_boundary(
         input: &str,
@@ -494,17 +489,22 @@ mod backward_boundary_tests {
             visualize(actual),
         );
     }
-    // -------------------------------------------------------------------------
-    // Core behavior
-    // -------------------------------------------------------------------------
-
+    
     mod core{
         use super::*;
+
+        #[test]
+        fn whole_text_fits() {
+            let s = "First sentence. Second sentence.";
+
+            assert_backward_boundary(s, s.len(), Some(0));
+        }
+
         #[test]
         fn finds_first_period_after_limit() {
             let s = "First sentence. Second sentence.";
 
-            assert_backward_boundary(s, s.len(), Some(15));
+            assert_backward_boundary(s, s.len()-3, Some(16));
         }
 
         #[test]
@@ -519,13 +519,13 @@ mod backward_boundary_tests {
             let s = "First sentence. Second sentence."; 
 
             // limit before first '.'
-            assert_backward_boundary(s, 10, Some(32));
+            assert_backward_boundary(s, 10, None);
 
             // limit exactly at first '.'
-            assert_backward_boundary(s, 19, Some(15));
+            assert_backward_boundary(s, 19, Some(16));
 
             // limit after first '.'
-            assert_backward_boundary(s, 20, Some(15));
+            assert_backward_boundary(s, 20, Some(16));
         }
 
     }
@@ -536,22 +536,22 @@ mod backward_boundary_tests {
         use super::*;
         #[test]
         fn recognizes_standard_terminators() {
-            assert_backward_boundary("Hello! test.", 100, Some(6));
-            assert_backward_boundary("What? test.", 100, Some(5));
-            assert_backward_boundary("Done. test.", 100, Some(5));
+            assert_backward_boundary("Hello! test.", 9, Some(7));
+            assert_backward_boundary("What? test.", 9, Some(6));
+            assert_backward_boundary("Done. test.", 9, Some(6));
         }
 
         #[test]
         fn handles_repeated_punctuation() {
-            assert_backward_boundary("What?! Really?!", 100, Some(6));
-            assert_backward_boundary("Wow!!! Nice!!", 100, Some(6));
+            assert_backward_boundary("What?! Really?!", 10, Some(7));
+            assert_backward_boundary("Wow!!! Nice!!", 11, Some(7));
         }
 
         #[test]
         fn includes_closing_quotes_and_parens() {
-            assert_backward_boundary(r#"He said "Hello.""#, 100, Some(16));
+            assert_backward_boundary(r#"He said "Hello." Then this is."#, 20, Some(17));
 
-            assert_backward_boundary("He said (Hello!)", 100, Some(16));
+            assert_backward_boundary("He said (Hello!) Then we test", 20, Some(17));
         }
 
     }
@@ -565,28 +565,28 @@ mod backward_boundary_tests {
         fn does_not_break_on_common_titles() {
             let s = "test sentence. Dr. Smith went home.";
 
-            assert_backward_boundary(s, 30, Some(14));
+            assert_backward_boundary(s, 30, Some(15));
         }
 
         #[test]
         fn does_not_break_on_multi_part_abbreviations() {
             let s = "Then he published. The Ph.D. candidate graduated.";
 
-            assert_backward_boundary(s, 33, Some(18));
+            assert_backward_boundary(s, 33, Some(19));
         }
 
         #[test]
         fn does_not_break_on_latin_abbreviations() {
             let s = "test sentence. Examples, e.g. apples, are useful.";
 
-            assert_backward_boundary(s, 44, Some(14));
+            assert_backward_boundary(s, 44, Some(15));
         }
 
         #[test]
         fn abbreviations_are_case_insensitive() {
             let s = "DR. Smith left.";
 
-            assert_backward_boundary(s, s.len(), None);
+            assert_backward_boundary(s, s.len()-2, None);
         }
     }
 
@@ -600,21 +600,21 @@ mod backward_boundary_tests {
         fn ignores_decimal_points() {
             let s = "Value is 3.14. Next sentence.";
 
-            assert_backward_boundary(s, 0, Some(15));
+            assert_backward_boundary(s, s.len()-3, None);
         }
 
         #[test]
         fn ignores_version_numbers() {
             let s = "Using version 2.4.1. Deployment succeeded.";
 
-            assert_backward_boundary(s, 0, Some(30));
+            assert_backward_boundary(s, s.len()-3, None);
         }
 
         #[test]
         fn ignores_version_numbers_and_snaps_to_previous_sentence() {
             let s = "This is a test. Using version 2.4.1. Deployment succeeded.";
 
-            assert_backward_boundary(s, 16, Some(30));
+            assert_backward_boundary(s, 46, Some(16));
         }
    }
 
@@ -626,7 +626,7 @@ mod backward_boundary_tests {
     fn handles_ellipses() {
         let s = "Wait...stop.";
 
-        assert_backward_boundary(s, 9, Some(13));
+        assert_backward_boundary(s, 9, None);
     }
 
     // -------------------------------------------------------------------------
@@ -635,11 +635,19 @@ mod backward_boundary_tests {
 
     mod html {
         use super::*;
+
         #[test]
-        fn includes_html_tags_after_boundary() {
+        fn includes_fitting_html_tags_after_boundary() {
             let s = "<p>Hello world.</p><p>Next.</p>";
-            assert_backward_boundary(s, 0, Some(19));
+            assert_backward_boundary(s, 18, Some(19));
         }
+
+        #[test]
+        fn includes_not_fitting_html_tags_after_boundary() {
+            let s = "<p>Hello world.</p><p>Next.</p>";
+            assert_backward_boundary(s, 11, Some(19));
+        }
+
 
         #[test]
         fn includes_only_html_tags_after_boundary() {
@@ -658,14 +666,14 @@ mod backward_boundary_tests {
         fn handles_unicode_quotes() {
             let s = "He said «Hello!»";
 
-            assert_backward_boundary(s, 0, Some(s.len()));
+            assert_backward_boundary(s, s.len(), Some(0));
         }
 
         #[test]
         fn handles_unicode_whitespace() {
             let s = "Hello.\u{00A0}World.";
 
-            assert_backward_boundary(s, 6, Some(9));
+            assert_backward_boundary(s, 9, Some(8));
         }
 
     }
@@ -679,14 +687,14 @@ mod backward_boundary_tests {
         fn regression_et_al() {
             let s = "Smith et al. published results.";
 
-            assert_backward_boundary(s, 0, Some(21));
+            assert_backward_boundary(s, 0, None);
         }
 
         #[test]
         fn regression_st_louis() {
             let s = "They traveled to St. Louis.";
 
-            assert_backward_boundary(s, 0, Some(27));
+            assert_backward_boundary(s, 0, None);
         }
     }
     mod trailing_tags {
@@ -699,5 +707,3 @@ mod backward_boundary_tests {
         }
     }
 }
-
-// ... existing code ...

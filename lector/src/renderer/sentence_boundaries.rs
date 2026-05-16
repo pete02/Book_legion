@@ -1,4 +1,4 @@
-use dioxus::html::li;
+use dioxus::html::{li, u::is};
 
 const ABBREVIATIONS: &[&str] = &[
     "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "vs", "etc", "eg", "ie",
@@ -18,91 +18,165 @@ const ABBREVIATIONS: &[&str] = &[
 
 
 pub fn find_last_sentence_boundary(text: &str, limit: usize) -> Option<usize> {
-    let limit = limit.min(text.len());
-        
-    for (i, c) in text[..limit].char_indices().rev() {
-        if c == '.' || c == '!' || c == '?' {
-            if is_abbreviation_boundary(text, i) {
-                continue;
-            }
-            if is_number_boundary(text, i) {
-                continue;
-            }
-            
-            let mut pos = i + c.len_utf8();
-            while pos < limit {
-                match text[pos..].chars().next() {
-                    Some('!' | '?' | '.') => {
-                        pos += text[pos..].chars().next().unwrap().len_utf8();
-                    }
-                    _ => break,
-                }
-            }
-            
-            pos = skip_tralings(text, pos, limit);
-            return Some(pos);
+    let limit = normalize_limit(text, limit);
+    
+    for i in (0..limit).rev() {
+        if is_valid_cut(text, i) {
+            let resolved_pos = resolve_boundary(text, i);
+            return Some(resolved_pos);
         }
     }
-    
+
     None
 }
 
-// ... existing code ...
-
+// Returns None, if the text does not contain a sentence boundary within the specified limit from the end.
 pub fn find_first_sentence_boundary(text: &str, limit_from_end: usize) -> Option<usize> {
-    // Convert limit from "from end" to "from start"
-    let limit = text.len()-limit_from_end.min(text.len());
-
-
-    for (i, c) in text[limit..].char_indices() {
-        let pos = limit + i;
-        
-        if c == '.' || c == '!' || c == '?' {
-            if is_abbreviation_boundary(text, pos) {
-                continue;
-            }
-            if is_number_boundary(text, pos) {
-                continue;
-            }
-            
-            // Found a valid sentence terminator
-            // Return the position right after the terminator
-            let mut start_pos = pos + c.len_utf8();
-            
-            // Skip any trailing punctuation (!, ?, .)
-            while start_pos < text.len() {
-                match text[start_pos..].chars().next() {
-                    Some('!' | '?' | '.') => {
-                        start_pos += text[start_pos..].chars().next().unwrap().len_utf8();
-                    }
-                    _ => break,
-                }
-            }
-            
-            start_pos = skip_trailing_closers(text, start_pos, text.len());
-        
-            // Skip trailing HTML tags
-            start_pos = skip_trailing_html(text, start_pos, text.len());
-            
-            
-            return Some(start_pos);
+    let limit = normalize_limit(text, text.len()-limit_from_end.min(text.len()));
+    if limit==0{
+        return Some(0)
+    }
+    for i in limit..text.len()-1 {
+        println!("checking position: {i}");
+        if is_valid_cut(text, i) {
+            let resolved_pos = resolve_boundary(text, i);
+            return Some(resolved_pos);
         }
     }
-    
+
     None
 }
 
+
+fn normalize_limit(text: &str, mut limit: usize) -> usize {
+    let len = text.len();
+    limit = limit.min(len);
+
+    // If inside HTML tag, move backward until safe
+    while is_inside_html_tag_boundary(text, limit) && limit > 0 {
+        limit -= 1;
+    }
+
+    limit
+}
+
+pub fn is_valid_cut(text: &str, pos: usize) -> bool {
+    is_between_html_blocks(text, pos) || is_valid_boundary(text, pos)
+}
+
+pub fn is_valid_boundary(text: &str, pos: usize) -> bool {
+    let terminators=['.', '!', '?'];
+
+    text.chars().nth(pos).is_some_and(|f|
+        terminators.contains(&f) 
+        && !is_inside_html(text, pos)
+        && !is_abbreviation_boundary(text, pos)
+        && !is_ellipsis(text, pos)
+        && !is_number_boundary(text, pos)
+    )
+}
+
+
+pub fn resolve_boundary(text: &str, mut pos: usize) -> usize {
+    let len = text.len();
+    if pos >= len {
+        return len;
+    }
+
+    // ONLY advance if we are NOT at a structural HTML boundary
+    if !is_between_html_blocks(text, pos) {
+        pos += text[pos..].chars().next().unwrap().len_utf8();
+    }
+
+    pos = collapse_punctuations(text, pos);
+    pos = collapse_closers(text, pos);
+    pos = collapse_whitespace(text, pos);
+    pos = collapse_html_closers(text, pos);
+
+    pos
+}
+
+
+fn collapse_punctuations(text: &str, mut pos: usize) -> usize {
+    loop {
+        let next = text[pos..].chars().next();
+        match next {
+            Some('!' | '?' | '.') => {
+                pos += next.unwrap().len_utf8();
+            }
+            _ => break,
+        }
+    }
+    pos
+}
+
+fn collapse_closers(text: &str, mut pos: usize) -> usize {
+    loop {
+        let next = text[pos..].chars().next();
+        match next {
+            Some('"' | '\'' | ')' | ']' | '»' | '』') => {
+                pos += next.unwrap().len_utf8();
+            }
+            _ => break,
+        }
+    }
+    pos
+}
+
+fn collapse_whitespace(text: &str, mut pos: usize) -> usize {
+    while let Some(c) = text[pos..].chars().next() {
+        if c.is_whitespace() {
+            pos += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    pos
+}
+
+fn collapse_html_closers(text: &str, mut pos: usize) -> usize {
+    loop {
+        if text[pos..].starts_with("</") {
+            if let Some(end) = text[pos..].find('>') {
+                pos += end + 1;
+                continue;
+            }
+        }
+        break;
+    }
+    pos
+}
+
+fn is_number_boundary(text: &str, pos: usize) -> bool {
+    is_decimal_separator(text, pos) || is_dotted_numeric_token_boundary(text, pos)
+}
+
+
+fn is_inside_html(text: &str, pos: usize) -> bool {
+    let last_open = text[..pos].rfind('<');
+    let last_close = text[..pos].rfind('>');
+
+    match (last_open, last_close) {
+        (Some(o), Some(c)) => o > c,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+fn is_ellipsis(text: &str, pos: usize) -> bool {
+    // Check for ... either starting at pos or with dots before it
+    let dots_after = text[pos..].chars().take_while(|&c| c == '.').count();
+    let dots_before = text[..pos].chars().rev().take_while(|&c| c == '.').count();
+    dots_before + dots_after >= 3
+}
 
 fn is_abbreviation_boundary(text: &str, pos: usize) -> bool {
     if pos == 0 {
         return false;
     }
-
     let before = &text[..pos];
     let after = &text[pos + 1..]; // skip the dot itself
 
-    // If the dot is followed by a single capital letter and another dot,
-    // we're mid-way through a multi-part abbreviation like Ph.D. or U.S.A.
     {
         let mut after_chars = after.chars();
         let c1 = after_chars.next();
@@ -127,53 +201,73 @@ fn is_abbreviation_boundary(text: &str, pos: usize) -> bool {
 }
 
 
-fn is_number_boundary(text: &str, pos: usize) -> bool {
-    if pos == 0 {
+
+
+
+fn is_decimal_separator(text: &str, pos: usize) -> bool {
+    let before = text[..pos].chars().next_back();
+    let after = text[pos + 1..].chars().next();
+
+    matches!(
+        (before, after),
+        (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit()
+    )
+}
+
+fn is_dotted_numeric_token_boundary(text: &str, pos: usize) -> bool {
+    let before = &text[..pos];
+
+    let prev = before.chars().next_back();
+
+    if !matches!(prev, Some(c) if c.is_ascii_digit()) {
         return false;
     }
-    
-    let before = &text[..pos];
-    let word_start = before.char_indices()
+
+    let token_start = find_token_start(before);
+    let token = &before[token_start..];
+
+    is_dotted_numeric_token(token)
+}
+
+fn find_token_start(before: &str) -> usize {
+    before
+        .char_indices()
         .rev()
-        .find(|(_, c)| c.is_whitespace() || *c == '.' || *c == '!' || *c == '?')
+        .find(|(_, c)| c.is_whitespace())
         .map(|(i, c)| i + c.len_utf8())
-        .unwrap_or(0);
-    
-    let word = &before[word_start..];
-    word.chars().all(|c| c.is_ascii_digit() || c == '.')
+        .unwrap_or(0)
 }
 
-fn skip_tralings(text: &str, pos: usize, limit: usize) -> usize {
-    let mut new_pos = pos;
-    new_pos = skip_trailing_closers(text, new_pos, limit);
-    new_pos = skip_trailing_html(text, new_pos, limit);
-    new_pos
+fn is_dotted_numeric_token(token: &str) -> bool {
+    token.contains('.')
+        && token.chars().all(|c| c.is_ascii_digit() || c == '.')
 }
 
-fn skip_trailing_closers(text: &str, pos: usize, limit: usize) -> usize {
-    let mut new_pos = pos;
-    while new_pos < limit {
-        match text[new_pos..].chars().next() {
-            Some('"' | '\'' | ')' | ']' | '»' | '』') => {
-                new_pos += text[new_pos..].chars().next().unwrap().len_utf8();
-            }
-            _ => break,
-        }
+pub fn is_inside_html_tag_boundary(text: &str, pos: usize) -> bool {
+    let before = &text[..pos];
+
+    let last_open = before.rfind('<');
+    let last_close = before.rfind('>');
+
+    match (last_open, last_close) {
+        (Some(o), Some(c)) => o > c,
+        (Some(_), None) => true,
+        _ => false,
     }
-    new_pos
 }
 
-fn skip_trailing_html(text: &str, mut pos: usize, limit: usize) -> usize {
-    while pos < limit {
-        if text[pos..].starts_with("</") {
-            // Find the closing >
-            if let Some(end) = text[pos..].find('>') {
-                pos += end + 1;
-                continue;
-            }
-        }
-        break;
+fn is_between_html_blocks(text: &str, pos: usize) -> bool {
+    if pos == 0 || pos >= text.len() {
+        return false;
     }
-    pos
-}
 
+    if !text.is_char_boundary(pos) {
+        return false;
+    }
+
+    let before = &text[..pos];
+    let after = &text[pos..];
+
+    before.trim_end().ends_with('>')
+        && after.trim_start().starts_with('<')
+}
