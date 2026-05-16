@@ -37,7 +37,6 @@ pub fn find_first_sentence_boundary(text: &str, limit_from_end: usize) -> Option
         return Some(0)
     }
     for i in limit..text.len()-1 {
-        println!("checking position: {i}");
         if is_valid_cut(text, i) {
             let resolved_pos = resolve_boundary(text, i);
             return Some(resolved_pos);
