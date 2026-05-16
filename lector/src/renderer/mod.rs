@@ -2,6 +2,8 @@
 pub mod render_test;
 
 pub mod sentence_boundaries;
+pub mod calculate_page_height;
+
 
 use regex::Regex;
 
@@ -144,3 +146,6 @@ fn consume_if_self_closing(chars: &mut std::iter::Peekable<std::str::CharIndices
 fn is_void_element(tag: &str) -> bool {
     VOID_ELEMENTS.contains(&tag.to_lowercase().as_str())
 }
+
+
+
