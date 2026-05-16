@@ -1,56 +1,63 @@
+use std::sync::Arc;
 
-use crate::renderer::sentence_boundaries::*;
-pub const PAGE_HEIGHT_FUDGE_FACTOR: f64 = 0.0;
+#[derive(Clone)]
+pub struct LayoutQuery{
+    pub text_len: u32,
+    pub top: f64,
+    pub bottom: f64,
+    pub char_start: u32,
+    pub children: Vec<LayoutQuery>,
+    pub get_char_bottom: Arc<dyn Fn(u32) -> f64 + Send + Sync>,
+}
 
-pub fn calculate_page_boundary(
-    html: &str,
-    start_offset: usize,
-    usable_height: f64,
-    mut measure: impl FnMut(&str) -> f64,
-) -> (usize, usize) {
-    let mut accumulated = String::new();
-    let mut pos = start_offset;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FitResult {
+    AllFit,
+    NoneFit,
+    LastFitting(u32),
+}
 
-    while pos < html.len() {
-        let token_end = next_token_end(html, pos);
-        accumulated.push_str(&html[pos..token_end]);
 
-        if measure(&accumulated) > usable_height {
-            // `pos` is the offset immediately before the token that overflowed
-            let region = &html[start_offset..pos];
-            let snapped = match find_last_sentence_boundary(region, region.len()) {
-                Some(rel) => start_offset + rel,
-                None => pos, // no sentence boundary found, cut at token edge
-            };
-            return (start_offset, include_trailing_end_tags(html, snapped));
+impl std::fmt::Debug for LayoutQuery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LayoutQuery")
+            .field("text_len", &self.text_len)
+            .field("top", &self.top)
+            .field("bottom", &self.bottom)
+            .field("char_start", &self.char_start)
+            .field("children", &self.children)
+            .finish()
+    }
+}
+
+
+
+// Returns AllFit, if the layout fits and there is space left. If the Layout does not fit at all, returns NoneFit
+//  If it partially fits, returns the index of the last fitting char.
+
+pub fn last_fitting_char(layout: &LayoutQuery, page_height: f64) -> FitResult {
+    if layout.top > page_height {return FitResult::NoneFit;}
+    if layout.bottom == page_height {return FitResult::LastFitting(layout.char_start + layout.text_len - 1);}
+    if layout.bottom < page_height {return FitResult::AllFit;}
+    if layout.children.is_empty() && layout.text_len == 0 {return FitResult::AllFit;} 
+    if page_height <= 0.0 {return FitResult::NoneFit;}
+
+    for child in &layout.children {
+        let child_fit = last_fitting_char(child, page_height);
+        if child_fit != FitResult::AllFit && child_fit != FitResult::NoneFit {
+            return child_fit;
         }
-
-        pos = token_end;
     }
 
-    (start_offset, html.len())
-}
-
-fn next_token_end(html: &str, pos: usize) -> usize {
-    if html.as_bytes().get(pos) == Some(&b'<') {
-        html[pos..].find('>').map(|i| pos + i + 1).unwrap_or(html.len())
-    } else {
-        html[pos..].find('<').map(|i| pos + i).unwrap_or(html.len())
-    }
-}
-
-fn include_trailing_end_tags(html: &str, mut pos: usize) -> usize {
-    loop {
-        let rest = html[pos..].trim_start();
-        let whitespace_len = html[pos..].len() - rest.len();
-        if rest.starts_with("</") {
-            match rest.find('>') {
-                Some(i) => pos += whitespace_len + i + 1,
-                None => break,
-            }
+    let mut best_bottom=FitResult::NoneFit;
+    for i in 0..layout.text_len {
+        let char_bottom = (layout.get_char_bottom)(i);
+        if char_bottom <= page_height {
+            best_bottom = FitResult::LastFitting(layout.char_start+i);
         } else {
             break;
         }
     }
-    pos
+
+   best_bottom
 }

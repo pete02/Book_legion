@@ -1,5 +1,6 @@
 
 pub mod render_test;
+pub mod page_boundary_test;
 
 pub mod sentence_boundaries;
 pub mod calculate_page_height;

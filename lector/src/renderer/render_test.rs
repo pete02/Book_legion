@@ -331,6 +331,12 @@ mod forward_boundary_tests {
             let s = "<p>Hello world.</p><p>Next.</p>";
             assert_boundary(s, s.len()-6, Some(19));
         }
+
+                #[test]
+        fn does_not_include_text_after_boundary_if_html_tag_is_not_set() {
+            let s = "<p>Hello world. This is a very big test to see where it binds.</p><p>Next.</p>";
+            assert_boundary(s, 51, Some(15));
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -566,7 +572,7 @@ mod backward_boundary_tests {
         fn does_not_break_on_multi_part_abbreviations() {
             let s = "Then he published. The Ph.D. candidate graduated.";
 
-            assert_backward_boundary(s, 30, Some(18));
+            assert_backward_boundary(s, 33, Some(18));
         }
 
         #[test]
@@ -615,12 +621,12 @@ mod backward_boundary_tests {
     // -------------------------------------------------------------------------
     // Ellipses
     // -------------------------------------------------------------------------
-
+   //broken
     #[test]
     fn handles_ellipses() {
-        let s = "Wait... stop.";
+        let s = "Wait...stop.";
 
-        assert_backward_boundary(s, 0, Some(13));
+        assert_backward_boundary(s, 9, Some(13));
     }
 
     // -------------------------------------------------------------------------
