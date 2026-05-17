@@ -5,16 +5,17 @@ mod last_fitting_char_tests_no_children {
     use crate::renderer::calculate_page_height::*;
     use std::sync::Arc;
 
-    fn create_mock(text_len: u32, char_bottoms: &[f64], children: Vec<LayoutQuery>) ->LayoutQuery {
+    fn create_mock(text_len: u32, char_bottoms: &[f64], children: Vec<LayoutQuery>) -> LayoutQuery {
         let char_bottoms = char_bottoms.to_vec(); // owned, no lifetime
 
         LayoutQuery {
-            text_len,
+            text: "x".repeat(text_len as usize),
             char_start: 0,
             top: 0.0,
             bottom: char_bottoms.last().cloned().unwrap_or(0.0),
             children,
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
+            get_char_top: Arc::new(move |_offset| 0.0),
         }
     }
 
@@ -238,9 +239,296 @@ mod last_fitting_char_tests_no_children {
         let layout = create_mock(1, &[2000.0], vec![]);
         assert_eq!(last_fitting_char(&layout, 800.0), FitResult::NoneFit);
     }
+
+    #[test]
+    fn last_fitting_sentence_boundary_cut_returns_boundary() {
+        let text = "Hello. Next sentence.";
+        let layout = LayoutQuery {
+            text: text.to_string(),
+            char_start: 0,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
+            get_char_top: Arc::new(move |_offset| 0.0),
+        };
+
+        let result = last_fitting_sentence_boundary_cut(&layout, 60.0);
+        assert_eq!(result, Some(7));
+    }
+
+    #[test]
+    fn last_fitting_sentence_boundary_cut_returns_text_end_when_all_fit() {
+        let text = "Hello. Next sentence.";
+        let layout = LayoutQuery {
+            text: text.to_string(),
+            char_start: 0,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
+            get_char_top: Arc::new(move |_offset| 0.0),
+        };
+
+        let result = last_fitting_sentence_boundary_cut(&layout, 1000.0);
+        assert_eq!(result, Some(text.len()));
+    }
+
+    #[test]
+    fn last_fitting_sentence_boundary_cut_uses_child_leaf_global_index() {
+        let child_text = "Hello. Next sentence.";
+        let child = LayoutQuery {
+            text: child_text.to_string(),
+            char_start: 10,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
+            get_char_top: Arc::new(move |_offset| 0.0),
+        };
+
+        let layout = LayoutQuery {
+            text: String::new(),
+            char_start: 0,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![child],
+            get_char_bottom: Arc::new(move |_offset| 0.0),
+            get_char_top: Arc::new(move |_offset| 0.0),
+        };
+
+        let result = last_fitting_sentence_boundary_cut(&layout, 60.0);
+        assert_eq!(result, Some(17));
+    }
 }
 
 // ... existing code ...
+#[cfg(test)]
+mod first_fitting_char_tests_no_children {
+    use super::*;
+    use crate::renderer::calculate_page_height::*;
+    use std::sync::Arc;
+
+    fn create_mock(
+        text_len: u32,
+        char_tops: &[f64],
+        char_bottoms: &[f64],
+        top: f64,
+        children: Vec<LayoutQuery>,
+    ) -> LayoutQuery {
+        let char_tops = char_tops.to_vec();
+        let char_bottoms = char_bottoms.to_vec();
+
+        LayoutQuery {
+            text: "x".repeat(text_len as usize),
+            char_start: 0,
+            top,
+            bottom: char_bottoms.last().cloned().unwrap_or(top),
+            children,
+            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
+            get_char_top: Arc::new(move |offset| char_tops[offset as usize]),
+        }
+    }
+
+    #[test]
+    fn handles_empty_text_and_children() {
+        let layout = create_mock(0, &[], &[], 0.0, vec![]);
+        let result = first_fitting_char(&layout, 100.0);
+        assert_eq!(result, FitResult::NoneFit);
+    }
+
+    #[test]
+    fn returns_none_when_layout_above_page_top() {
+        let layout = create_mock(
+            5,
+            &[0.0, 10.0, 20.0, 30.0, 40.0],
+            &[10.0, 20.0, 30.0, 40.0, 50.0],
+            0.0,
+            vec![],
+        );
+
+        let result = first_fitting_char(&layout, 100.0);
+        assert_eq!(result, FitResult::NoneFit);
+    }
+
+    #[test]
+    fn first_fitting_sentence_boundary_cut_returns_boundary() {
+        let text = "Hello. Next sentence.";
+        let layout = LayoutQuery {
+            text: text.to_string(),
+            char_start: 0,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |_offset| 0.0),
+            get_char_top: Arc::new(move |offset| (offset as f64) * 10.0),
+        };
+
+        let result = first_fitting_sentence_boundary_cut(&layout, 45.0);
+        assert_eq!(result, Some(7));
+    }
+
+    #[test]
+    fn first_fitting_sentence_boundary_cut_returns_zero_when_all_fit() {
+        let text = "Hello. Next sentence.";
+        let layout = LayoutQuery {
+            text: text.to_string(),
+            char_start: 0,
+            top: 100.0,
+            bottom: 200.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |_offset| 0.0),
+            get_char_top: Arc::new(move |_offset| 200.0),
+        };
+
+        let result = first_fitting_sentence_boundary_cut(&layout, 50.0);
+        assert_eq!(result, Some(0));
+    }
+
+    #[test]
+    fn first_fitting_sentence_boundary_cut_uses_child_leaf_global_index() {
+        let child_text = "Hello. Next sentence.";
+        let child = LayoutQuery {
+            text: child_text.to_string(),
+            char_start: 10,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![],
+            get_char_bottom: Arc::new(move |_offset| 0.0),
+            get_char_top: Arc::new(move |offset| (offset as f64) * 10.0),
+        };
+
+        let layout = LayoutQuery {
+            text: String::new(),
+            char_start: 0,
+            top: 0.0,
+            bottom: 100.0,
+            children: vec![child],
+            get_char_bottom: Arc::new(move |_offset| 0.0),
+            get_char_top: Arc::new(move |_offset| 0.0),
+        };
+
+        let result = first_fitting_sentence_boundary_cut(&layout, 45.0);
+        assert_eq!(result, Some(17));
+    }
+
+    #[test]
+    fn finds_first_fitting_char() {
+        let layout = create_mock(
+            5,
+            &[0.0, 10.0, 20.0, 30.0, 40.0],
+            &[10.0, 20.0, 30.0, 40.0, 50.0],
+            0.0,
+            vec![],
+        );
+
+        let result = first_fitting_char(&layout, 25.0);
+        assert_eq!(result, FitResult::LastFitting(3));
+    }
+
+    #[test]
+    fn char_exactly_on_boundary_fits() {
+        let layout = create_mock(
+            3,
+            &[0.0, 10.0, 20.0],
+            &[10.0, 20.0, 30.0],
+            0.0,
+            vec![],
+        );
+
+        let result = first_fitting_char(&layout, 10.0);
+        assert_eq!(result, FitResult::LastFitting(1));
+    }
+
+    #[test]
+    fn layout_below_page_top_returns_all_fit() {
+        let layout = create_mock(
+            2,
+            &[20.0, 30.0],
+            &[30.0, 40.0],
+            20.0,
+            vec![],
+        );
+
+        let result = first_fitting_char(&layout, 10.0);
+        assert_eq!(result, FitResult::AllFit);
+    }
+
+    #[test]
+    fn page_top_at_max_returns_none_fit() {
+        let layout = create_mock(
+            2,
+            &[0.0, 10.0],
+            &[10.0, 20.0],
+            0.0,
+            vec![],
+        );
+
+        let result = first_fitting_char(&layout, f64::MAX);
+        assert_eq!(result, FitResult::NoneFit);
+    }
+}
+
+#[cfg(test)]
+mod first_fitting_char_tests_with_children {
+    use super::*;
+    use crate::renderer::calculate_page_height::*;
+    use std::sync::Arc;
+
+    fn create_text_leaf(
+        text_len: u32,
+        char_tops: &[f64],
+        char_bottoms: &[f64],
+        char_start: u32,
+        top: f64,
+    ) -> LayoutQuery {
+        let char_tops = char_tops.to_vec();
+        let char_bottoms = char_bottoms.to_vec();
+
+        LayoutQuery {
+            text: "x".repeat(text_len as usize),
+            char_start,
+            top,
+            bottom: char_bottoms.last().cloned().unwrap_or(top),
+            children: vec![],
+            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
+            get_char_top: Arc::new(move |offset| char_tops[offset as usize]),
+        }
+    }
+
+    fn create_container(children: Vec<LayoutQuery>) -> LayoutQuery {
+        let max_child_bottom = children
+            .iter()
+            .map(|c| c.bottom)
+            .fold(0.0, f64::max);
+        let min_child_top = children
+            .iter()
+            .map(|c| c.top)
+            .fold(f64::MAX, f64::min);
+
+        LayoutQuery {
+            text: String::new(),
+            char_start: 0,
+            top: if min_child_top.is_finite() { min_child_top } else { 0.0 },
+            bottom: max_child_bottom,
+            children,
+            get_char_bottom: Arc::new(|_| panic!("Container node must not access char_bottoms")),
+            get_char_top: Arc::new(|_| panic!("Container node must not access char_tops")),
+        }
+    }
+
+    #[test]
+    fn last_child_is_scanned_first() {
+        let child1 = create_text_leaf(2, &[0.0, 10.0], &[10.0, 20.0], 0, 0.0);
+        let child2 = create_text_leaf(2, &[30.0, 40.0], &[40.0, 50.0], 2, 30.0);
+
+        let parent = create_container(vec![child1, child2]);
+        let result = first_fitting_char(&parent, 30.0);
+
+        assert_eq!(result, FitResult::LastFitting(2));
+    }
+}
+
 #[cfg(test)]
 mod last_fitting_char_tests_with_children {
     use std::sync::Arc;
@@ -256,12 +544,13 @@ mod last_fitting_char_tests_with_children {
         let char_bottoms = char_bottoms.to_vec();
 
         LayoutQuery {
-            text_len,
+            text: "x".repeat(text_len as usize),
             char_start,
             top: 0.0,
             bottom: char_bottoms.last().cloned().unwrap_or(0.0),
             children: vec![],
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
+            get_char_top: Arc::new(move |_offset| 0.0),
         }
     }
 
@@ -275,13 +564,16 @@ mod last_fitting_char_tests_with_children {
             .fold(0.0, f64::max);
 
         LayoutQuery {
-            text_len: 0,
+            text: String::new(),
             char_start: 0,
             top: 0.0,
             bottom: max_child_bottom,
             children,
             get_char_bottom: Arc::new(|_| {
                 panic!("Container node must not access char_bottoms")
+            }),
+            get_char_top: Arc::new(|_| {
+                panic!("Container node must not access char_tops")
             }),
         }
     }
@@ -367,7 +659,7 @@ mod last_fitting_char_tests_with_children {
         let child = create_text_leaf(2, &[10.0, 20.0], 0);
         let container = create_container(vec![child]);
 
-        assert_eq!(container.text_len, 0);
+        assert!(container.text.is_empty());
     }
 
     #[test]
