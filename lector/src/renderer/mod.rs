@@ -1,7 +1,7 @@
 pub mod tests;
 pub mod sentence_boundaries;
 pub mod calculate_page_height;
-
+pub mod layout_builder;
 
 
 use regex::Regex;

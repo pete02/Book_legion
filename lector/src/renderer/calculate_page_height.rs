@@ -13,6 +13,17 @@ pub struct LayoutQuery{
 
 }
 impl LayoutQuery {
+    pub fn default() -> Self {
+        Self {
+            text: String::new(),
+            top: 0.0,
+            bottom: 0.0,
+            char_start: 0,
+            children: Vec::new(),
+            get_char_bottom: Arc::new(|_| 0.0),
+            get_char_top: Arc::new(|_| 0.0),
+        }
+    }
     pub fn text_len(&self) -> u32 {
         self.text.chars().count() as u32
     }
