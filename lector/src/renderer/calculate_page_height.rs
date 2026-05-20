@@ -8,10 +8,14 @@ pub struct LayoutQuery{
     pub bottom: f64,
     pub char_start: u32,
     pub children: Vec<LayoutQuery>,
-    pub get_char_bottom: Arc<dyn Fn(u32) -> f64 + Send + Sync>,
-    pub get_char_top: Arc<dyn Fn(u32) -> f64 + Send + Sync>,
+    pub get_char_bottom: Arc<dyn Fn(u32) -> f64>,  // drop Send + Sync
+    pub get_char_top: Arc<dyn Fn(u32) -> f64>,  
 
 }
+
+
+
+
 impl LayoutQuery {
     pub fn default() -> Self {
         Self {
@@ -25,7 +29,11 @@ impl LayoutQuery {
         }
     }
     pub fn text_len(&self) -> u32 {
-        self.text.chars().count() as u32
+        if self.children.is_empty() {
+            self.text.chars().count() as u32
+        } else {
+            self.children.iter().map(|c| c.text_len()).sum()
+        }
     }
 
     pub fn find_leaf_text_for_char_index(&self, global_index: u32) -> Option<(&str, u32)> {
