@@ -86,7 +86,7 @@ fn last_child_bottom_relative(viewport: &HtmlElement) -> f64 {
 //   • Cutting at a sensible boundary when content overflows
 //   • Leaving the viewport unchanged when no cut point exists
 //
-use crate::renderer::calculate_page_height::load_chapter; // <-- change to your actual path, e.g. `super::load_chapter`
+use crate::renderer::{self, calculate_page_height::load_chapter}; // <-- change to your actual path, e.g. `super::load_chapter`
 
 // ---------------------------------------------------------------------------
 // Test 1 – Chapter fits entirely: no cut should occur
@@ -262,6 +262,42 @@ async fn test_problem_chapter_does_not_panic() {
 
     let viewport = make_viewport(800, 600);
     let result = load_chapter(&viewport, &html, 0);
+
+    // It must not panic, and must return either Some(_) or None — both are valid.
+    // The key assertion is just that we got here without unwinding.
+    assert!(result.is_some());
+
+    console::log_1(&JsValue::from_str(&format!("Result: {:?}, whole text length: {}", result, html.len())));
+
+
+    match result {
+        Some(n) => assert!(n <= html.len(), "cut position out of bounds: {n} > {}", html.len()),
+        None    => { /* no cut point found — valid for this chapter */ }
+    }
+
+    cleanup(&viewport);
+}
+
+
+#[wasm_bindgen_test]
+async fn test_problem_chapter_at_middle_does_not_panic() {
+    // Fetch the problem HTML file — path is relative to where wasm-pack serves files,
+    // typically the crate root or a configured asset directory.
+    let response = wasm_bindgen_futures::JsFuture::from(
+        web_sys::window().unwrap().fetch_with_str("/assets/problem.html")
+    ).await.unwrap();
+
+    let response: web_sys::Response = response.dyn_into().unwrap();
+    let text = wasm_bindgen_futures::JsFuture::from(response.text().unwrap())
+        .await
+        .unwrap();
+
+    let html = text.as_string().unwrap();
+
+    let split=renderer::calculate_page_height::split_html_at(&html, 3319);
+
+    let viewport = make_viewport(800, 600);
+    let result = load_chapter(&viewport, &split, 0);
 
     // It must not panic, and must return either Some(_) or None — both are valid.
     // The key assertion is just that we got here without unwinding.

@@ -240,7 +240,28 @@ pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Opti
     return None
 }
 
+pub fn split_html_at(html: &str, byte_index: usize) -> &str {
+    let safe_index = html
+        .char_indices()
+        .map(|(i, _)| i)
+        .filter(|&i| i >= byte_index)
+        .next()
+        .unwrap_or(html.len());
 
+    &html[safe_index..]
+}
+
+
+pub fn split_html_at_end(html: &str, byte_index: usize) -> &str {
+    let safe_index = html
+        .char_indices()
+        .map(|(i, _)| i)
+        .filter(|&i| i >= byte_index)
+        .next()
+        .unwrap_or(html.len());
+
+    &html[..safe_index]
+}
 #[cfg(target_arch = "wasm32")]
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
