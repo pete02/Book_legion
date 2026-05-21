@@ -1,5 +1,8 @@
-use std::sync::Arc;
-use crate::renderer::sentence_boundaries;
+use std::{fmt::format, sync::Arc};
+use dioxus::logger::tracing;
+use web_sys::HtmlElement;
+
+use crate::renderer::{self, sentence_boundaries};
 
 #[derive(Clone)]
 pub struct LayoutQuery{
@@ -28,12 +31,27 @@ impl LayoutQuery {
             get_char_top: Arc::new(|_| 0.0),
         }
     }
+    pub fn bottom(&self) -> f64 {
+        self.children
+            .iter()
+            .map(|c| c.bottom())
+            .fold(self.bottom, f64::max)
+    }
+
     pub fn text_len(&self) -> u32 {
         if self.children.is_empty() {
-            self.text.chars().count() as u32
+            self.text.len() as u32
         } else {
             self.children.iter().map(|c| c.text_len()).sum()
         }
+    }
+
+    pub fn print_text(&self)->String{
+        let mut t=self.text.clone();
+        for child in &self.children{
+            t=format!("{}; child: {}",t, child.print_text());
+        }
+        t
     }
 
     pub fn find_leaf_text_for_char_index(&self, global_index: u32) -> Option<(&str, u32)> {
@@ -85,35 +103,57 @@ impl std::fmt::Debug for LayoutQuery {
 //  If it partially fits, returns the index of the last fitting char.
 
 pub fn last_fitting_char(layout: &LayoutQuery, page_height: f64) -> FitResult {
+    
+    console(&format!("last fitting char, has children: {:?}", layout.children.len()));
+    console(&format!("layout {:?}; page height: {:?}", layout, page_height));
+    console(&format!("layout text: {}", layout.print_text()));
+
     if layout.top > page_height {return FitResult::NoneFit;}
-    if layout.bottom == page_height {return FitResult::LastFitting(layout.char_start + layout.text_len() - 1);}
-    if layout.bottom < page_height {return FitResult::AllFit;}
+    if layout.bottom() == page_height {return FitResult::LastFitting(layout.char_start + layout.text_len() - 1);}
+    if layout.bottom() < page_height {return FitResult::AllFit;}
+    console("layout height ok");
     if layout.children.is_empty() && layout.text_len() == 0 {return FitResult::AllFit;} 
     if page_height <= 0.0 {return FitResult::NoneFit;}
-
+    console("pre-checks cleared");
+    let mut best_child_fit=FitResult::NoneFit;
     for child in &layout.children {
+        console("going for child");
         let child_fit = last_fitting_char(child, page_height);
-        if child_fit != FitResult::AllFit && child_fit != FitResult::NoneFit {
-            return child_fit;
+        console(&format!("returned: {:?}", child_fit));
+        match child_fit{
+            FitResult::AllFit=> best_child_fit = FitResult::LastFitting(child.char_start+child.text_len()),
+            FitResult::NoneFit=> return best_child_fit,
+            FitResult::LastFitting(_)=> {
+                best_child_fit = child_fit
+            },
         }
+    }
+
+    if layout.children.len() > 0{
+        return best_child_fit;
     }
 
     let mut best_bottom=FitResult::NoneFit;
-    for i in 0..layout.text_len() {
-        let char_bottom = (layout.get_char_bottom)(i);
-        if char_bottom <= page_height {
-            best_bottom = FitResult::LastFitting(layout.char_start+i);
-        } else {
-            break;
+    if layout.children.len() == 0{
+        for i in 0..layout.text_len() {
+            let char_bottom = (layout.get_char_bottom)(i);
+            console(&format!("checking: {}, got bottom: {}", i, char_bottom));
+            if char_bottom <= page_height {
+                best_bottom = FitResult::LastFitting(layout.char_start+i);
+            } else {
+                break;
+            }
         }
     }
+
+    console(&format!("Last fitting: {:?}, will return {:?}", layout, best_bottom));
 
    best_bottom
 }
 
 
 pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
-    if layout.bottom < page_top { return FitResult::NoneFit; }
+    if layout.bottom() < page_top { return FitResult::NoneFit; }
     if layout.top == page_top   { return FitResult::LastFitting(layout.char_start); }
     if layout.top > page_top    { return FitResult::AllFit; }
     if layout.children.is_empty() && layout.text_len() == 0 { return FitResult::AllFit; }
@@ -141,20 +181,22 @@ pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     best_top
 }
 
-pub fn last_fitting_sentence_boundary_cut(layout: &LayoutQuery, page_height: f64) -> Option<usize> {
+pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page_height: f64) -> Option<usize> {
     match last_fitting_char(layout, page_height) {
         FitResult::AllFit => Some(layout.subtree_end_char() as usize),
         FitResult::NoneFit => None,
         FitResult::LastFitting(last_char_index) => {
-            let (text, local_char_index) = layout
-                .find_leaf_text_for_char_index(last_char_index)?;
-            let limit_byte = text
-                .char_indices()
-                .nth(local_char_index as usize)
-                .map(|(byte_index, ch)| byte_index + ch.len_utf8())
-                .unwrap_or(text.len());
-            sentence_boundaries::find_last_sentence_boundary(text, limit_byte)
-                .map(|boundary_byte| text[..boundary_byte].chars().count() as usize + (last_char_index - local_char_index) as usize)
+            console(&format!("only some fit: {}",last_char_index));
+            console(&format!("whole text: {}, len: {}",htlm,htlm.len()));
+            let text = if htlm.is_empty() || last_char_index as usize > htlm.len() {
+                &htlm[..]
+            } else {
+                &htlm[..last_char_index as usize]
+            };
+
+
+            console(&format!("got: {}",text));
+            sentence_boundaries::find_last_sentence_boundary(htlm, last_char_index as usize)
         }
     }
 }
@@ -176,4 +218,36 @@ pub fn first_fitting_sentence_boundary_cut(layout: &LayoutQuery, page_top: f64) 
                 .map(|boundary_byte| text[..boundary_byte].chars().count() as usize + (first_char_index - local_char_index) as usize)
         }
     }
+}
+
+
+
+pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Option<usize>{
+    let html=renderer::heal_html(&htlm);
+    viewport.set_inner_html(&html);
+    let rect=viewport.get_bounding_client_rect().height();
+    console(&format!("rect height: {}", rect));
+    let layout=renderer::layout_builder::build_layout(viewport, char_start as u32);
+    let res=last_fitting_sentence_boundary_cut(&html,&layout, rect);
+    if let Some(a)=res{
+        console(&format!("last fitting char: {}", a));
+        let fit=&htlm[..a as usize];
+        let fixed=renderer::heal_html(fit);
+        viewport.set_inner_html(&fixed);
+        return Some(a)
+    }
+    console("cutter returned None");
+    return None
+}
+
+
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+fn console(text: &str){
+    #[cfg(target_arch = "wasm32")]
+    //console::log_1(&JsValue::from_str(text));
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", text);
 }

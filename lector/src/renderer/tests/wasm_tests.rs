@@ -331,7 +331,7 @@ fn build_layout_single_child_element() {
     let layout = build_layout(&parent, 0);
     
     assert_eq!(layout.children.len(), 1);
-    assert_eq!(layout.children[0].text, "<span>Single child</span>");
+    assert_eq!(layout.children[0].text, "<span style=\"font-size: 20px;\">Single child</span>");
     
     document.body().unwrap().remove_child(&parent).unwrap();
 }
@@ -643,4 +643,151 @@ mod tests {
             assert!(top > 0.0, "char 100 should map to a real y position");
         });
     }
+
+    #[wasm_bindgen_test]
+    fn build_layout_problem_html_structure() {
+        let document = window().unwrap().document().unwrap();
+        
+        // Create a container and inject the problem.html content
+        let container_el = document.create_element("div").unwrap();
+        let container: &HtmlElement = container_el.dyn_ref().unwrap();
+        container.style().set_property("font-size", "16px").unwrap();
+        
+        // HTML content from problem.html (truncated for test)
+        let html_content = r#"
+            <div id="toc3_CHAPTER_ONE_Hugh_of_Emblin" class="class54">CHAPTER ONE</div>
+            <div class="class56">Hugh of Emblin</div>
+            <div class="class58">Hugh of Emblin wasn't good at much, but he was very, very good at hiding. Which was good, because he really needed to be.</div>
+            <div class="class60">"Where are you hiding, sheepherder? The longer it takes us to find you, the worse it will be for you!"</div>
+            <div class="class60">Hugh slid farther back into the space behind the bookshelf. Rhodes and his friends might have chosen him as their favorite victim, but their attention span usually wasn't too long. If he stayed hidden long enough, they'd eventually get bored and find something else to amuse themselves.</div>
+            <div class="class95">Hugh, thankfully enough, didn't run into Rhodes and his lackeys on the way to his next class.</div>
+        "#;
+        
+        container.set_inner_html(html_content);
+        document.body().unwrap().append_child(&container_el).unwrap();
+        
+        let layout = build_layout(&container, 0);
+        
+        // Verify structure
+        assert_eq!(layout.children.len(), 6, "Should have 6 child div elements");
+        
+        // First child: CHAPTER ONE header
+        assert!(layout.children[0].text.contains("CHAPTER ONE"));
+        
+        // Second child: Title
+        assert!(layout.children[1].text.contains("Hugh of Emblin"));
+        
+        // Third child: Opening paragraph
+        assert!(layout.children[2].text.contains("wasn't good at much"));
+        
+        // Fourth child: Dialogue
+        assert!(layout.children[3].text.contains("sheepherder"));
+        
+        // Fifth child: Section break   
+        assert!(layout.children[4].text.contains("slid farther back"));
+
+        // Sixth child: Section break
+        assert!(layout.children[5].text.contains("thankfully enough"));
+        
+        document.body().unwrap().remove_child(&container_el).unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    fn build_layout_problem_html_text_extraction() {
+        let document = window().unwrap().document().unwrap();
+        
+        let container_el = document.create_element("div").unwrap();
+        let container: &HtmlElement = container_el.dyn_ref().unwrap();
+        container.style().set_property("font-size", "16px").unwrap();
+        
+        let html_content = r#"
+            <div class="class60">Hugh slid farther back into the space behind the bookshelf.</div>
+            <div class="class60">Rhodes and his friends might have chosen him as their favorite victim.</div>
+        "#;
+        
+        container.set_inner_html(html_content);
+        document.body().unwrap().append_child(&container_el).unwrap();
+        
+        let layout = build_layout(&container, 0);
+        
+        // Verify all text content is extracted
+        let total_text_len: u32 = layout.children.iter()
+            .map(|c| c.text_len())
+            .sum();
+        
+        assert!(total_text_len > 100, "Should have significant text content");
+        
+        // Verify char_start offsets are correct across siblings
+        assert_eq!(layout.children[0].char_start, 0);
+        assert!(layout.children[1].char_start > layout.children[0].char_start);
+        
+        document.body().unwrap().remove_child(&container_el).unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    fn build_layout_problem_html_nested_structure() {
+        let document = window().unwrap().document().unwrap();
+        
+        let container_el = document.create_element("div").unwrap();
+        let container: &HtmlElement = container_el.dyn_ref().unwrap();
+        container.style().set_property("font-size", "16px").unwrap();
+        
+        // Test nested dialogue with potential inline elements
+        let html_content = r#"
+            <div class="class60">
+                "Where are you hiding, sheepherder?" a voice asked.
+                <span class="class60">Hugh took a deep breath and looked up.</span>
+            </div>
+        "#;
+        
+        container.set_inner_html(html_content);
+        document.body().unwrap().append_child(&container_el).unwrap();
+        
+        let layout = build_layout(&container, 0);
+        
+        // Should have nested structure
+        assert_eq!(layout.children.len(), 1);
+        assert!(layout.children[0].children.len() >= 1);
+        
+        // Verify nested element is captured
+        let has_span = layout.children[0].children.iter()
+            .any(|c| c.text.contains("span"));
+        assert!(has_span, "Should have nested span element");
+        
+        document.body().unwrap().remove_child(&container_el).unwrap();
+    }
+
+    #[wasm_bindgen_test]
+    fn build_layout_problem_html_char_coordinates() {
+        let document = window().unwrap().document().unwrap();
+        
+        let container_el = document.create_element("div").unwrap();
+        let container: &HtmlElement = container_el.dyn_ref().unwrap();
+        container.style().set_property("font-size", "16px").unwrap();
+        container.style().set_property("line-height", "20px").unwrap();
+        
+        let html_content = r#"
+            <div class="class60">Hello World</div>
+        "#;
+        
+        container.set_inner_html(html_content);
+        document.body().unwrap().append_child(&container_el).unwrap();
+        
+        let layout = build_layout(&container, 0);
+        
+        // Verify char coordinates are queryable
+        let top_h = (layout.get_char_top)(0);
+        let top_o = (layout.get_char_top)(1);
+        
+        // Same line should have same top
+        assert_eq!(top_h, top_o, "Characters on same line should have same top");
+        
+        // Top should be > 0 (not defaulting to 0)
+        assert!(top_h > 0.0, "Character coordinates should be populated");
+        
+        document.body().unwrap().remove_child(&container_el).unwrap();
+    }
 }
+
+
+

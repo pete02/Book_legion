@@ -28,6 +28,7 @@ wasm-bindgen-futures = "0.4.55"
 web-sys = {version="0.3.85", features=["Url", "Blob", "BlobPropertyBag", "HtmlAudioElement", "Storage","Document",
     "Element",
     "HtmlElement",
+    "HtmlCollection",
     "CssStyleDeclaration",
     "Node",
     "Text",
@@ -43,3 +44,7 @@ web = ["dioxus/web"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
 mock = []
+
+
+[package.metadata.wasm-pack.test]
+static-files = ["assets/problem.html"]

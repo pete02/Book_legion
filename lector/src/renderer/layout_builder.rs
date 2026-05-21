@@ -169,11 +169,5 @@ fn char_bottom(node: &Node, local_offset: u32) -> f64 {
 // ── Misc helpers ─────────────────────────────────────────────────────────────
 
 fn generate_element_html(element: &Element) -> String {
-    let tag  = element.tag_name().to_lowercase();
-    let text = element.text_content().unwrap_or_default();
-    if text.is_empty() {
-        format!("<{tag}></{tag}>")
-    } else {
-        format!("<{tag}>{text}</{tag}>")
-    }
+    element.outer_html()
 }

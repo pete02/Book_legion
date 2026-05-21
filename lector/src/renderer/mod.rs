@@ -81,7 +81,6 @@ fn handle_opening_tag(
 
     emit_open_tag(output, &tag_name, is_self_closing, source, tag_start, raw_end);
 }
-
 fn emit_open_tag(
     output: &mut String,
     tag_name: &str,
@@ -90,16 +89,20 @@ fn emit_open_tag(
     raw_start: usize,
     raw_end: usize,
 ) {
-    if is_void_element(tag_name) {
-        output.push_str(&source[raw_start..=raw_end]);
-    } else if is_self_closing {
-        output.push('<');
-        output.push_str(tag_name);
-        output.push_str("/>");
-    } else {
-        output.push('<');
-        output.push_str(tag_name);
+    if is_self_closing {
+        // Self-closing: reconstruct without the slash since we normalise to
+        // paired tags, but preserve attributes from the source slice.
+        // source[raw_start..=raw_end] looks like `<foo attr="x"/>`
+        // Emit as `<foo attr="x">` (drop the slash before `>`).
+        let inner = source[raw_start..=raw_end]
+            .trim_end_matches('>')
+            .trim_end_matches('/')
+            .trim_end();
+        output.push_str(inner);
         output.push('>');
+    } else {
+        // Void or normal: emit the raw tag as-is — attributes included.
+        output.push_str(&source[raw_start..=raw_end]);
     }
 }
 

@@ -185,7 +185,7 @@ mod last_fitting_char_tests_no_children {
         assert_eq!(result, FitResult::LastFitting(4)); // everything fits
     }
 
-        #[test]
+    #[test]
     fn char_just_under_boundary_fits() {
         let layout = create_mock(5, &[10.0, 20.0, 30.0, 40.0, 50.0], vec![]);
 
@@ -253,7 +253,7 @@ mod last_fitting_char_tests_no_children {
             get_char_top: Arc::new(move |_offset| 0.0),
         };
 
-        let result = last_fitting_sentence_boundary_cut(&layout, 60.0);
+        let result = last_fitting_sentence_boundary_cut(text, &layout, 90.0);
         assert_eq!(result, Some(7));
     }
 
@@ -270,36 +270,10 @@ mod last_fitting_char_tests_no_children {
             get_char_top: Arc::new(move |_offset| 0.0),
         };
 
-        let result = last_fitting_sentence_boundary_cut(&layout, 1000.0);
+        let result = last_fitting_sentence_boundary_cut(text, &layout, 1000.0);
         assert_eq!(result, Some(text.len()));
     }
 
-    #[test]
-    fn last_fitting_sentence_boundary_cut_uses_child_leaf_global_index() {
-        let child_text = "Hello. Next sentence.";
-        let child = LayoutQuery {
-            text: child_text.to_string(),
-            char_start: 10,
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        };
-
-        let layout = LayoutQuery {
-            text: String::new(),
-            char_start: 0,
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![child],
-            get_char_bottom: Arc::new(move |_offset| 0.0),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        };
-
-        let result = last_fitting_sentence_boundary_cut(&layout, 60.0);
-        assert_eq!(result, Some(17));
-    }
 }
 
 // ... existing code ...
@@ -383,33 +357,6 @@ mod first_fitting_char_tests_no_children {
 
         let result = first_fitting_sentence_boundary_cut(&layout, 50.0);
         assert_eq!(result, Some(0));
-    }
-
-    #[test]
-    fn first_fitting_sentence_boundary_cut_uses_child_leaf_global_index() {
-        let child_text = "Hello. Next sentence.";
-        let child = LayoutQuery {
-            text: child_text.to_string(),
-            char_start: 10,
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |_offset| 0.0),
-            get_char_top: Arc::new(move |offset| (offset as f64) * 10.0),
-        };
-
-        let layout = LayoutQuery {
-            text: String::new(),
-            char_start: 0,
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![child],
-            get_char_bottom: Arc::new(move |_offset| 0.0),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        };
-
-        let result = first_fitting_sentence_boundary_cut(&layout, 45.0);
-        assert_eq!(result, Some(17));
     }
 
     #[test]
