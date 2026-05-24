@@ -12,6 +12,8 @@ mod last_fitting_char_tests_no_children {
             text: "x".repeat(text_len as usize),
             char_start: 0,
             top: 0.0,
+            
+            
             bottom: char_bottoms.last().cloned().unwrap_or(0.0),
             children,
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
@@ -246,6 +248,8 @@ mod last_fitting_char_tests_no_children {
         let layout = LayoutQuery {
             text: text.to_string(),
             char_start: 0,
+            
+            
             top: 0.0,
             bottom: 100.0,
             children: vec![],
@@ -263,6 +267,8 @@ mod last_fitting_char_tests_no_children {
         let layout = LayoutQuery {
             text: text.to_string(),
             char_start: 0,
+            
+            
             top: 0.0,
             bottom: 100.0,
             children: vec![],
@@ -297,6 +303,8 @@ mod first_fitting_char_tests_no_children {
             text: "x".repeat(text_len as usize),
             char_start: 0,
             top,
+            
+            
             bottom: char_bottoms.last().cloned().unwrap_or(top),
             children,
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
@@ -331,6 +339,8 @@ mod first_fitting_char_tests_no_children {
         let layout = LayoutQuery {
             text: text.to_string(),
             char_start: 0,
+            
+            
             top: 0.0,
             bottom: 100.0,
             children: vec![],
@@ -348,6 +358,8 @@ mod first_fitting_char_tests_no_children {
         let layout = LayoutQuery {
             text: text.to_string(),
             char_start: 0,
+            
+            
             top: 100.0,
             bottom: 200.0,
             children: vec![],
@@ -436,6 +448,8 @@ mod first_fitting_char_tests_with_children {
             text: "x".repeat(text_len as usize),
             char_start,
             top,
+            
+            
             bottom: char_bottoms.last().cloned().unwrap_or(top),
             children: vec![],
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
@@ -456,6 +470,8 @@ mod first_fitting_char_tests_with_children {
         LayoutQuery {
             text: String::new(),
             char_start: 0,
+            
+            
             top: if min_child_top.is_finite() { min_child_top } else { 0.0 },
             bottom: max_child_bottom,
             children,
@@ -498,6 +514,8 @@ mod last_fitting_char_tests_with_children {
             children: vec![],
             get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
             get_char_top: Arc::new(move |_offset| 0.0),
+            
+            
         }
     }
 
@@ -522,6 +540,8 @@ mod last_fitting_char_tests_with_children {
             get_char_top: Arc::new(|_| {
                 panic!("Container node must not access char_tops")
             }),
+            
+            
         }
     }
 

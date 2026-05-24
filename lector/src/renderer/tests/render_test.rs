@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod html_decoder_tests {
-    use crate::renderer::*;
+    use crate::renderer::html_healer::*;
 
 
     #[test]
@@ -397,28 +397,28 @@ mod html_healing_tests {
     #[test]
     fn does_not_change_well_formed_html() {
         let html = "<p>Hello <em>world</em></p>";
-        let healed = heal_html(html);
+        let healed =html_healer::heal_html(html);
         assert_eq!(healed, html);
     }
 
     #[test]
     fn heals_unclosed_open_tags() {
         let html = "<p>Hello <em>world";
-        let healed = heal_html(html);
+        let healed =html_healer::heal_html(html);
         assert_eq!(healed, "<p>Hello <em>world</em></p>");
     }
 
     #[test]
     fn drops_orphaned_close_tags() {
         let html = "</p><p>Hello world</p>";
-        let healed = heal_html(html);
+        let healed =html_healer::heal_html(html);
         assert_eq!(healed, "<p>Hello world</p>");
     }
 
     #[test]
     fn void_elements_no_close_tags() {
         let html = "<img src='x.jpg'><p>Text";
-        let healed = heal_html(html);
+        let healed =html_healer::heal_html(html);
         assert_eq!(healed, "<img src='x.jpg'><p>Text</p>");
     }
 }

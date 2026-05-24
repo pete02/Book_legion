@@ -2,152 +2,110 @@ pub mod tests;
 pub mod sentence_boundaries;
 pub mod calculate_page_height;
 pub mod layout_builder;
+pub mod html_healer;
+use dioxus::html::view;
+use web_sys::HtmlElement;
+use crate::{infra, renderer::calculate_page_height::split_html_at};
 
 
-use regex::Regex;
-
-const VOID_ELEMENTS: &[&str] = &[
-    "area", "base", "br", "col", "embed", "hr", "img", "input", 
-    "link", "meta", "param", "source", "track", "wbr"
-];
-
-fn decode_html(html: &str) -> String {
-    strip_html_comments(&html_escape::decode_html_entities(html).to_string())
-}
-fn strip_html_comments(text: &str) -> String {
-    static COMMENT_RE: std::sync::LazyLock<Regex> = 
-        std::sync::LazyLock::new(|| Regex::new(r"<!--.*?-->").unwrap());
-    COMMENT_RE.replace_all(text, "").to_string()
+pub struct BookDriver {
+    pub book_id: String,
+    pub chapter_idx: usize,
+    pub char_position: usize,
+    pub char_end: usize,
+    viewport: HtmlElement,
+    chapter_html: String,
 }
 
-fn heal_html(html: &str) -> String {
-    let mut output = String::with_capacity(html.len());
-    let mut tag_stack: Vec<String> = Vec::new();
-    let mut chars = html.char_indices().peekable();
-
-    while let Some((i, ch)) = chars.next() {
-        if ch != '<' {
-            output.push(ch);
-            continue;
-        }
-
-        if matches!(chars.peek(), Some((_, '/'))) {
-            chars.next(); // consume '/'
-            handle_closing_tag(&mut chars, &mut output, &mut tag_stack);
-        } else {
-            handle_opening_tag(&mut chars, &mut output, &mut tag_stack, html, i);
-        }
+impl BookDriver {
+    pub async fn new(book_id: String, chapter_idx: usize, viewport: HtmlElement) -> Option<Self> {
+        let chapter_html = infra::chapters::fetch_chapter(&book_id, chapter_idx).await.ok()?;
+        Some(Self {
+            book_id,
+            chapter_idx,
+            char_position: 0,
+            char_end: 0,
+            viewport,
+            chapter_html,
+        })
     }
 
-    close_unclosed_tags(&mut output, tag_stack);
-    output
-}
-
-fn handle_closing_tag(
-    chars: &mut std::iter::Peekable<std::str::CharIndices>,
-    output: &mut String,
-    tag_stack: &mut Vec<String>,
-) {
-    let tag_name = read_tag_name(chars);
-    skip_to_tag_end(chars);
-
-    let matches_top = tag_stack.last().map_or(false, |top| {
-        top.eq_ignore_ascii_case(&tag_name)
-    });
-
-    if matches_top {
-        tag_stack.pop();
-        output.push_str("</");
-        output.push_str(&tag_name);
-        output.push('>');
+    pub async fn go(&mut self, direction: Direction) {
+        match direction {
+            Direction::Forward => self.drive_forward().await,
+            Direction::Back => todo!(),
+        };
     }
 
-}
 
-fn handle_opening_tag(
-    chars: &mut std::iter::Peekable<std::str::CharIndices>,
-    output: &mut String,
-    tag_stack: &mut Vec<String>,
-    source: &str,
-    tag_start: usize,
-) {
-    let tag_name = read_tag_name(chars);
-    let is_self_closing = consume_if_self_closing(chars);
-    let raw_end = skip_to_tag_end(chars);
-
-    if !is_void_element(&tag_name) && !is_self_closing {
-        tag_stack.push(tag_name.to_lowercase());
-    }
-
-    emit_open_tag(output, &tag_name, is_self_closing, source, tag_start, raw_end);
-}
-fn emit_open_tag(
-    output: &mut String,
-    tag_name: &str,
-    is_self_closing: bool,
-    source: &str,
-    raw_start: usize,
-    raw_end: usize,
-) {
-    if is_self_closing {
-        // Self-closing: reconstruct without the slash since we normalise to
-        // paired tags, but preserve attributes from the source slice.
-        // source[raw_start..=raw_end] looks like `<foo attr="x"/>`
-        // Emit as `<foo attr="x">` (drop the slash before `>`).
-        let inner = source[raw_start..=raw_end]
-            .trim_end_matches('>')
-            .trim_end_matches('/')
-            .trim_end();
-        output.push_str(inner);
-        output.push('>');
-    } else {
-        // Void or normal: emit the raw tag as-is — attributes included.
-        output.push_str(&source[raw_start..=raw_end]);
-    }
-}
-
-
-fn close_unclosed_tags(output: &mut String, tag_stack: Vec<String>) {
-    for tag in tag_stack.into_iter().rev() {
-        output.push_str("</");
-        output.push_str(&tag);
-        output.push('>');
-    }
-}
-
-
-
-fn read_tag_name(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> String {
-    let mut name = String::new();
-    while matches!(chars.peek(), Some((_, c)) if !c.is_whitespace() && *c != '>' && *c != '/') {
-        name.push(chars.next().unwrap().1);
-    }
-    name
-}
-
-/// Advance the iterator until `>` has been consumed, returning its byte index.
-fn skip_to_tag_end(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> usize {
-    let mut last = 0;
-    while let Some((i, c)) = chars.next() {
-        last = i;
-        if c == '>' {
-            break;
+    async fn drive_forward(&mut self){
+        if self.char_end == self.chapter_html.len(){
+            match infra::chapters::fetch_chapter(&self.book_id, self.chapter_idx + 1).await {
+                Ok(html) => {
+                    self.chapter_idx += 1;
+                    self.chapter_html = html;
+                    self.char_position = 0;
+                    self.char_end = 0;
+                    self.load_and_advance(0);
+                }
+                Err(e) => {
+                    console(&format!("Failed to fetch next chapter: {:?}", e));
+                    // Stay on current page — do nothing
+                }
+            }
+        }else{
+            self.load_and_advance(self.char_end);
         }
     }
-    last
-}
-fn consume_if_self_closing(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> bool {
-    if matches!(chars.peek(), Some((_, '/'))) {
-        chars.next();
-        true
-    } else {
-        false
+
+
+    fn load_and_advance(&mut self, start: usize) {
+        match load_chapter(&self.viewport, &self.chapter_html, start) {
+            Some(end) => {
+                self.char_position = start;
+                self.char_end = end;
+            }
+            None => console("not implemented"),
+        }
     }
 }
 
-fn is_void_element(tag: &str) -> bool {
-    VOID_ELEMENTS.contains(&tag.to_lowercase().as_str())
+pub enum Direction {
+    Forward,
+    Back,
 }
 
 
 
+pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Option<usize>{
+    let html = html_healer::heal_html(split_html_at(htlm, char_start));  
+    console(&format!("Start the text at {}",char_start));
+    viewport.set_inner_html(&html);
+    let rect=viewport.get_bounding_client_rect().height();
+    console(&format!("rect height: {}", rect));
+    let layout=layout_builder::build_layout(viewport, char_start as u32);
+    let res=calculate_page_height::last_fitting_sentence_boundary_cut(&html,&layout, rect);
+    if let Some(a)=res{
+        console(&format!("last fitting char: {}", a));
+        let fit=&html[..a as usize];
+        console(&format!("fit len: {}", fit.len()));
+        console(&format!("fit: {}", fit));
+        let fixed=html_healer::heal_html(fit);
+        console(&format!("fixed: {}", fixed));
+        viewport.set_inner_html(&fixed);
+        return Some(a)
+    }
+    console("cutter returned None");
+    return None
+}
+
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+fn console(text: &str){
+    #[cfg(target_arch = "wasm32")]
+    console::log_1(&JsValue::from_str(text));
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", text);
+}

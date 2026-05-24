@@ -187,15 +187,11 @@ pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page
         FitResult::NoneFit => None,
         FitResult::LastFitting(last_char_index) => {
             console(&format!("only some fit: {}",last_char_index));
-            console(&format!("whole text: {}, len: {}",htlm,htlm.len()));
             let text = if htlm.is_empty() || last_char_index as usize > htlm.len() {
                 &htlm[..]
             } else {
                 &htlm[..last_char_index as usize]
             };
-
-
-            console(&format!("got: {}",text));
             sentence_boundaries::find_last_sentence_boundary(htlm, last_char_index as usize)
         }
     }
@@ -220,25 +216,6 @@ pub fn first_fitting_sentence_boundary_cut(layout: &LayoutQuery, page_top: f64) 
     }
 }
 
-
-
-pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Option<usize>{
-    let html=renderer::heal_html(&htlm);
-    viewport.set_inner_html(&html);
-    let rect=viewport.get_bounding_client_rect().height();
-    console(&format!("rect height: {}", rect));
-    let layout=renderer::layout_builder::build_layout(viewport, char_start as u32);
-    let res=last_fitting_sentence_boundary_cut(&html,&layout, rect);
-    if let Some(a)=res{
-        console(&format!("last fitting char: {}", a));
-        let fit=&htlm[..a as usize];
-        let fixed=renderer::heal_html(fit);
-        viewport.set_inner_html(&fixed);
-        return Some(a)
-    }
-    console("cutter returned None");
-    return None
-}
 
 pub fn split_html_at(html: &str, byte_index: usize) -> &str {
     let safe_index = html
@@ -268,7 +245,7 @@ use web_sys::console;
 use wasm_bindgen::JsValue;
 fn console(text: &str){
     #[cfg(target_arch = "wasm32")]
-    //console::log_1(&JsValue::from_str(text));
+    console::log_1(&JsValue::from_str(text));
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", text);
 }

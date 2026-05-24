@@ -787,7 +787,35 @@ mod tests {
         
         document.body().unwrap().remove_child(&container_el).unwrap();
     }
+
+    #[wasm_bindgen_test]
+    fn layout_len_shoud_match_html(){
+                let document = window().unwrap().document().unwrap();
+        
+        // Create a container and inject the problem.html content
+        let container_el = document.create_element("div").unwrap();
+        let container: &HtmlElement = container_el.dyn_ref().unwrap();
+        container.style().set_property("font-size", "16px").unwrap();
+        
+        // HTML content from problem.html (truncated for test)
+        let html_content = r#"
+            <div id="toc3_CHAPTER_ONE_Hugh_of_Emblin" class="class54">CHAPTER ONE</div>
+            <div class="class56">Hugh of Emblin</div>
+            <div class="class58">Hugh of Emblin wasn't good at much, but he was very, very good at hiding. Which was good, because he really needed to be.</div>
+            <div class="class60">"Where are you hiding, sheepherder? The longer it takes us to find you, the worse it will be for you!"</div>
+            <div class="class60">Hugh slid farther back into the space behind the bookshelf. Rhodes and his friends might have chosen him as their favorite victim, but their attention span usually wasn't too long. If he stayed hidden long enough, they'd eventually get bored and find something else to amuse themselves.</div>
+            <div class="class95">Hugh, thankfully enough, didn't run into Rhodes and his lackeys on the way to his next class.</div>
+        "#;
+        
+        container.set_inner_html(html_content);
+        document.body().unwrap().append_child(&container_el).unwrap();
+        
+        let layout = build_layout(&container, 0);
+
+        assert_eq!(layout.text_len(), html_content.len() as u32);
+    }
 }
+
 
 
 
