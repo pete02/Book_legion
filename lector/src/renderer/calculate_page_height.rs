@@ -179,7 +179,7 @@ pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     best_top
 }
 
-pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page_height: f64) -> Option<usize> {
+pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page_height: f64, char_start: usize) -> Option<usize> {
     match last_fitting_char(layout, page_height) {
         FitResult::AllFit => Some(layout.subtree_end_char() as usize),
         FitResult::NoneFit => None,
@@ -190,7 +190,8 @@ pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page
             } else {
                 &htlm[..last_char_index as usize]
             };
-            sentence_boundaries::find_last_sentence_boundary(htlm, last_char_index as usize)
+            console(&format!("text: {}", text));
+            sentence_boundaries::find_last_sentence_boundary(htlm, last_char_index as usize, char_start)
         }
     }
 }
@@ -231,12 +232,13 @@ pub fn split_html_at_end(html: &str, byte_index: usize) -> &str {
     let safe_index = html
         .char_indices()
         .map(|(i, _)| i)
-        .filter(|&i| i >= byte_index)
-        .next()
-        .unwrap_or(html.len());
+        .filter(|&i| i <= byte_index)
+        .last()
+        .unwrap_or(0);
 
     &html[..safe_index]
 }
+
 #[cfg(target_arch = "wasm32")]
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]

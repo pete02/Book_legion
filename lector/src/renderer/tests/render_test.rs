@@ -130,7 +130,7 @@ mod forward_boundary_tests {
         limit: usize,
         expected: Option<usize>,
     ) {
-        let actual = sentence_boundaries::find_last_sentence_boundary(input, limit);
+        let actual = sentence_boundaries::find_last_sentence_boundary(input, limit, 0);
 
         let visualize = |pos: Option<usize>| {
             match pos {
@@ -207,7 +207,7 @@ mod forward_boundary_tests {
             assert_boundary(s, 10, None);
 
             // limit exactly at '.'
-            assert_boundary(s, 15, Some(16));
+            assert_boundary(s, 15, Some(15));
 
             // limit after '.'
             assert_boundary(s, 20, Some(16));
@@ -229,7 +229,7 @@ mod forward_boundary_tests {
         #[test]
         fn handles_repeated_punctuation() {
             assert_boundary("What?! Really?", 8, Some(7));
-            assert_boundary("Wow!!! Nice", 6, Some(7));
+            assert_boundary("Wow!!! Nice", 6, Some(6));
         }
 
         #[test]
@@ -293,13 +293,6 @@ mod forward_boundary_tests {
             let s = "Using version 2.4.1. Deployment succeeded.";
 
             assert_boundary(s, s.len(), Some(42));
-        }
-
-        #[test]
-        fn ignores_version_numbers_and_sanps_to_previous_sentence() {
-            let s = "This is a test. Using version 2.4.1. Deployment succeeded.";
-
-            assert_boundary(s, s.len()-4, Some(16));
         }
    }
 

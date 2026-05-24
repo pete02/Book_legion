@@ -69,7 +69,7 @@ pub fn build_layout(element: &Element, char_start: u32,html: &str) -> LayoutQuer
             if raw.trim().is_empty() {
                 continue;
             }
-            let text_start = html[current_char as usize..]
+            let text_start =split_html_at(html, current_char as usize)
                 .find(&raw)
                 .map(|i| current_char as usize + i)
                 .unwrap_or(current_char as usize);

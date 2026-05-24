@@ -84,15 +84,15 @@ pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Opti
     let rect=viewport.get_bounding_client_rect().height();
     console(&format!("rect height: {}", rect));
     let layout=layout_builder::build_layout(viewport, char_start as u32, &html);
-    let res=calculate_page_height::last_fitting_sentence_boundary_cut(&html,&layout, rect);
+    let res=calculate_page_height::last_fitting_sentence_boundary_cut(&html,&layout, rect, char_start);
     if let Some(absolute_cutoff)=res{
-        console(&format!("last fitting char: {}", absolute_cutoff));
+        console(&format!("last fitting char: {}, start char: {}", absolute_cutoff, char_start));
         let relative_cutoff=absolute_cutoff-char_start;
         let fit=&html[..relative_cutoff as usize];
         console(&format!("fit len: {}", fit.len()));
-        console(&format!("fit: {}", fit));
         let fixed=html_healer::heal_html(fit);
-        console(&format!("fixed: {}", fixed));
+            console(&format!("fit: {}", fixed));
+
         viewport.set_inner_html(&fixed);
         return Some(absolute_cutoff)
     }
@@ -104,7 +104,7 @@ pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Opti
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
-fn console(text: &str){
+pub fn console(text: &str){
     #[cfg(target_arch = "wasm32")]
     console::log_1(&JsValue::from_str(text));
     #[cfg(not(target_arch = "wasm32"))]

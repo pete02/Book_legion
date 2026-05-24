@@ -69,7 +69,14 @@ pub fn handle_opening_tag(
 ) {
     let tag_name = read_tag_name(chars);
     let is_self_closing = consume_if_self_closing(chars);
-    let raw_end = skip_to_tag_end(chars);
+    skip_to_tag_end(chars);
+
+    // raw_end is the position of '>' in source — peek at chars after skip
+    // to find where we actually landed
+    let raw_end = chars
+        .peek()
+        .map(|(i, _)| i.saturating_sub(1))
+        .unwrap_or(source.len().saturating_sub(1));
 
     if !is_void_element(&tag_name) && !is_self_closing {
         tag_stack.push(tag_name.to_lowercase());
@@ -77,6 +84,7 @@ pub fn handle_opening_tag(
 
     emit_open_tag(output, &tag_name, is_self_closing, source, tag_start, raw_end);
 }
+
 pub fn emit_open_tag(
     output: &mut String,
     tag_name: &str,
@@ -122,16 +130,20 @@ pub fn read_tag_name(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> 
 }
 
 /// Advance the iterator until `>` has been consumed, returning its byte index.
-pub fn skip_to_tag_end(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> usize {
+fn skip_to_tag_end(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> usize {
     let mut last = 0;
-    while let Some((i, c)) = chars.next() {
-        last = i;
-        if c == '>' {
+    while let Some((i, ch)) = chars.peek() {
+        if *ch == '>' {
+            last = *i;
+            chars.next();
             break;
         }
+        last = *i;
+        chars.next();
     }
     last
 }
+
 pub fn consume_if_self_closing(chars: &mut std::iter::Peekable<std::str::CharIndices>) -> bool {
     if matches!(chars.peek(), Some((_, '/'))) {
         chars.next();

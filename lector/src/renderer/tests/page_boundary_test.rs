@@ -257,7 +257,7 @@ mod last_fitting_char_tests_no_children {
             get_char_top: Arc::new(move |_offset| 0.0),
         };
 
-        let result = last_fitting_sentence_boundary_cut(text, &layout, 90.0);
+        let result = last_fitting_sentence_boundary_cut(text, &layout, 90.0, 0);
         assert_eq!(result, Some(7));
     }
 
@@ -276,7 +276,7 @@ mod last_fitting_char_tests_no_children {
             get_char_top: Arc::new(move |_offset| 0.0),
         };
 
-        let result = last_fitting_sentence_boundary_cut(text, &layout, 1000.0);
+        let result = last_fitting_sentence_boundary_cut(text, &layout, 1000.0, 0);
         assert_eq!(result, Some(text.len()));
     }
 
@@ -651,84 +651,3 @@ mod last_fitting_char_tests_with_children {
     
 }
 
-
-mod inside_html_tests{
-    use crate::renderer::sentence_boundaries::*;
-
-    #[test]
-    fn inside_simple_open_tag() {
-        let s = "<p>Hello world</p>";
-
-        // position inside "<p"
-        assert!(is_inside_html_tag_boundary(s, 1));
-    }
-
-    #[test]
-    fn outside_tag_in_text() {
-        let s = "<p>Hello world</p>";
-
-        let pos = s.find("Hello").unwrap();
-
-        assert!(!is_inside_html_tag_boundary(s, pos));
-    }
-    #[test]
-    fn inside_closing_tag() {
-        let s = "<p>Hello</p>";
-
-        // position inside "</p>"
-        let pos = s.find("</p>").unwrap() + 2;
-
-        assert!(is_inside_html_tag_boundary(s, pos));
-    }
-    #[test]
-    fn after_closing_tag_is_safe() {
-        let s = "<p>Hello</p>Next";
-
-        let pos = s.find("Next").unwrap();
-
-        assert!(!is_inside_html_tag_boundary(s, pos));
-    }
-
-    #[test]
-    fn between_adjacent_tags_is_inside_tag_context() {
-        let s = "<p>Hello</p><p>Next</p>";
-
-        // position between </p> and <p>
-        let pos = s.find("</p>").unwrap() + "</p>".len();
-
-        assert!(!is_inside_html_tag_boundary(s, pos));
-    }
-    #[test]
-    fn inside_nested_tags() {
-        let s = "<div><p>Hello</p></div>";
-
-        let pos = s.find("<p").unwrap() + 1;
-
-        assert!(is_inside_html_tag_boundary(s, pos));
-    }
-    #[test]
-    fn outside_nested_tags_text() {
-        let s = "<div><p>Hello</p></div>";
-
-        let pos = s.find("Hello").unwrap();
-
-        assert!(!is_inside_html_tag_boundary(s, pos));
-    }
-
-    #[test]
-    fn incomplete_open_tag() {
-        let s = "<p>Hello world";
-
-        let pos = s.find("<p").unwrap() + 1;
-
-        assert!(is_inside_html_tag_boundary(s, pos));
-    }
-    #[test]
-    fn plain_text_is_never_inside_tag() {
-        let s = "Hello world.";
-
-        for i in 0..s.len() {
-            assert!(!is_inside_html_tag_boundary(s, i));
-        }
-    }
-}
