@@ -37,14 +37,12 @@ impl LayoutQuery {
             .map(|c| c.bottom())
             .fold(self.bottom, f64::max)
     }
-
     pub fn text_len(&self) -> u32 {
-        if self.children.is_empty() {
-            self.text.len() as u32
-        } else {
-            self.children.iter().map(|c| c.text_len()).sum()
-        }
+        let my_end = self.char_start + self.text.len() as u32;
+        let children_end = self.children.iter().map(|c| c.char_start + c.text_len()).max().unwrap_or(0);
+        my_end.max(children_end).saturating_sub(self.char_start)
     }
+
 
     pub fn print_text(&self)->String{
         let mut t=self.text.clone();

@@ -83,17 +83,18 @@ pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Opti
     viewport.set_inner_html(&html);
     let rect=viewport.get_bounding_client_rect().height();
     console(&format!("rect height: {}", rect));
-    let layout=layout_builder::build_layout(viewport, char_start as u32);
+    let layout=layout_builder::build_layout(viewport, char_start as u32, &html);
     let res=calculate_page_height::last_fitting_sentence_boundary_cut(&html,&layout, rect);
-    if let Some(a)=res{
-        console(&format!("last fitting char: {}", a));
-        let fit=&html[..a as usize];
+    if let Some(absolute_cutoff)=res{
+        console(&format!("last fitting char: {}", absolute_cutoff));
+        let relative_cutoff=absolute_cutoff-char_start;
+        let fit=&html[..relative_cutoff as usize];
         console(&format!("fit len: {}", fit.len()));
         console(&format!("fit: {}", fit));
         let fixed=html_healer::heal_html(fit);
         console(&format!("fixed: {}", fixed));
         viewport.set_inner_html(&fixed);
-        return Some(a)
+        return Some(absolute_cutoff)
     }
     console("cutter returned None");
     return None

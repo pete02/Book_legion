@@ -47,7 +47,7 @@ fn build_layout_simple_text_element() {
     span.set_text_content(Some("hello world"));
     document.body().unwrap().append_child(&span).unwrap();
     
-    let layout = build_layout(&span,0);
+    let layout = build_layout(&span,0, &span.outer_html());
     
 
     assert_eq!(layout.text, "<span>hello world</span>");
@@ -67,7 +67,7 @@ fn build_layout_nested_elements() {
     parent.append_child(&child).unwrap();
     document.body().unwrap().append_child(&parent).unwrap();
     
-    let layout = build_layout(&parent,0);
+    let layout = build_layout(&parent,0, &parent.outer_html());
     
     assert_eq!(layout.text, "");
     assert_eq!(layout.children.len(), 1);
@@ -89,7 +89,7 @@ fn build_layout_text_and_children() {
     
     document.body().unwrap().append_child(&p).unwrap();
     
-    let layout = build_layout(&p, 0);
+    let layout = build_layout(&p, 0, &p.outer_html());
     
     // Parent has text "test" and one child
     assert_eq!(layout.text, "");
@@ -120,7 +120,7 @@ fn build_layout_multiple_children() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     assert_eq!(layout.text, "");
     assert_eq!(layout.children.len(), 3);
@@ -144,7 +144,7 @@ fn build_layout_deeply_nested() {
     outer.append_child(&middle).unwrap();
     document.body().unwrap().append_child(&outer).unwrap();
     
-    let layout = build_layout(&outer, 0);
+    let layout = build_layout(&outer, 0, &outer.outer_html());
     
     assert_eq!(layout.text, "");
     assert_eq!(layout.children.len(), 1);
@@ -172,7 +172,7 @@ fn build_layout_measures_simple_element_height() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     // Verify structure is correct
     assert!(!layout.text.is_empty());
@@ -230,7 +230,7 @@ fn build_layout_text_only_element_has_no_children() {
     p.set_text_content(Some("Just text content"));
     document.body().unwrap().append_child(&p).unwrap();
     
-    let layout = build_layout(&p, 0);
+    let layout = build_layout(&p, 0, &p.outer_html());
     
     assert_eq!(layout.children.len(), 0);
     assert!(!layout.text.is_empty());
@@ -261,7 +261,7 @@ fn build_layout_element_with_mixed_content() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     // Should have children for both text nodes and element
     assert_eq!(layout.children.len(), 3);
@@ -287,7 +287,7 @@ fn build_layout_text_node_extraction() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     // Layout should capture the text content
     assert!(!layout.text.is_empty());
@@ -303,7 +303,7 @@ fn build_layout_empty_element() {
     let div = document.create_element("div").unwrap();
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     assert_eq!(layout.text, "<div></div>");
     assert!(layout.children.is_empty());
@@ -328,7 +328,7 @@ fn build_layout_single_child_element() {
     
     document.body().unwrap().append_child(&parent).unwrap();
     
-    let layout = build_layout(&parent, 0);
+    let layout = build_layout(&parent, 0, &parent.outer_html());
     
     assert_eq!(layout.children.len(), 1);
     assert_eq!(layout.children[0].text, "<span style=\"font-size: 20px;\">Single child</span>");
@@ -353,7 +353,7 @@ fn build_layout_multiple_siblings() {
     
     document.body().unwrap().append_child(&container).unwrap();
     
-    let layout = build_layout(&container, 0);
+    let layout = build_layout(&container, 0, &container.outer_html());
     
     assert_eq!(layout.children.len(), 5);
     for i in 0..5 {
@@ -382,7 +382,7 @@ fn build_layout_deeply_nested_structure() {
     
     document.body().unwrap().append_child(&level1).unwrap();
     
-    let layout = build_layout(&level1, 0);
+    let layout = build_layout(&level1, 0, &level1.outer_html());
     
     // Verify depth
     assert_eq!(layout.children.len(), 1);
@@ -407,7 +407,7 @@ fn build_layout_with_styles_affects_rect() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     let rect_small = div.get_bounding_client_rect();
     
     // Clear and create with larger font
@@ -419,7 +419,7 @@ fn build_layout_with_styles_affects_rect() {
     div2.set_text_content(Some("Small"));
     document.body().unwrap().append_child(&div2).unwrap();
     
-    let layout2 = build_layout(&div2, 0);
+    let layout2 = build_layout(&div2, 0, &div2.outer_html());
     let rect_large = div2.get_bounding_client_rect();
     
     // Larger font should have larger height
@@ -440,7 +440,7 @@ fn layout_query_has_correct_text_field() {
     span.set_text_content(Some("Test content"));
     document.body().unwrap().append_child(&span).unwrap();
     
-    let layout = build_layout(&span, 0);
+    let layout = build_layout(&span, 0, &span.outer_html());
     
     // Text field should contain full HTML markup
     assert!(layout.text.contains("span"));
@@ -457,7 +457,7 @@ fn layout_query_text_len_matches_content() {
     p.set_text_content(Some("Hello World"));
     document.body().unwrap().append_child(&p).unwrap();
     
-    let layout = build_layout(&p, 0);
+    let layout = build_layout(&p, 0, &p.outer_html());
     
     // text_len() should count characters in text field
     let expected_len = layout.text.chars().count();
@@ -486,7 +486,7 @@ fn layout_query_children_are_in_dom_order() {
     
     document.body().unwrap().append_child(&div).unwrap();
     
-    let layout = build_layout(&div, 0);
+    let layout = build_layout(&div, 0, &div.outer_html());
     
     // Children should be in DOM order
     assert_eq!(layout.children[0].text, "<span>First</span>");
@@ -529,7 +529,7 @@ mod tests {
     fn char_top_is_above_char_bottom() {
         with_element(r#"<p style="font-size:16px;line-height:20px;">Hello</p>"#, |container| {
             let p = container.first_element_child().unwrap();
-            let layout = build_layout(&p, 0);
+            let layout = build_layout(&p, 0, &p.outer_html());
 
             let top    = (layout.get_char_top)(0);
             let bottom = (layout.get_char_bottom)(0);
@@ -544,7 +544,7 @@ mod tests {
     fn same_line_chars_have_same_top_and_bottom() {
         with_element(r#"<p style="font-size:16px;line-height:20px;width:400px;">Hello</p>"#, |container| {
             let p = container.first_element_child().unwrap();
-            let layout = build_layout(&p, 0);
+            let layout = build_layout(&p, 0, &p.outer_html());
 
             let top_h = (layout.get_char_top)(0); // 'H'
             let top_e = (layout.get_char_top)(1); // 'e'
@@ -564,7 +564,7 @@ mod tests {
             r#"<p style="font-size:16px;line-height:20px;width:20px;">A B</p>"#,
             |container| {
                 let p = container.first_element_child().unwrap();
-                let layout = build_layout(&p, 0);
+                let layout = build_layout(&p, 0, &p.outer_html());
 
                 let top_a     = (layout.get_char_top)(0); // 'A' — line 1
                 let top_space = (layout.get_char_top)(1); // ' ' — line 1
@@ -587,20 +587,20 @@ mod tests {
             r#"<p style="font-size:16px;">Hello <span>World</span></p>"#,
             |container| {
                 let p = container.first_element_child().unwrap();
-                let layout = build_layout(&p, 0);
+                let layout = build_layout(&p, 0, &container.outer_html());
 
                 // "Hello " is the first text node → chars 0..5
                 // <span>World</span> starts at char 6
                 let span_child = layout.children.iter()
-                    .find(|c| c.char_start == 6)
-                    .expect("span child should have char_start=6");
+                    .find(|c| c.text == "<span>World</span>")
+                    .expect("span child should have correct text");
                 println!("Span child char_start: {}", span_child.char_start);
-                assert_eq!(span_child.char_start, 6);
+                assert_eq!(span_child.char_start, 38, "Expected char_start of 38, got {}", span_child.char_start);
                 assert_eq!(span_child.text, "<span>World</span>");
                 assert_eq!(span_child.text_len(), 18); // "World"
 
                 // char 6 ('W') should be queryable via the parent too
-                let top_via_parent = (layout.get_char_top)(6);
+                let top_via_parent = (layout.get_char_top)(38);
                 let top_via_child  = (span_child.get_char_top)(6);
                 assert_eq!(top_via_parent, top_via_child);
             },
@@ -615,15 +615,15 @@ mod tests {
             r#"<div style="font-size:16px;"><p>AB</p><p>CD</p></div>"#,
             |container| {
                 let div = container.first_element_child().unwrap();
-                let layout = build_layout(&div, 0);
+                let layout = build_layout(&div, 0, &container.outer_html());
 
                 assert_eq!(layout.children.len(), 2);
-
+                
                 let first  = &layout.children[0]; // <p>AB</p>
                 let second = &layout.children[1]; // <p>CD</p>
 
-                assert_eq!(first.char_start,  0);
-                assert_eq!(second.char_start, 9); // "AB" = 2 chars
+                assert_eq!(first.char_start,  34);
+                assert_eq!(second.char_start, 43); // "AB" = 2 chars
             },
         );
     }
@@ -634,7 +634,7 @@ mod tests {
     fn build_layout_respects_nonzero_char_start() {
         with_element(r#"<p style="font-size:16px;">Hi</p>"#, |container| {
             let p = container.first_element_child().unwrap();
-            let layout = build_layout(&p, 100);
+            let layout = build_layout(&p, 100, &container.outer_html());
 
             assert_eq!(layout.char_start, 100);
 
@@ -666,7 +666,7 @@ mod tests {
         container.set_inner_html(html_content);
         document.body().unwrap().append_child(&container_el).unwrap();
         
-        let layout = build_layout(&container, 0);
+        let layout = build_layout(&container, 0, html_content);
         
         // Verify structure
         assert_eq!(layout.children.len(), 6, "Should have 6 child div elements");
@@ -700,15 +700,12 @@ mod tests {
         let container: &HtmlElement = container_el.dyn_ref().unwrap();
         container.style().set_property("font-size", "16px").unwrap();
         
-        let html_content = r#"
-            <div class="class60">Hugh slid farther back into the space behind the bookshelf.</div>
-            <div class="class60">Rhodes and his friends might have chosen him as their favorite victim.</div>
-        "#;
+        let html_content = r#"<div class="class60">Hugh slid farther back into the space behind the bookshelf.</div><div class="class60">Rhodes and his friends might have chosen him as their favorite victim.</div>"#;
         
         container.set_inner_html(html_content);
         document.body().unwrap().append_child(&container_el).unwrap();
         
-        let layout = build_layout(&container, 0);
+        let layout = build_layout(&container, 0, html_content);
         
         // Verify all text content is extracted
         let total_text_len: u32 = layout.children.iter()
@@ -716,7 +713,6 @@ mod tests {
             .sum();
         
         assert!(total_text_len > 100, "Should have significant text content");
-        
         // Verify char_start offsets are correct across siblings
         assert_eq!(layout.children[0].char_start, 0);
         assert!(layout.children[1].char_start > layout.children[0].char_start);
@@ -743,7 +739,7 @@ mod tests {
         container.set_inner_html(html_content);
         document.body().unwrap().append_child(&container_el).unwrap();
         
-        let layout = build_layout(&container, 0);
+        let layout = build_layout(&container, 0, html_content);
         
         // Should have nested structure
         assert_eq!(layout.children.len(), 1);
@@ -773,11 +769,11 @@ mod tests {
         container.set_inner_html(html_content);
         document.body().unwrap().append_child(&container_el).unwrap();
         
-        let layout = build_layout(&container, 0);
+        let layout = build_layout(&container, 0, html_content);
         
         // Verify char coordinates are queryable
-        let top_h = (layout.get_char_top)(0);
-        let top_o = (layout.get_char_top)(1);
+        let top_h = (layout.get_char_top)(13);
+        let top_o = (layout.get_char_top)(14);
         
         // Same line should have same top
         assert_eq!(top_h, top_o, "Characters on same line should have same top");
@@ -798,24 +794,31 @@ mod tests {
         container.style().set_property("font-size", "16px").unwrap();
         
         // HTML content from problem.html (truncated for test)
-        let html_content = r#"
-            <div id="toc3_CHAPTER_ONE_Hugh_of_Emblin" class="class54">CHAPTER ONE</div>
-            <div class="class56">Hugh of Emblin</div>
-            <div class="class58">Hugh of Emblin wasn't good at much, but he was very, very good at hiding. Which was good, because he really needed to be.</div>
-            <div class="class60">"Where are you hiding, sheepherder? The longer it takes us to find you, the worse it will be for you!"</div>
-            <div class="class60">Hugh slid farther back into the space behind the bookshelf. Rhodes and his friends might have chosen him as their favorite victim, but their attention span usually wasn't too long. If he stayed hidden long enough, they'd eventually get bored and find something else to amuse themselves.</div>
-            <div class="class95">Hugh, thankfully enough, didn't run into Rhodes and his lackeys on the way to his next class.</div>
-        "#;
+        let html_content = r#"<div id="toc3_CHAPTER_ONE_Hugh_of_Emblin" class="class54">CHAPTER ONE</div><p class="THis is a big test"><span class="class56">Hugh of Emblin</span></p><div class="class58">Hugh of Emblin wasn't good at much, but he was very, very good at hiding. Which was good, because he really needed to be.</div><div class="class60">"Where are you hiding, sheepherder? The longer it takes us to find you, the worse it will be for you!"</div><div class="class60">Hugh slid farther back into the space behind the bookshelf. Rhodes and his friends might have chosen him as their favorite victim, but their attention span usually wasn't too long. If he stayed hidden long enough, they'd eventually get bored and find something else to amuse themselves.</div><div class="class95">Hugh, thankfully enough, didn't run into Rhodes and his lackeys on the way to his next class.</div>"#;
         
         container.set_inner_html(html_content);
         document.body().unwrap().append_child(&container_el).unwrap();
         
-        let layout = build_layout(&container, 0);
+        let layout = build_layout(&container, 0, html_content);
 
-        assert_eq!(layout.text_len(), html_content.len() as u32);
+        let expected_len = container_el.text_content().unwrap_or_default().len() as u32;
+
+        assert_eq!(layout.text_len(), html_content.len() as u32, "Layout text length should match HTML content length. Now, {} != {}, difference of {}", layout.text_len(), html_content.len() as u32, (layout.text_len() as i32 - html_content.len() as i32).abs());
+    }
+
+
+
+    #[cfg(target_arch = "wasm32")]
+    use web_sys::console;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen::JsValue;
+    fn console(text: &str){
+        #[cfg(target_arch = "wasm32")]
+        console::log_1(&JsValue::from_str(text));
+        #[cfg(not(target_arch = "wasm32"))]
+        println!("{}", text);
     }
 }
-
 
 
 
