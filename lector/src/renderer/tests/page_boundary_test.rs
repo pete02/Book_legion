@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod last_fitting_char_tests_no_children {
     use super::*;
-    use crate::renderer::calculate_page_height::*;
+    use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
 
     fn create_mock(text_len: u32, char_bottoms: &[f64], children: Vec<LayoutQuery>) -> LayoutQuery {
@@ -242,51 +242,13 @@ mod last_fitting_char_tests_no_children {
         assert_eq!(last_fitting_char(&layout, 800.0), FitResult::NoneFit);
     }
 
-    #[test]
-    fn last_fitting_sentence_boundary_cut_returns_boundary() {
-        let text = "Hello. Next sentence.";
-        let layout = LayoutQuery {
-            text: text.to_string(),
-            char_start: 0,
-            
-            
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        };
-
-        let result = last_fitting_sentence_boundary_cut(text, &layout, 90.0, 0);
-        assert_eq!(result, Some(7));
-    }
-
-    #[test]
-    fn last_fitting_sentence_boundary_cut_returns_text_end_when_all_fit() {
-        let text = "Hello. Next sentence.";
-        let layout = LayoutQuery {
-            text: text.to_string(),
-            char_start: 0,
-            
-            
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |offset| ((offset + 1) as f64) * 10.0),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        };
-
-        let result = last_fitting_sentence_boundary_cut(text, &layout, 1000.0, 0);
-        assert_eq!(result, Some(text.len()));
-    }
-
 }
 
 // ... existing code ...
 #[cfg(test)]
 mod first_fitting_char_tests_no_children {
     use super::*;
-    use crate::renderer::calculate_page_height::*;
+    use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
 
     fn create_mock(
@@ -331,44 +293,6 @@ mod first_fitting_char_tests_no_children {
 
         let result = first_fitting_char(&layout, 100.0);
         assert_eq!(result, FitResult::NoneFit);
-    }
-
-    #[test]
-    fn first_fitting_sentence_boundary_cut_returns_boundary() {
-        let text = "Hello. Next sentence.";
-        let layout = LayoutQuery {
-            text: text.to_string(),
-            char_start: 0,
-            
-            
-            top: 0.0,
-            bottom: 100.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |_offset| 0.0),
-            get_char_top: Arc::new(move |offset| (offset as f64) * 10.0),
-        };
-
-        let result = first_fitting_sentence_boundary_cut(&layout, 45.0);
-        assert_eq!(result, Some(7));
-    }
-
-    #[test]
-    fn first_fitting_sentence_boundary_cut_returns_zero_when_all_fit() {
-        let text = "Hello. Next sentence.";
-        let layout = LayoutQuery {
-            text: text.to_string(),
-            char_start: 0,
-            
-            
-            top: 100.0,
-            bottom: 200.0,
-            children: vec![],
-            get_char_bottom: Arc::new(move |_offset| 0.0),
-            get_char_top: Arc::new(move |_offset| 200.0),
-        };
-
-        let result = first_fitting_sentence_boundary_cut(&layout, 50.0);
-        assert_eq!(result, Some(0));
     }
 
     #[test]
@@ -431,7 +355,7 @@ mod first_fitting_char_tests_no_children {
 #[cfg(test)]
 mod first_fitting_char_tests_with_children {
     use super::*;
-    use crate::renderer::calculate_page_height::*;
+    use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
 
     fn create_text_leaf(
@@ -496,7 +420,7 @@ mod first_fitting_char_tests_with_children {
 mod last_fitting_char_tests_with_children {
     use std::sync::Arc;
     use super::*;
-    use crate::renderer::calculate_page_height::*;
+    use crate::renderer::find_page_boundary::*;
 
     /// Leaf node (text only)
     fn create_text_leaf(

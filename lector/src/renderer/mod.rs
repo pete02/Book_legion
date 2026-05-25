@@ -1,11 +1,11 @@
 pub mod tests;
 pub mod sentence_boundaries;
-pub mod calculate_page_height;
+pub mod find_page_boundary;
 pub mod layout_builder;
 pub mod html_healer;
 use dioxus::html::view;
 use web_sys::HtmlElement;
-use crate::{infra, renderer::calculate_page_height::split_html_at};
+use crate::{infra, renderer::find_page_boundary::split_html_at};
 
 
 pub struct BookDriver {
@@ -78,25 +78,7 @@ pub enum Direction {
 
 
 pub fn load_chapter(viewport: &HtmlElement, htlm: &str, char_start: usize)->Option<usize>{
-    let html = html_healer::heal_html(split_html_at(htlm, char_start));  
-    console(&format!("Start the text at {}",char_start));
-    viewport.set_inner_html(&html);
-    let rect=viewport.get_bounding_client_rect().height();
-    console(&format!("rect height: {}", rect));
-    let layout=layout_builder::build_layout(viewport, char_start as u32, &html);
-    let res=calculate_page_height::last_fitting_sentence_boundary_cut(&html,&layout, rect, char_start);
-    if let Some(absolute_cutoff)=res{
-        console(&format!("last fitting char: {}, start char: {}", absolute_cutoff, char_start));
-        let relative_cutoff=absolute_cutoff-char_start;
-        let fit=&html[..relative_cutoff as usize];
-        console(&format!("fit len: {}", fit.len()));
-        let fixed=html_healer::heal_html(fit);
-            console(&format!("fit: {}", fixed));
 
-        viewport.set_inner_html(&fixed);
-        return Some(absolute_cutoff)
-    }
-    console("cutter returned None");
     return None
 }
 

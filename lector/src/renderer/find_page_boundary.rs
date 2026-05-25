@@ -39,7 +39,7 @@ impl LayoutQuery {
     }
     pub fn text_len(&self) -> u32 {
         let my_end = self.char_start + self.text.len() as u32;
-        let children_end = self.children.iter().map(|c| c.char_start + c.text_len()).max().unwrap_or(0);
+        let children_end = self.children.iter().map(|c| c.char_start+ c.text_len()).max().unwrap_or(0);
         my_end.max(children_end).saturating_sub(self.char_start)
     }
 
@@ -87,6 +87,7 @@ impl std::fmt::Debug for LayoutQuery {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LayoutQuery")
             .field("text_len()", &self.text_len())
+            .field("text", &self.text)
             .field("top", &self.top)
             .field("bottom", &self.bottom)
             .field("char_start", &self.char_start)
@@ -94,11 +95,6 @@ impl std::fmt::Debug for LayoutQuery {
             .finish()
     }
 }
-
-
-
-// Returns AllFit, if the layout fits and there is space left. If the Layout does not fit at all, returns NoneFit
-//  If it partially fits, returns the index of the last fitting char.
 
 pub fn last_fitting_char(layout: &LayoutQuery, page_height: f64) -> FitResult {
     
@@ -179,43 +175,6 @@ pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     best_top
 }
 
-pub fn last_fitting_sentence_boundary_cut(htlm: &str, layout: &LayoutQuery, page_height: f64, char_start: usize) -> Option<usize> {
-    match last_fitting_char(layout, page_height) {
-        FitResult::AllFit => Some(layout.subtree_end_char() as usize),
-        FitResult::NoneFit => None,
-        FitResult::LastFitting(last_char_index) => {
-            console(&format!("only some fit: {}",last_char_index));
-            let text = if htlm.is_empty() || last_char_index as usize > htlm.len() {
-                &htlm[..]
-            } else {
-                &htlm[..last_char_index as usize]
-            };
-            console(&format!("text: {}", text));
-            sentence_boundaries::find_last_sentence_boundary(htlm, last_char_index as usize, char_start)
-        }
-    }
-}
-
-pub fn first_fitting_sentence_boundary_cut(layout: &LayoutQuery, page_top: f64) -> Option<usize> {
-    match first_fitting_char(layout, page_top) {
-        FitResult::AllFit => Some(layout.char_start as usize),
-        FitResult::NoneFit => None,
-        FitResult::LastFitting(first_char_index) => {
-            let (text, local_char_index) = layout
-                .find_leaf_text_for_char_index(first_char_index)?;
-            let start_byte = text
-                .char_indices()
-                .nth(local_char_index as usize)
-                .map(|(byte_index, _)| byte_index)
-                .unwrap_or(text.len());
-            let limit_from_end = text.len().saturating_sub(start_byte);
-            sentence_boundaries::find_first_sentence_boundary(text, limit_from_end)
-                .map(|boundary_byte| text[..boundary_byte].chars().count() as usize + (first_char_index - local_char_index) as usize)
-        }
-    }
-}
-
-
 pub fn split_html_at(html: &str, byte_index: usize) -> &str {
     let safe_index = html
         .char_indices()
@@ -246,6 +205,4 @@ use wasm_bindgen::JsValue;
 fn console(text: &str){
     #[cfg(target_arch = "wasm32")]
     console::log_1(&JsValue::from_str(text));
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", text);
 }

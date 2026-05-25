@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::{Element, Node, Range, Text};
-use crate::renderer::calculate_page_height::{LayoutQuery, split_html_at};
+use crate::renderer::find_page_boundary::{LayoutQuery, split_html_at};
 
 // ── Send+Sync wrapper ────────────────────────────────────────────────────────
 // WASM is single-threaded; this is safe in practice.
@@ -13,8 +13,7 @@ unsafe impl<T> Sync for WasmSend<T> {}
 
 // ── Public entry point ───────────────────────────────────────────────────────
 
-pub fn build_layout(element: &Element, char_start: u32,html: &str) -> LayoutQuery {
-    console(&format!("build fo: {}",html));
+pub fn build_layout(element: &Element, char_start: u32, html: &str) -> LayoutQuery {
     let mut layout = LayoutQuery::default();
     layout.char_start = char_start;
 
@@ -44,24 +43,35 @@ pub fn build_layout(element: &Element, char_start: u32,html: &str) -> LayoutQuer
         }
     }
 
-    // ── Track the running character offset across siblings ───────────────────
-    let mut current_char = char_start;
+    // ── Compute where this element's *inner* content starts ──────────────────
+    // char_start points to the '<' of this element's opening tag in `html`.
+    // We need to skip past the opening tag to get the offset of the first child.
+    let inner_start: u32 = {
+        let outer = element.outer_html();
+        let inner = element.inner_html();
+
+        let tag_len = outer
+            .find(&inner)
+            .unwrap_or(0);
+        char_start + tag_len as u32
+    };
+
+    let mut current_char = inner_start;
 
     for i in 0..child_nodes.length() {
         let Some(node) = child_nodes.item(i) else { continue };
 
         if let Some(el) = node.dyn_ref::<Element>() {
-            // Recurse — child_start is current_char, which advances after
             let child_outer = el.outer_html();
+
+            // Find this child's opening tag inside `html` starting from current_char
             let child_start = split_html_at(html, current_char as usize)
                 .find(&child_outer)
                 .map(|i| current_char as usize + i)
                 .unwrap_or(current_char as usize);
 
-            console(&format!("cur: {}", current_char));
-            console(&format!("el: {:?}",el.outer_html()));
             let child = build_layout(el, child_start as u32, html);
-            current_char += el.outer_html().len() as u32;  // <-- advance by what the child consumed
+            current_char = child_start as u32 + child_outer.len() as u32;
             layout.children.push(child);
 
         } else if let Some(text_node) = node.dyn_ref::<Text>() {
@@ -69,27 +79,29 @@ pub fn build_layout(element: &Element, char_start: u32,html: &str) -> LayoutQuer
             if raw.trim().is_empty() {
                 continue;
             }
-            let text_start =split_html_at(html, current_char as usize)
+
+            let text_start = split_html_at(html, current_char as usize)
                 .find(&raw)
                 .map(|i| current_char as usize + i)
                 .unwrap_or(current_char as usize);
 
-
-            let len = text_node.length();
+            let len = raw.len() as u32; // use byte len to match html offsets
             let mut child = LayoutQuery::default();
             child.text = raw;
-            child.char_start = text_start as u32;  // <-- correct start for this text node
+            child.char_start = text_start as u32;
             attach_text_node_char_fns(&mut child, text_node, text_start as u32);
 
-            current_char += len;  // <-- advance past this text node
+            current_char = text_start as u32 + len;
             layout.children.push(child);
         }
     }
 
     attach_delegating_char_fns(&mut layout);
-
     layout
 }
+
+
+
 // ── Character-function attachment helpers ────────────────────────────────────
 
 /// Leaf text node: use the Range API for exact per-character positions.

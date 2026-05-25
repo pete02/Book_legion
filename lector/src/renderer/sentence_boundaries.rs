@@ -18,7 +18,7 @@ const ABBREVIATIONS: &[&str] = &[
 
 use regex::Regex;
 
-use crate::renderer::{self, calculate_page_height::{split_html_at, split_html_at_end}, console};
+use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_end}, console};
 
 
 
