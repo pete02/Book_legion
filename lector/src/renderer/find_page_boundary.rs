@@ -3,77 +3,7 @@ use dioxus::logger::tracing;
 use web_sys::HtmlElement;
 
 use crate::renderer::{self, sentence_boundaries};
-
-#[derive(Clone)]
-pub struct LayoutQuery{
-    pub text: String,
-    pub top: f64,
-    pub bottom: f64,
-    pub char_start: u32,
-    pub children: Vec<LayoutQuery>,
-    pub get_char_bottom: Arc<dyn Fn(u32) -> f64>,  // drop Send + Sync
-    pub get_char_top: Arc<dyn Fn(u32) -> f64>,  
-
-}
-
-
-
-
-impl LayoutQuery {
-    pub fn default() -> Self {
-        Self {
-            text: String::new(),
-            top: 0.0,
-            bottom: 0.0,
-            char_start: 0,
-            children: Vec::new(),
-            get_char_bottom: Arc::new(|_| 0.0),
-            get_char_top: Arc::new(|_| 0.0),
-        }
-    }
-    pub fn bottom(&self) -> f64 {
-        self.children
-            .iter()
-            .map(|c| c.bottom())
-            .fold(self.bottom, f64::max)
-    }
-    pub fn text_len(&self) -> u32 {
-        let my_end = self.char_start + self.text.len() as u32;
-        let children_end = self.children.iter().map(|c| c.char_start+ c.text_len()).max().unwrap_or(0);
-        my_end.max(children_end).saturating_sub(self.char_start)
-    }
-
-
-    pub fn print_text(&self)->String{
-        let mut t=self.text.clone();
-        for child in &self.children{
-            t=format!("{}; child: {}",t, child.print_text());
-        }
-        t
-    }
-
-    pub fn find_leaf_text_for_char_index(&self, global_index: u32) -> Option<(&str, u32)> {
-        if global_index >= self.char_start && global_index < self.char_start + self.text_len() {
-            return Some((&self.text, global_index - self.char_start));
-        }
-
-        for child in &self.children {
-            if let Some(found) = child.find_leaf_text_for_char_index(global_index) {
-                return Some(found);
-            }
-        }
-
-        None
-    }
-
-    pub fn subtree_end_char(&self) -> u32 {
-        let mut end = self.char_start + self.text_len();
-        for child in &self.children {
-            end = end.max(child.subtree_end_char());
-        }
-        end
-    }
-}
+use crate::renderer::layout_builder::LayoutQuery;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FitResult {
@@ -82,19 +12,6 @@ pub enum FitResult {
     LastFitting(u32),
 }
 
-
-impl std::fmt::Debug for LayoutQuery {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LayoutQuery")
-            .field("text_len()", &self.text_len())
-            .field("text", &self.text)
-            .field("top", &self.top)
-            .field("bottom", &self.bottom)
-            .field("char_start", &self.char_start)
-            .field("children", &self.children)
-            .finish()
-    }
-}
 
 pub fn last_fitting_char(layout: &LayoutQuery, page_height: f64) -> FitResult {
     

@@ -4,21 +4,17 @@ mod last_fitting_char_tests_no_children {
     use super::*;
     use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
+    use crate::renderer::layout_builder::LayoutQuery;
 
     fn create_mock(text_len: u32, char_bottoms: &[f64], children: Vec<LayoutQuery>) -> LayoutQuery {
         let char_bottoms = char_bottoms.to_vec(); // owned, no lifetime
-
-        LayoutQuery {
-            text: "x".repeat(text_len as usize),
-            char_start: 0,
-            top: 0.0,
-            
-            
-            bottom: char_bottoms.last().cloned().unwrap_or(0.0),
-            children,
-            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
-            get_char_top: Arc::new(move |_offset| 0.0),
-        }
+        let mut layout=LayoutQuery::default();
+        layout.text="x".repeat(text_len as usize);
+        layout.bottom=char_bottoms.last().cloned().unwrap_or(0.0);
+        layout.children=children;
+        layout.get_char_bottom=Arc::new(move |offset| char_bottoms[offset as usize]);
+        layout.get_char_top=Arc::new(move |_offset| 0.0);
+        return layout;
     }
 
     // -------------------------------------------------------------------------
@@ -247,6 +243,7 @@ mod last_fitting_char_tests_no_children {
 // ... existing code ...
 #[cfg(test)]
 mod first_fitting_char_tests_no_children {
+    use crate::renderer::layout_builder::LayoutQuery;
     use super::*;
     use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
@@ -261,17 +258,13 @@ mod first_fitting_char_tests_no_children {
         let char_tops = char_tops.to_vec();
         let char_bottoms = char_bottoms.to_vec();
 
-        LayoutQuery {
-            text: "x".repeat(text_len as usize),
-            char_start: 0,
-            top,
-            
-            
-            bottom: char_bottoms.last().cloned().unwrap_or(top),
-            children,
-            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
-            get_char_top: Arc::new(move |offset| char_tops[offset as usize]),
-        }
+        let mut layout=LayoutQuery::default();
+        layout.text="x".repeat(text_len as usize);
+        layout.bottom=char_bottoms.last().cloned().unwrap_or(0.0);
+        layout.children=children;
+        layout.get_char_bottom=Arc::new(move |offset| char_bottoms[offset as usize]);
+        layout.get_char_top=Arc::new(move |offset| char_tops[offset as usize]);
+        return layout;
     }
 
     #[test]
@@ -354,6 +347,7 @@ mod first_fitting_char_tests_no_children {
 
 #[cfg(test)]
 mod first_fitting_char_tests_with_children {
+    use crate::renderer::layout_builder::LayoutQuery;
     use super::*;
     use crate::renderer::find_page_boundary::*;
     use std::sync::Arc;
@@ -368,18 +362,16 @@ mod first_fitting_char_tests_with_children {
         let char_tops = char_tops.to_vec();
         let char_bottoms = char_bottoms.to_vec();
 
-        LayoutQuery {
-            text: "x".repeat(text_len as usize),
-            char_start,
-            top,
-            
-            
-            bottom: char_bottoms.last().cloned().unwrap_or(top),
-            children: vec![],
-            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
-            get_char_top: Arc::new(move |offset| char_tops[offset as usize]),
-        }
+        let mut layout=LayoutQuery::default();
+        layout.text="x".repeat(text_len as usize);
+        layout.char_start=char_start;
+        layout.bottom=char_bottoms.last().cloned().unwrap_or(0.0);
+        layout.children=vec![];
+        layout.get_char_bottom=Arc::new(move |offset| char_bottoms[offset as usize]);
+        layout.get_char_top=Arc::new(move |offset| char_tops[offset as usize]);
+        return layout;
     }
+
 
     fn create_container(children: Vec<LayoutQuery>) -> LayoutQuery {
         let max_child_bottom = children
@@ -391,17 +383,16 @@ mod first_fitting_char_tests_with_children {
             .map(|c| c.top)
             .fold(f64::MAX, f64::min);
 
-        LayoutQuery {
-            text: String::new(),
-            char_start: 0,
-            
-            
-            top: if min_child_top.is_finite() { min_child_top } else { 0.0 },
-            bottom: max_child_bottom,
-            children,
-            get_char_bottom: Arc::new(|_| panic!("Container node must not access char_bottoms")),
-            get_char_top: Arc::new(|_| panic!("Container node must not access char_tops")),
-        }
+        let mut layout=LayoutQuery::default();
+        layout.text= String::new();
+        layout.char_start=0;
+              
+        layout.top= if min_child_top.is_finite() { min_child_top } else { 0.0 };
+        layout.bottom= max_child_bottom;
+        layout.children= children;
+        layout.get_char_bottom= Arc::new(|_| panic!("Container node must not access char_bottoms"));
+        layout.get_char_top= Arc::new(|_| panic!("Container node must not access char_tops"));
+        return layout;
     }
 
     #[test]
@@ -419,6 +410,7 @@ mod first_fitting_char_tests_with_children {
 #[cfg(test)]
 mod last_fitting_char_tests_with_children {
     use std::sync::Arc;
+    use crate::renderer::layout_builder::LayoutQuery;
     use super::*;
     use crate::renderer::find_page_boundary::*;
 
@@ -429,18 +421,15 @@ mod last_fitting_char_tests_with_children {
         char_start: u32,
     ) -> LayoutQuery {
         let char_bottoms = char_bottoms.to_vec();
-
-        LayoutQuery {
-            text: "x".repeat(text_len as usize),
-            char_start,
-            top: 0.0,
-            bottom: char_bottoms.last().cloned().unwrap_or(0.0),
-            children: vec![],
-            get_char_bottom: Arc::new(move |offset| char_bottoms[offset as usize]),
-            get_char_top: Arc::new(move |_offset| 0.0),
-            
-            
-        }
+        let mut layout=LayoutQuery::default();
+        layout.text="x".repeat(text_len as usize);
+        layout.char_start=char_start;
+        layout.top=0.0;
+        layout.bottom=char_bottoms.last().cloned().unwrap_or(0.0);
+        layout.children=vec![];
+        layout.get_char_bottom=Arc::new(move |offset| char_bottoms[offset as usize]);
+        layout.get_char_top=Arc::new(move |_offset| 0.0);
+        return layout;
     }
 
     /// Container node (children only, no text)
@@ -452,21 +441,16 @@ mod last_fitting_char_tests_with_children {
             .map(|c| c.bottom)
             .fold(0.0, f64::max);
 
-        LayoutQuery {
-            text: String::new(),
-            char_start: 0,
-            top: 0.0,
-            bottom: max_child_bottom,
-            children,
-            get_char_bottom: Arc::new(|_| {
-                panic!("Container node must not access char_bottoms")
-            }),
-            get_char_top: Arc::new(|_| {
-                panic!("Container node must not access char_tops")
-            }),
+        let mut layout=LayoutQuery::default();
+        layout.text= String::new();
+        layout.char_start=0;
+        layout.top=0.0;
+        layout.bottom=max_child_bottom;
+        layout.children=children;
+        layout.get_char_bottom= Arc::new(|_| {panic!("Container node must not access char_bottoms")});
+        layout.get_char_top= Arc::new(|_| {panic!("Container node must not access char_tops")});
+        return layout;
             
-            
-        }
     }
 
     // ------------------------------------------------------------

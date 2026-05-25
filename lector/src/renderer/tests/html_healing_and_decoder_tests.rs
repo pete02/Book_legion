@@ -15,7 +15,13 @@ mod html_decoder_tests {
         let decoded_html = decode_html(html);
         assert_eq!(decoded_html, "<div>Hello World!</div>");
     }
-        #[test]
+    #[test]
+    fn htlm_deocder_strips_whitespace(){
+        let html = "<div>Hello World!</div>   <div>Hello World!</div>";
+        let decoded_html = decode_html(html);
+        assert_eq!(decoded_html, "<div>Hello World!</div><div>Hello World!</div>");
+    }
+    #[test]
     fn htlm_deocder_strips_comments(){
         let html = "<div>Hello World!<!-- hidden --></div>";
         let decoded_html = decode_html(html);

@@ -8,13 +8,28 @@ const VOID_ELEMENTS: &[&str] = &[
 ];
 
 pub fn decode_html(html: &str) -> String {
-    strip_html_comments(&html_escape::decode_html_entities(html).to_string())
+    let mut text=html_escape::decode_html_entities(html).to_string().trim().to_string();
+    text=strip_whitespace_between_tags(&text);
+    text=strip_html_comments(&text);
+
+    text
 }
+
+
 pub fn strip_html_comments(text: &str) -> String {
     static COMMENT_RE: std::sync::LazyLock<Regex> = 
         std::sync::LazyLock::new(|| Regex::new(r"<!--.*?-->").unwrap());
     COMMENT_RE.replace_all(text, "").to_string()
 }
+
+use std::sync::LazyLock;
+pub fn strip_whitespace_between_tags(text: &str) -> String {
+    static WS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?s)(</\w+>)\s+(<\w)").unwrap()
+    });
+    WS_RE.replace_all(text, "$1$2").to_string()
+}
+
 
 pub fn heal_html(html: &str) -> String {
     let mut output = String::with_capacity(html.len());
