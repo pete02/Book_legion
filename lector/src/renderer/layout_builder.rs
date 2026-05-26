@@ -61,8 +61,6 @@ impl LayoutQuery {
             let children_end = self.children.iter().map(|c| c.char_start+ c.text_len()).max().unwrap_or(0);
             return children_end.saturating_sub(self.char_start)+self.end_tag_len
         }
-
-
     }
 
 

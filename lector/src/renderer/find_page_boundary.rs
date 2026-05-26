@@ -1,8 +1,3 @@
-use std::{fmt::format, sync::Arc};
-use dioxus::logger::tracing;
-use web_sys::HtmlElement;
-
-use crate::renderer::{self, sentence_boundaries};
 use crate::renderer::layout_builder::LayoutQuery;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,84 +7,79 @@ pub enum FitResult {
     LastFitting(u32),
 }
 
+//takes in a LayoutQuery and the global bottom of the viewport. 
+//Returns the FitResult, relative to the given LayoutQuery
+pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
+    if layout.text_len() ==0 {
+        return FitResult::AllFit
+    }
 
-pub fn last_fitting_char(layout: &LayoutQuery, page_height: f64) -> FitResult {
-    
-    console(&format!("last fitting char, has children: {:?}", layout.children.len()));
-    console(&format!("layout {:?}; page height: {:?}", layout, page_height));
-    console(&format!("layout text: {}", layout.print_text()));
-
-    if layout.top > page_height {return FitResult::NoneFit;}
-    if layout.bottom() == page_height {return FitResult::LastFitting(layout.char_start + layout.text_len() - 1);}
-    if layout.bottom() < page_height {return FitResult::AllFit;}
-    console("layout height ok");
-    if layout.children.is_empty() && layout.text_len() == 0 {return FitResult::AllFit;} 
-    if page_height <= 0.0 {return FitResult::NoneFit;}
-    console("pre-checks cleared");
-    let mut best_child_fit=FitResult::NoneFit;
-    for child in &layout.children {
-        console("going for child");
-        let child_fit = last_fitting_char(child, page_height);
-        console(&format!("returned: {:?}", child_fit));
-        match child_fit{
-            FitResult::AllFit=> best_child_fit = FitResult::LastFitting(child.char_start+child.text_len()),
-            FitResult::NoneFit=> return best_child_fit,
-            FitResult::LastFitting(_)=> {
-                best_child_fit = child_fit
-            },
+    for child_idx in 0..layout.children.len(){
+        let current_child = &layout.children[child_idx];
+        match last_fitting_char(current_child, page_bottom) {
+            FitResult::AllFit => continue,
+            FitResult::NoneFit => return extract_previous_child_len(layout, child_idx),
+            FitResult::LastFitting(i) => return FitResult::LastFitting(current_child.char_start + i-layout.char_start),
         }
     }
 
-    if layout.children.len() > 0{
-        return best_child_fit;
+    if !layout.children.is_empty(){
+        return FitResult::AllFit
     }
 
     let mut best_bottom=FitResult::NoneFit;
-    if layout.children.len() == 0{
-        for i in 0..layout.text_len() {
-            let char_bottom = (layout.get_char_bottom)(i);
-            console(&format!("checking: {}, got bottom: {}", i, char_bottom));
-            if char_bottom <= page_height {
-                best_bottom = FitResult::LastFitting(layout.char_start+i);
-            } else {
-                break;
-            }
-        }
-    }
-
-    console(&format!("Last fitting: {:?}, will return {:?}", layout, best_bottom));
-
-   best_bottom
-}
-
-
-pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
-    if layout.bottom() < page_top { return FitResult::NoneFit; }
-    if layout.top == page_top   { return FitResult::LastFitting(layout.char_start); }
-    if layout.top > page_top    { return FitResult::AllFit; }
-    if layout.children.is_empty() && layout.text_len() == 0 { return FitResult::AllFit; }
-    if page_top >= f64::MAX     { return FitResult::NoneFit; }
-
-    // Walk children in reverse — last child is topmost in bottom→top flow
-    for child in layout.children.iter().rev() {
-        let child_fit = first_fitting_char(child, page_top);
-        if child_fit != FitResult::AllFit && child_fit != FitResult::NoneFit {
-            return child_fit;
-        }
-    }
-
-    // Walk chars from last to first — char text_len()-1 is topmost
-    let mut best_top = FitResult::NoneFit;
-    for i in (0..layout.text_len()).rev() {
-        let char_top = (layout.get_char_top)(i);
-        if char_top >= page_top {
-            best_top = FitResult::LastFitting(layout.char_start + i);
+    for i in 0..layout.text_len() {
+        let char_bottom = (layout.get_char_bottom)(i);
+        console(&format!("checking: {}, got bottom: {}", i, char_bottom));
+        if char_bottom <= page_bottom {
+            best_bottom = FitResult::LastFitting(i);
         } else {
             break;
         }
     }
 
-    best_top
+    if best_bottom == FitResult::LastFitting(layout.text_len()-1){
+        return FitResult::AllFit;
+    }
+
+   best_bottom
+}
+
+
+fn extract_previous_child_len(layout: &LayoutQuery, idx: usize)->FitResult{
+    if idx==0{
+        return FitResult::NoneFit
+    }
+    if idx >=layout.children.len(){
+        return FitResult::AllFit
+    }
+
+    let prev_child=&layout.children[idx-1];
+    FitResult::LastFitting(prev_child.char_start+prev_child.text_len()-layout.char_start-1)
+}
+
+
+pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
+    if layout.text_len() ==0 {
+        return FitResult::AllFit
+    }
+
+    let mut best_top=FitResult::NoneFit;
+    for i in (0..layout.text_len()).rev() {
+        let char_top = (layout.get_char_top)(i);
+        console(&format!("checking: {}, got top: {}", i, char_top));
+        if char_top >= page_top {
+            best_top = FitResult::LastFitting(i);
+        } else {
+            break;
+        }
+    }
+
+    if best_top == FitResult::LastFitting(0){
+        return FitResult::AllFit;
+    }
+
+   best_top
 }
 
 pub fn split_html_at(html: &str, byte_index: usize) -> &str {

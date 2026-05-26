@@ -122,8 +122,10 @@ mod html_decoder_tests {
     }
 }
 
+
+#[cfg(test)]
 mod html_healing_tests {
-    use crate::renderer::*;
+    use crate::renderer::html_healer;
     #[test]
     fn does_not_change_well_formed_html() {
         let html = "<p>Hello <em>world</em></p>";

@@ -22,10 +22,35 @@ use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_en
 
 
 
-pub fn find_first_sentence_boundary(text: &str, limit_from_end: usize) -> Option<usize> {
+pub fn find_first_sentence_boundary(text: &str, start: usize) -> Option<usize> {
+    let split_text = split_html_at(text, start);
 
+    let tag_end = first_closing_tag(split_text);
+    let punct_end = first_sentence_terminator(split_text);
 
-    None
+    match (tag_end, punct_end) {
+        (Some(t), Some(p)) => Some(start + t.min(p)),
+        (Some(t), None)    => Some(start + t),
+        (None, Some(p))    => Some(start + p),
+        (None, None)       => None,
+    }
+}
+
+fn first_closing_tag(text: &str) -> Option<usize> {
+    let re = Regex::new(r"</[^>]+>").unwrap();
+    re.find(text).map(|m| m.end())
+}
+
+fn first_sentence_terminator(text: &str) -> Option<usize> {
+    let re = Regex::new(r#"[.!?][!?.)}\]'"»』\s]*"#).unwrap();
+    re.find_iter(text)
+        .filter(|m| {
+            let before = text[..m.start()].chars().next_back();
+            let after = text[m.end()..].chars().next();
+            !matches!((before, after), (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit())
+        })
+        .next()
+        .map(|m| m.end())
 }
 
 

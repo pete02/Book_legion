@@ -1,8 +1,6 @@
 
 #[cfg(test)]
 mod forward_boundary_tests {
-    use super::*;
-    
     use crate::renderer::*;
     // -------------------------------------------------------------------------
     // Helpers
@@ -271,7 +269,6 @@ mod forward_boundary_tests {
 
 #[cfg(test)]
 mod backward_boundary_tests {
-    use super::*;
     use crate::renderer::*;
     
 
@@ -281,8 +278,6 @@ mod backward_boundary_tests {
         expected: Option<usize>,
     ) {
         // Convert limit from "from end" to "from start"
-        let limit = input.len().saturating_sub(limit_from_end);
-        
         let actual = sentence_boundaries::find_first_sentence_boundary(input, limit_from_end);
 
         let visualize = |pos: Option<usize>| {
