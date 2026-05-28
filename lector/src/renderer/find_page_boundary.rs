@@ -33,7 +33,6 @@ pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
     let mut best_bottom=FitResult::NoneFit;
     for i in 0..layout.text_len() {
         let char_bottom = (layout.get_char_bottom)(i);
-        console(&format!("checking: {}, got bottom: {}", i, char_bottom));
         if char_bottom <= page_bottom {
             best_bottom = FitResult::LastFitting(i);
         } else {
@@ -119,7 +118,6 @@ pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     let mut best_top=FitResult::NoneFit;
     for i in (0..layout.text_len()).rev() {
         let char_top = (layout.get_char_top)(i);
-        console(&format!("checking: {}, got top: {}", i, char_top));
         if char_top >= page_top {
             best_top = FitResult::LastFitting(i);
         } else {

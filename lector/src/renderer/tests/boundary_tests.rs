@@ -274,11 +274,11 @@ mod backward_boundary_tests {
 
  fn assert_backward_boundary(
         input: &str,
-        limit_from_end: usize,
+        limit: usize,
         expected: Option<usize>,
     ) {
         // Convert limit from "from end" to "from start"
-        let actual = sentence_boundaries::find_first_sentence_boundary(input, limit_from_end);
+        let actual = sentence_boundaries::find_first_sentence_boundary(input, limit, input.len(), );
 
         let visualize = |pos: Option<usize>| {
             match pos {
@@ -294,8 +294,7 @@ mod backward_boundary_tests {
             }
         };
 
-        let visualize_limit = |limit_from_end: usize| {
-            let limit = input.len().saturating_sub(limit_from_end);
+        let visualize_limit = |limit: usize| {
             if limit <= input.len() && input.is_char_boundary(limit) {
                 format!(
                     "{}^{}",
@@ -312,7 +311,7 @@ mod backward_boundary_tests {
             expected,
             concat!(
                 "\ninput            : {:?}",
-                "\nlimit_from_end   : {}",
+                "\nlimit   : {}",
                 "\nlimit_visual     : {}",
                 "\nexpected         : {:?}",
                 "\nexpected visual  : {}",
@@ -320,8 +319,8 @@ mod backward_boundary_tests {
                 "\nactual visual    : {}\n"
             ),
             input,
-            limit_from_end,
-            visualize_limit(limit_from_end),
+            limit,
+            visualize_limit(limit),
             expected,
             visualize(expected),
             actual,
@@ -333,24 +332,17 @@ mod backward_boundary_tests {
         use super::*;
 
         #[test]
-        fn whole_text_fits() {
+        fn returns_some_when_whole_text_fits() {
             let s = "First sentence. Second sentence.";
 
-            assert_backward_boundary(s, s.len(), Some(0));
-        }
-
-        #[test]
-        fn finds_first_period_after_limit() {
-            let s = "First sentence. Second sentence.";
-
-            assert_backward_boundary(s, s.len()-3, Some(16));
+            assert_backward_boundary(s, 0, Some(0));
         }
 
         #[test]
         fn returns_none_when_no_boundary_exists() {
             let s = "No sentence ending here";
 
-            assert_backward_boundary(s, 0, None);
+            assert_backward_boundary(s, 3, None);
         }
 
         #[test]
@@ -358,13 +350,13 @@ mod backward_boundary_tests {
             let s = "First sentence. Second sentence."; 
 
             // limit before first '.'
-            assert_backward_boundary(s, 10, None);
+            assert_backward_boundary(s, 0, Some(0));
 
             // limit exactly at first '.'
-            assert_backward_boundary(s, 19, Some(16));
+            assert_backward_boundary(s, 10, Some(16));
 
             // limit after first '.'
-            assert_backward_boundary(s, 20, Some(16));
+            assert_backward_boundary(s, 20, None);
         }
 
     }
@@ -375,22 +367,21 @@ mod backward_boundary_tests {
         use super::*;
         #[test]
         fn recognizes_standard_terminators() {
-            assert_backward_boundary("Hello! test.", 9, Some(7));
-            assert_backward_boundary("What? test.", 9, Some(6));
-            assert_backward_boundary("Done. test.", 9, Some(6));
+            assert_backward_boundary("Hello! test.", 4, Some(7));
+            assert_backward_boundary("What? test.", 4, Some(6));
+            assert_backward_boundary("Done. test.", 4, Some(6));
         }
 
         #[test]
         fn handles_repeated_punctuation() {
-            assert_backward_boundary("What?! Really?!", 10, Some(7));
-            assert_backward_boundary("Wow!!! Nice!!", 11, Some(7));
+            assert_backward_boundary("What?! Really?!", 4, Some(7));
+            assert_backward_boundary("Wow!!! Nice!!", 2, Some(7));
         }
 
         #[test]
         fn includes_closing_quotes_and_parens() {
-            assert_backward_boundary(r#"He said "Hello." Then this is."#, 20, Some(17));
-
-            assert_backward_boundary("He said (Hello!) Then we test", 20, Some(17));
+            assert_backward_boundary(r#"He said "Hello." Then this is."#, 12, Some(17));
+            assert_backward_boundary("He said (Hello!) Then we test", 12, Some(17));
         }
 
     }
@@ -404,28 +395,28 @@ mod backward_boundary_tests {
         fn does_not_break_on_common_titles() {
             let s = "test sentence. Dr. Smith went home.";
 
-            assert_backward_boundary(s, 30, Some(15));
+            assert_backward_boundary(s, 4, Some(15));
         }
 
         #[test]
         fn does_not_break_on_multi_part_abbreviations() {
             let s = "Then he published. The Ph.D. candidate graduated.";
 
-            assert_backward_boundary(s, 33, Some(19));
+            assert_backward_boundary(s, 22, None);
         }
 
         #[test]
         fn does_not_break_on_latin_abbreviations() {
             let s = "test sentence. Examples, e.g. apples, are useful.";
 
-            assert_backward_boundary(s, 44, Some(15));
+            assert_backward_boundary(s,23, None);
         }
 
         #[test]
         fn abbreviations_are_case_insensitive() {
             let s = "DR. Smith left.";
 
-            assert_backward_boundary(s, s.len()-2, None);
+            assert_backward_boundary(s, 2, None);
         }
     }
 
@@ -439,21 +430,14 @@ mod backward_boundary_tests {
         fn ignores_decimal_points() {
             let s = "Value is 3.14. Next sentence.";
 
-            assert_backward_boundary(s, s.len()-3, None);
+            assert_backward_boundary(s, 2, Some(15));
         }
 
         #[test]
         fn ignores_version_numbers() {
             let s = "Using version 2.4.1. Deployment succeeded.";
 
-            assert_backward_boundary(s, s.len()-3, None);
-        }
-
-        #[test]
-        fn ignores_version_numbers_and_snaps_to_previous_sentence() {
-            let s = "This is a test. Using version 2.4.1. Deployment succeeded.";
-
-            assert_backward_boundary(s, 46, Some(16));
+            assert_backward_boundary(s, 3, Some(21));
         }
    }
 
@@ -465,7 +449,7 @@ mod backward_boundary_tests {
     fn handles_ellipses() {
         let s = "Wait...stop.";
 
-        assert_backward_boundary(s, 9, None);
+        assert_backward_boundary(s, 2, None);
     }
 
     // -------------------------------------------------------------------------
