@@ -73,35 +73,47 @@ pub fn last_fitting_char_vec(layouts: &Vec<LayoutQuery>, page_bottom: f64) -> (F
     (FitResult::AllFit,layouts.len()-1)
 }
 
-fn extract_previous_child_len(layout: &LayoutQuery, idx: usize)->FitResult{
-    if idx==0{
-        return FitResult::NoneFit
-    }
-    if idx >=layout.children.len(){
-        return FitResult::AllFit
+pub fn first_fitting_char_vec(layouts: &Vec<LayoutQuery>, page_bottom: f64) -> (FitResult,usize) {
+    if layouts.len()==0{
+        return (FitResult::AllFit, 0);
     }
 
-    let prev_child=&layout.children[idx-1];
-    FitResult::LastFitting(prev_child.char_start+prev_child.text_len()-layout.char_start-1)
+    for idx in (0..layouts.len()).rev(){
+        let current = &layouts[idx];
+        match first_fitting_char(current, page_bottom) {
+            FitResult::AllFit => continue,
+            FitResult::NoneFit => {
+                if idx==layouts.len()-1{
+                    return (FitResult::NoneFit, layouts.len()-1);
+                }else{
+                    return (FitResult::AllFit, idx+1);
+                }
+            },
+            FitResult::LastFitting(i) => return (FitResult::LastFitting(i), idx),
+        }
+    }
+
+    (FitResult::AllFit,0)
 }
-
 
 pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     if layout.text_len() ==0 {
         return FitResult::AllFit
     }
 
-    for child in (0..layout.children.len()).rev(){
-        let current_child=&layout.children[child];
-        match first_fitting_char(current_child, page_top) {
-            FitResult::AllFit => continue,
-            FitResult::NoneFit => return extract_next_child_len(layout, child),
-            FitResult::LastFitting(i) => return FitResult::LastFitting(current_child.char_start + i-layout.char_start),
-        }
-    }
-
     if !layout.children.is_empty(){
-        return FitResult::AllFit
+        let res=first_fitting_char_vec(&layout.children, page_top);
+        match res{
+            (FitResult::AllFit, idx) => {
+                if idx == 0{
+                    return FitResult::AllFit;
+                }else{
+                    return FitResult::LastFitting(layout.children[idx].char_start - layout.char_start);
+                }
+            },
+            (FitResult::NoneFit, _) => return FitResult::NoneFit,
+            (FitResult::LastFitting(i), idx) => return  FitResult::LastFitting(layout.children[idx].char_start + i - layout.char_start),
+        }
     }
 
     let mut best_top=FitResult::NoneFit;
@@ -120,20 +132,6 @@ pub fn first_fitting_char(layout: &LayoutQuery, page_top: f64) -> FitResult {
     }
 
    best_top
-}
-
-fn extract_next_child_len(layout: &LayoutQuery, idx: usize)->FitResult{
-    println!("Extracting next child length for index: {}. children: {}", idx, layout.children.len());
-    if layout.children.len()==1{
-        return  FitResult::NoneFit;
-    }
-
-    if idx==layout.children.len()-1{
-        return FitResult::NoneFit
-    }
-
-    let next_child=&layout.children[idx+1];
-    FitResult::LastFitting(next_child.char_start-layout.char_start)
 }
 
 

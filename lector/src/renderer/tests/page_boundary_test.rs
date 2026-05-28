@@ -1174,3 +1174,354 @@ mod first_fitting_char_tests_with_children {
         }
     }
 }
+
+#[cfg(test)]
+mod first_fitting_char_vec_tests {
+    use std::sync::Arc;
+    use crate::renderer::layout_builder::LayoutQuery;
+    use crate::renderer::find_page_boundary::*;
+
+    // =========================================================================
+    // Test helpers
+    // =========================================================================
+
+    fn make_leaf(char_start: u32, char_tops: Vec<f64>) -> LayoutQuery {
+        let text_len = char_tops.len();
+        let tops = char_tops.clone();
+        let mut layout = LayoutQuery::default();
+        layout.char_start = char_start;
+        layout.text = "x".repeat(text_len);
+        layout.top = char_tops.first().cloned().unwrap_or(0.0);
+        layout.bottom = char_tops.last().cloned().unwrap_or(0.0);
+        layout.children = vec![];
+        layout.get_char_bottom = Arc::new(|_| 0.0);
+        layout.get_char_top = Arc::new(move |i| tops[i as usize]);
+        layout
+    }
+
+    fn make_container(children: Vec<LayoutQuery>) -> LayoutQuery {
+        let top = children.iter().map(|c| c.top).fold(f64::MAX, f64::min);
+        let bottom = children.iter().map(|c| c.bottom).fold(0.0_f64, f64::max);
+        let char_start = children.first().map(|c| c.char_start).unwrap_or(0);
+        let mut layout = LayoutQuery::default();
+        layout.char_start = char_start;
+        layout.text = String::new();
+        layout.top = top;
+        layout.bottom = bottom;
+        layout.children = children;
+        layout.get_char_bottom = Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
+        layout
+    }
+
+    // =========================================================================
+    // mod core
+    // =========================================================================
+    mod core {
+        use super::*;
+
+        #[test]
+        fn single_layout_all_fit() {
+            // Only layout, all tops >= page_top → (AllFit, 0).
+            let layouts = vec![make_leaf(0, vec![60.0, 70.0, 80.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn single_layout_none_fit() {
+            // Only layout, all tops < page_top → (NoneFit, 0) which equals len-1=0, legal.
+            let layouts = vec![make_leaf(0, vec![10.0, 20.0, 30.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::NoneFit, 0));
+        }
+
+        #[test]
+        fn single_layout_partial_fit() {
+            // Char 0 top < page_top, char 1 top >= page_top.
+            // FirstFitting(1) local to layout[0]. Returns (LastFitting(1), 0).
+            let layouts = vec![make_leaf(0, vec![10.0, 60.0, 70.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 0));
+        }
+
+        #[test]
+        fn multiple_layouts_all_fit() {
+            // Every layout fully fits → (AllFit, 0).
+            let layouts = vec![
+                make_leaf(0, vec![60.0, 70.0]),
+                make_leaf(2, vec![80.0, 90.0]),
+                make_leaf(4, vec![100.0, 110.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn multiple_layouts_last_none_fit() {
+            // Last layout (checked first) already none fit → (NoneFit, len-1=2).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![60.0, 70.0]),
+                make_leaf(4, vec![80.0, 90.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+
+        #[test]
+        fn last_fits_second_to_last_none_fit_returns_all_fit_not_none_fit() {
+            // layouts[2] all fit, layouts[1] none fit.
+            // NoneFit at idx=1 is illegal (1 < len-1=2) → must return (AllFit, 2).
+            let layouts = vec![
+                make_leaf(0, vec![60.0, 70.0]),
+                make_leaf(2, vec![10.0, 20.0]),
+                make_leaf(4, vec![80.0, 90.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 2));
+        }
+
+        #[test]
+        fn multiple_layouts_first_fitting_in_middle() {
+            // layouts[0] none fit, layouts[1] none fit, layouts[2] all fit, layouts[3] all fit.
+            // Iterating from end: layouts[3] all fit, layouts[2] all fit, layouts[1] none fit.
+            // NoneFit at idx=1 is illegal → (AllFit, 2).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 40.0]),
+                make_leaf(4, vec![60.0, 70.0]),
+                make_leaf(6, vec![80.0, 90.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 2));
+        }
+
+        #[test]
+        fn partial_fit_in_middle_layout() {
+            // layouts[0] none fit, layouts[1] partial, layouts[2] all fit, layouts[3] all fit.
+            // Iterating from end: [3] all fit, [2] all fit, [1] partial → (LastFitting(1), 1).
+            // k=1 local to layouts[1]: char 0 top < page_top, char 1 top >= page_top.
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 60.0]),
+                make_leaf(4, vec![70.0, 80.0]),
+                make_leaf(6, vec![90.0, 100.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 1));
+        }
+
+        #[test]
+        fn result_local_to_layout_at_returned_index() {
+            // layouts[1] has char_start=10. Partial: char 0 top < page_top, char 1 top >= page_top.
+            // LastFitting(1) — local to layouts[1], not global index 11.
+            let layouts = vec![
+                make_leaf(0,  vec![10.0, 20.0]),
+                make_leaf(10, vec![30.0, 60.0]),
+                make_leaf(12, vec![70.0, 80.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 1));
+        }
+
+        #[test]
+        fn container_layouts_respected() {
+            let child1 = make_leaf(0, vec![10.0, 20.0]);
+            let child2 = make_leaf(2, vec![30.0, 40.0]);
+            let container = make_container(vec![child1, child2]);
+            // container: all tops < page_top → none fit.
+            // leaf: all tops >= page_top → all fit.
+            // NoneFit at container (idx=0) is illegal (0 < len-1=1) → (AllFit, 1).
+            let layouts = vec![
+                container,
+                make_leaf(4, vec![60.0, 70.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+    }
+
+    // =========================================================================
+    // mod boundary
+    // =========================================================================
+    mod boundary {
+        use super::*;
+
+        #[test]
+        fn char_top_exactly_on_page_top_fits() {
+            // Last layout: char 0 top == page_top → fits → AllFit at last idx.
+            // Previous layout none fit → NoneFit at idx=0 illegal → (AllFit, 1).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![50.0, 60.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+
+        #[test]
+        fn char_top_one_epsilon_below_page_top_does_not_fit() {
+            // Last layout: char 0 top=49.999 < 50.0 → doesn't fit → NoneFit at len-1.
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![49.999]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::NoneFit, 1));
+        }
+
+        #[test]
+        fn char_top_one_epsilon_above_page_top_fits() {
+            // Last layout: char 0 top=50.001 > 50.0 → fits.
+            // Previous layout none fit → (AllFit, 1).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![50.001, 60.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+
+        #[test]
+        fn last_layout_partial_exactly_on_boundary() {
+            // Last layout: char 0 top < page_top, char 1 top == page_top → partial.
+            // LastFitting(1) local to last layout.
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 50.0, 70.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 1));
+        }
+
+        #[test]
+        fn none_fit_only_legal_at_last_index() {
+            // layouts[1] (last) all fit, layouts[0] none fit.
+            // NoneFit at idx=0 < len-1=1 is illegal → (AllFit, 1).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![60.0, 70.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+
+        #[test]
+        fn single_char_top_exactly_on_boundary_all_fit() {
+            let layouts = vec![make_leaf(0, vec![50.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn single_char_top_below_boundary_none_fit() {
+            let layouts = vec![make_leaf(0, vec![30.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::NoneFit, 0));
+        }
+
+        #[test]
+        fn zero_page_top_all_layouts_fit() {
+            // page_top=0.0: all tops >= 0.0 → everything fits → (AllFit, 0).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 40.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 0.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn negative_page_top_all_layouts_fit() {
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 40.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, -10.0), (FitResult::AllFit, 0));
+        }
+    }
+
+    // =========================================================================
+    // mod edge_cases
+    // =========================================================================
+    mod edge_cases {
+        use super::*;
+
+        #[test]
+        fn empty_vec_all_fit_at_zero() {
+            let layouts: Vec<LayoutQuery> = vec![];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn single_oversized_layout_all_fit() {
+            // A layout far below page_top still fits from the top perspective.
+            let layouts = vec![make_leaf(0, vec![2000.0, 2010.0])];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn all_layouts_none_fit_returns_none_fit_at_last_index() {
+            // All tops < page_top. Only legal NoneFit is at len-1.
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 40.0]),
+                make_leaf(4, vec![45.0, 49.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::NoneFit, 2));
+        }
+
+        #[test]
+        fn large_char_start_result_still_local() {
+            // layouts[1] has char_start=1000. Partial: char 0 top < page_top, char 1 top >= page_top.
+            // Result must be LastFitting(1) — local to layouts[1] — not LastFitting(1001).
+            let layouts = vec![
+                make_leaf(0,    vec![10.0, 20.0]),
+                make_leaf(1000, vec![30.0, 60.0]),
+                make_leaf(1002, vec![70.0, 80.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 1));
+        }
+
+        #[test]
+        fn many_layouts_all_fit_returns_index_zero() {
+            let layouts: Vec<LayoutQuery> = (0..10)
+                .map(|i| make_leaf(i * 2, vec![(i * 2 + 1) as f64 * 10.0 + 100.0, (i * 2 + 2) as f64 * 10.0 + 100.0]))
+                .collect();
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 0));
+        }
+
+        #[test]
+        fn partial_fit_at_last_layout() {
+            // Last layout partial: char 0 top < page_top, char 1 top >= page_top.
+            // No need to check further back. Returns (LastFitting(1), last_idx).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 40.0]),
+                make_leaf(4, vec![45.0, 60.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 2));
+        }
+
+        #[test]
+        fn mixed_container_and_leaf_layouts() {
+            let child1 = make_leaf(0, vec![60.0, 70.0]);
+            let child2 = make_leaf(2, vec![80.0, 90.0]);
+            let container = make_container(vec![child1, child2]);
+            // leaf: none fit. container: all fit.
+            // NoneFit at leaf (idx=0) is illegal (0 < len-1=1) → (AllFit, 1).
+            let layouts = vec![
+                make_leaf(4, vec![10.0, 20.0]),
+                container,
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::AllFit, 1));
+        }
+
+        #[test]
+        fn consecutive_chars_same_top_crossing_boundary() {
+            // Last layout: chars 0-1 share top=30.0 < page_top, chars 2-3 share top=60.0 >= page_top.
+            // First fitting local index = 2. Returns (LastFitting(2), last_idx).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),
+                make_leaf(2, vec![30.0, 30.0, 60.0, 60.0]),
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(2), 1));
+        }
+
+        #[test]
+        fn three_layouts_middle_partial_earlier_irrelevant() {
+            // Iterating from end: layouts[2] all fit, layouts[1] partial → stop.
+            // layouts[0] is never checked.
+            // Returns (LastFitting(1), 1).
+            let layouts = vec![
+                make_leaf(0, vec![10.0, 20.0]),   // never checked
+                make_leaf(2, vec![30.0, 60.0]),   // partial
+                make_leaf(4, vec![70.0, 80.0]),   // all fit
+            ];
+            assert_eq!(first_fitting_char_vec(&layouts, 50.0), (FitResult::LastFitting(1), 1));
+        }
+    }
+}
