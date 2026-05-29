@@ -19,7 +19,7 @@ pub struct BookDriver {
 impl BookDriver {
     pub async fn new(book_id: String, chapter_idx: usize, viewport: HtmlElement) -> Option<Self> {
         let chapter_html = match infra::chapters::fetch_chapter(&book_id, chapter_idx).await{
-            Ok(text)=>text,
+            Ok(text)=>text.replace("calibre", "replaced"),
             Err(e)=>format!("<p>Error in getting chapter: {}</p>",e)
         };
         Some(Self {
@@ -35,7 +35,7 @@ impl BookDriver {
     pub async fn go(&mut self, direction: Direction) {
         match direction {
             Direction::Forward => self.drive_forward().await,
-            Direction::Back => todo!(),
+            Direction::Back => self.drive_backward().await,
         };
     }
     async fn load_next_chapter(&mut self){
@@ -44,11 +44,29 @@ impl BookDriver {
         self.next_chapter_pending=false;
 
         match infra::chapters::fetch_chapter(&self.book_id, self.chapter_idx).await{
-            Ok(chapter_text)=>self.chapter_html=decode_html(&chapter_text),
+            Ok(chapter_text)=>self.chapter_html=decode_html(&chapter_text).replace("calibre", "replaced"),
             Err(e)=>{
                 self.chapter_html=format!("<p>Error in loading the chapter: {}</p>", e);
                 self.chapter_idx -= 1;
                 self.next_chapter_pending=true;
+
+            }
+        }
+    }
+
+    async fn load_prev_chapter(&mut self){
+        self.chapter_idx -= 1;
+        self.next_chapter_pending=true;
+
+        match infra::chapters::fetch_chapter(&self.book_id, self.chapter_idx).await{
+            Ok(chapter_text)=>{
+                self.chapter_html=decode_html(&chapter_text).replace("calibre", "replaced");
+                self.char_position=self.chapter_html.len();
+            },
+            Err(e)=>{
+                self.chapter_html=format!("<p>Error in loading the chapter: {}</p>", e);
+                self.chapter_idx += 1;
+                self.next_chapter_pending=false;
 
             }
         }
@@ -62,6 +80,22 @@ impl BookDriver {
         match cut{
             None=>self.next_chapter_pending=true,
             Some(i)=>self.char_position=i
+        }
+    }
+
+    async fn drive_backward(&mut self){
+        if self.chapter_idx==0 && self.char_position==0{
+            console("end of book");
+            return ;
+        }
+
+        if self.char_position==0{
+            self.load_prev_chapter().await;
+        }
+
+        match cut_backward(&self.viewport, &self.chapter_html, self.char_position) {
+            Some(i) => self.char_position = i,
+            None => {},
         }
     }
 }
@@ -123,6 +157,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 
     let healed=html_healer::heal_html(&html[..char_end]);
     console(&format!("html: {}", healed));
+    
     let rect=viewport.get_bounding_client_rect();
     viewport.set_inner_html(&healed);
 
@@ -142,7 +177,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 
     console(&format!("Cutoff: {}", cutoff));
     console(&healed[cutoff..]);
-
+    console(&format!("left over: {}", &html[..cutoff]));
     let first=layouts.first().unwrap();
     if cutoff as u32== first.char_start{
         return None
@@ -157,7 +192,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
             viewport.set_inner_html(&complete_html);
             Some(start)
         },
-        None => Some(cutoff),
+        None => Some(0),
     }
 }
 
