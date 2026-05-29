@@ -48,12 +48,7 @@ impl LayoutQuery {
             get_char_top: Arc::new(|_| 0.0),
         }
     }
-    pub fn bottom(&self) -> f64 {
-        self.children
-            .iter()
-            .map(|c| c.bottom())
-            .fold(self.bottom, f64::max)
-    }
+
     pub fn text_len(&self) -> u32 {
         if self.children.len()==0{
             return self.text.len() as u32;
@@ -61,37 +56,6 @@ impl LayoutQuery {
             let children_end = self.children.iter().map(|c| c.char_start+ c.text_len()).max().unwrap_or(0);
             return children_end.saturating_sub(self.char_start)+self.end_tag_len
         }
-    }
-
-
-    pub fn print_text(&self)->String{
-        let mut text=self.text.clone();
-        for child in &self.children{
-            text=format!("{}; child: {}",text, child.print_text());
-        }
-        text
-    }
-
-    pub fn find_leaf_text_for_char_index(&self, global_index: u32) -> Option<(&str, u32)> {
-        if global_index >= self.char_start && global_index < self.char_start + self.text_len() {
-            return Some((&self.text, global_index - self.char_start));
-        }
-
-        for child in &self.children {
-            if let Some(found) = child.find_leaf_text_for_char_index(global_index) {
-                return Some(found);
-            }
-        }
-
-        None
-    }
-
-    pub fn subtree_end_char(&self) -> u32 {
-        let mut end = self.char_start + self.text_len();
-        for child in &self.children {
-            end = end.max(child.subtree_end_char());
-        }
-        end
     }
 }
 
@@ -319,9 +283,10 @@ fn char_bottom(node: &Node, local_offset: u32) -> f64 {
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
-fn console(text: &str){
+#[allow(dead_code)]
+fn console(_text: &str){
     #[cfg(target_arch = "wasm32")]
-    //console::log_1(&JsValue::from_str(text));
+    //console::log_1(&JsValue::from_str(_text));
     #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", text);
+    println!("{}", _text);
 }

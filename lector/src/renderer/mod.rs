@@ -3,9 +3,8 @@ pub mod sentence_boundaries;
 pub mod find_page_boundary;
 pub mod layout_builder;
 pub mod html_healer;
-use dioxus::html::view;
 use web_sys::HtmlElement;
-use crate::{infra, renderer::{find_page_boundary::{FitResult::{self, AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec, split_html_at}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
+use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 
 
 pub struct BookDriver {

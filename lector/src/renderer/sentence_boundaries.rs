@@ -30,7 +30,7 @@ pub fn find_first_sentence_boundary(text: &str, limit: usize, end: usize) -> Opt
 
     let split_text= split_html_at(text, new_limit);
     console("start return");
-    if let Some(mut start)=return_start(split_text, end-split_text.len(), end) {
+    if let Some(mut start)=return_start(split_text, end-split_text.len()) {
         if let Some((tagstart,len))=next_closing_tag(&text[start..end]) {
             if tagstart==0{
                 start +=len
@@ -46,7 +46,7 @@ pub fn find_first_sentence_boundary(text: &str, limit: usize, end: usize) -> Opt
     None
 }
 
-fn return_start(split_text:&str, start: usize, end: usize)->Option<usize>{
+fn return_start(split_text:&str, start: usize)->Option<usize>{
     let tag_end = first_opening_tag(split_text);
     let punct_end = first_sentence_terminator(split_text);
     console(&format!("split_text: {}", split_text));
@@ -152,8 +152,7 @@ fn first_sentence_terminator(text: &str) -> Option<usize> {
 fn is_abbreviation_period(text: &str, period_pos: usize) -> bool {
     // Get text before and after the period
     let before = &text[..period_pos];
-    let after = &text[period_pos + 1..];
-    
+
     // Check if there's text before the period (abbreviation must have something before it)
     if before.is_empty() {
         return false;
@@ -205,7 +204,7 @@ pub fn find_last_sentence_boundary(text: &str, limit: usize, start:usize) -> Opt
         text
     };
 
-    if let Some(end)=return_end(split_text, start, limit) {
+    if let Some(end)=return_end(split_text, start) {
         console(&format!("got end at: {}", end));
         let walked=walk_next_tag(text, walk_closing_punctuation(text, end));
         return Some(walked.max(end));
@@ -214,7 +213,7 @@ pub fn find_last_sentence_boundary(text: &str, limit: usize, start:usize) -> Opt
     
 }
 
-fn return_end(split_text:&str, start: usize, limit: usize)->Option<usize>{
+fn return_end(split_text:&str, start: usize)->Option<usize>{
     let tag_end = last_closing_tag(split_text);
     let punct_end = last_sentence_terminator(split_text);
     console(&format!("split_text: {}", split_text));
