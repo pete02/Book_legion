@@ -459,6 +459,7 @@ mod cut_forward{
 mod cut_backward {
     use super::*;
 
+
     /// Asserts that every descendant element of `root` has its top >=
     /// root.top, using getBoundingClientRect.
     ///
@@ -898,7 +899,7 @@ mod cut_backward {
                 r#"<p style="margin:0;margin-top:100px;line-height:40px">Block A</p>"#;
 
             let block_b =
-                r#"<p style="margin:0;line-height:40px">Block B</p>"#;
+                r#"<p style="margin:0;margin-top:100px;line-height:40px">Block B</p>"#;
 
             let block_c =
                 r#"<p style="margin:0;line-height:40px">Block C</p>"#;
@@ -914,6 +915,7 @@ mod cut_backward {
             let idx1 = cut_backward(&viewport, &html, html.len())
                 .expect("Expected step 1 cut index");
 
+            console(&format!("Step 1 cut index: {}, rebdered  {}", idx1, &html[idx1..]));
             // Step 2
             let idx2 = cut_backward(&viewport, &html, idx1)
                 .expect("Expected step 2 cut index");

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::{Element, Node, Range, Text};
-use crate::renderer::find_page_boundary::split_html_at;
+
 
 // ── Send+Sync wrapper ────────────────────────────────────────────────────────
 // WASM is single-threaded; this is safe in practice.

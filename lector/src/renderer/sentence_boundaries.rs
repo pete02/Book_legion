@@ -1,4 +1,3 @@
-use dioxus::html::{li, u::is};
 
 const ABBREVIATIONS: &[&str] = &[
     "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "vs", "etc", "eg", "ie",
@@ -18,7 +17,7 @@ const ABBREVIATIONS: &[&str] = &[
 
 use regex::Regex;
 
-use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_end}, console};
+use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_end}};
 
 
 
@@ -30,9 +29,13 @@ pub fn find_first_sentence_boundary(text: &str, limit: usize, end: usize) -> Opt
     }
 
     let split_text= split_html_at(text, new_limit);
-
-    if let Some(start)=return_start(split_text, end-split_text.len(), end) {
-        console(&format!("got start at: {}", start));
+    console("start return");
+    if let Some(mut start)=return_start(split_text, end-split_text.len(), end) {
+        if let Some((tagstart,len))=next_closing_tag(&text[start..end]) {
+            if tagstart==0{
+                start +=len
+            } 
+        }
         if start==end{
             return None;
         }else{
@@ -44,7 +47,7 @@ pub fn find_first_sentence_boundary(text: &str, limit: usize, end: usize) -> Opt
 }
 
 fn return_start(split_text:&str, start: usize, end: usize)->Option<usize>{
-    let tag_end = first_closing_tag(split_text);
+    let tag_end = first_opening_tag(split_text);
     let punct_end = first_sentence_terminator(split_text);
     console(&format!("split_text: {}", split_text));
     console(&format!("start: {}", start));
@@ -57,12 +60,12 @@ fn return_start(split_text:&str, start: usize, end: usize)->Option<usize>{
         }
         (Some(t), None) => {
             console(&format!(" tag found: {}",&split_text[..t]));
-            console(&format!(" tag found at: {}",end-split_text.len()-t));
+            console(&format!(" tag found at: {}",start+t));
             return Some(start+t)
         },
         (None, Some(p)) => {
             console(&format!(" pucnt found: {}",&split_text[..p]));
-            console(&format!(" pucnt found at: {}",p));
+            console(&format!(" pucnt found at: {}",start+p));
             return Some(start+p)
         },
         (None, None) => {
@@ -115,9 +118,9 @@ fn prev_opening_tag(text: &str) -> Option<(usize, usize)> {
     re.find(text).map(|m| (m.start(), m.end() - m.start()))
 }
 
-fn first_closing_tag(text: &str) -> Option<usize> {
-    let re = Regex::new(r"</[^>]+>").unwrap();
-    re.find(text).map(|m| m.end())
+fn first_opening_tag(text: &str) -> Option<usize> {
+    let re = Regex::new(r"<[^/\s>][^>]*>").unwrap();
+    re.find(text).map(|m| m.start())
 }
 
 fn first_sentence_terminator(text: &str) -> Option<usize> {
@@ -294,4 +297,15 @@ fn walk_closing_punctuation(text: &str, limit: usize) -> usize {
     } else {
         safe_limit
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+fn console(text: &str){
+    #[cfg(target_arch = "wasm32")]
+    console::log_1(&JsValue::from_str(text));
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", text);
 }

@@ -160,7 +160,10 @@ pub fn split_html_at_end(html: &str, byte_index: usize) -> &str {
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
-fn console(text: &str){
+#[allow(dead_code)]
+fn console(_text: &str){
     #[cfg(target_arch = "wasm32")]
-    console::log_1(&JsValue::from_str(text));
+    //console::log_1(&JsValue::from_str(_text));
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", _text);
 }

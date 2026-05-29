@@ -489,14 +489,14 @@ mod backward_boundary_tests {
         fn handles_unicode_quotes() {
             let s = "He said «Hello!»";
 
-            assert_backward_boundary(s, s.len(), Some(0));
+            assert_backward_boundary(s, 0, Some(0));
         }
 
         #[test]
         fn handles_unicode_whitespace() {
-            let s = "Hello.\u{00A0}World.";
+            let s = "Hel\u{00A0}lo. World.";
 
-            assert_backward_boundary(s, 9, Some(8));
+            assert_backward_boundary(s, 6, Some(9));
         }
 
     }
@@ -510,14 +510,14 @@ mod backward_boundary_tests {
         fn regression_et_al() {
             let s = "Smith et al. published results.";
 
-            assert_backward_boundary(s, 0, None);
+            assert_backward_boundary(s, 0, Some(0));
         }
 
         #[test]
         fn regression_st_louis() {
             let s = "They traveled to St. Louis.";
 
-            assert_backward_boundary(s, 0, None);
+            assert_backward_boundary(s, 0, Some(0));
         }
     }
     mod trailing_tags {

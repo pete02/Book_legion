@@ -97,12 +97,11 @@ pub fn handle_opening_tag(
         tag_stack.push(tag_name.to_lowercase());
     }
 
-    emit_open_tag(output, &tag_name, is_self_closing, source, tag_start, raw_end);
+    emit_open_tag(output, is_self_closing, source, tag_start, raw_end);
 }
 
 pub fn emit_open_tag(
     output: &mut String,
-    tag_name: &str,
     is_self_closing: bool,
     source: &str,
     raw_start: usize,
