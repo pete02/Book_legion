@@ -73,6 +73,8 @@ pub fn ControlButtons(audio:AudioData )->Element{
         div {
             style:  "display: flex; justify-content: center; align-items: center;",
             class: "my-2 flex items-center gap-4",
+            style: "margin-top: 15px;",
+
             button {
                 class: "
                     w-12 h-12 flex items-center justify-center
@@ -87,13 +89,33 @@ pub fn ControlButtons(audio:AudioData )->Element{
                     src: assets::FORWARD
                 }
             }
+            div {
+                class: "relative w-14 h-14 overflow-visible",
 
-            button {
-                class: "w-14 h-14 flex items-center justify-center transition active:scale-90",
-                onclick: move |_| { domain::audio::playpause(audio.playing);},
-                img {
-                    class: "w-full h-full object-contain",
-                    src: if *audio.playing.read() { assets::PAUSE } else { assets::PLAY }
+                button {
+                    class: "w-full h-full flex items-center justify-center transition active:scale-90",
+                    onclick: move |_| { if !(*audio.error.read()) {
+                            domain::audio::playpause(audio.play);
+                        }
+                    },
+                    img {
+                        class: "w-full h-full object-contain",
+                        src: if *audio.error.read() { 
+                            assets::ERROR
+                        } else if *audio.play.read() { 
+                            assets::PAUSE 
+                        } else { 
+                            assets::PLAY 
+                        }
+                    }
+                }
+
+                if *audio.loading.read() {
+                    img {
+                        class: "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin pointer-events-none max-w-none",
+                        style: "width: 130px; height: 130px;",
+                        src: assets::LOADING
+                    }
                 }
             }
             button {
@@ -122,11 +144,11 @@ fn AudioPlayer(mut audio:AudioData) -> Element {
                 id: "my_audio",
                 controls: false,
                 style: "display:none",
-                autoplay: true,
+                autoplay: "{audio.play}",
                 src: "{audio.audio_url}",
                 onplay: move |_| {
                     domain::wake::on_audio_play();
-                    audio.playing.set(true)
+                    audio.play.set(true)
                 },
                 onended: move |_| { 
                     domain::wake::on_audio_pause();

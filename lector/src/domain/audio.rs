@@ -16,11 +16,13 @@ pub struct AudioData{
     pub name: Signal<String>,
     pub audio_url: Signal<String>,
     pub current_cursor: Signal<BookCursor>,
-    pub playing: Signal<bool>,
+    pub loading: Signal<bool>,
+    pub play: Signal<bool>,
     pub progress: Signal<f64>,
     pub audio_urls:Signal<HashMap<BookCursor,String>>,
     pub chapter_change: Signal<Vec<Cursor>>,
     pub guard: Signal<bool>,
+    pub error: Signal<bool>,
     pub debounce: Signal<i32>
 }
 
@@ -33,8 +35,10 @@ fn error_audio(book_id: String)->AudioData{
         audio_url: use_signal(||"".to_owned()),
         progress: use_signal(||0.0),
         current_cursor: use_signal(||BookCursor::new("u1", "b1", 0, 0)),
-        playing: use_signal(||false),
+        play: use_signal(||true),
+        loading: use_signal(||false),
         audio_urls: use_signal(||HashMap::new()),
+        error: use_signal(||false),
         chapter_change: use_signal(|| Vec::new()),
         guard: use_signal(||false),
         debounce: use_signal(||0)
@@ -48,7 +52,6 @@ pub async fn load_audio(book_id:String, mut audio: AudioData){
     audio.book_id.set(book_id.clone());
     audio.name.set(book.title);
     audio.progress.set(domain::book::get_book_progress(book_id.clone()).await);
-    audio.playing.set(false);
     audio.current_cursor.set(cursor);
 
     spawn(async move{
@@ -58,15 +61,16 @@ pub async fn load_audio(book_id:String, mut audio: AudioData){
 
 pub fn use_audio(book_id: String) -> AudioData {
     let book =error_audio(book_id.clone());
-    let v=book.clone();
+    let mut audiodata=book.clone();
     use_effect(move ||{
         let book=book.clone();
         let book_id=book_id.clone();
         spawn(async move{
+            audiodata.loading.set(true);
             load_audio(book_id,book).await;
         });
     });
-    v
+    audiodata
 }
 
 fn cursors_ahead(audio: &AudioData) -> usize {
@@ -84,9 +88,14 @@ pub async fn get_audio_url(mut audio: AudioData) {
         }
         audio.audio_url.set(url.clone());
     } else {
+        if !(audio.play)() {
+            audio.loading.set(true);
+        }
+
         get_audio_urls(audio.clone()).await;
         if let Some(url) = (audio.audio_urls)().get(&current_cursor) {
             audio.audio_url.set(url.clone());
+            audio.loading.set(false);
         }
     }
     spawn(async move{
@@ -107,6 +116,8 @@ pub async fn get_audio_urls(mut audio:AudioData){
     match infra::audio::get_chunks((audio.current_cursor)(), AHEAD).await {
         Err(e)=>{
             tracing::error!("Error in loading audioo_urls: {}",e);
+            audio.loading.set(false);
+            audio.error.set(true);
         },
         Ok(urls)=>{
             let mut c=(audio.current_cursor)();
@@ -196,17 +207,20 @@ pub fn skip_backward(mut audio: AudioData) {
 }
 
 use wasm_bindgen::JsCast;
-pub fn playpause(playing: Signal<bool>){
-    let mut playing=playing.clone();
+pub fn playpause(mut play: Signal<bool>){
     let document = web_sys::window().unwrap().document().unwrap();
     if let Some(audio) = document.get_element_by_id("my_audio") {
-        if *playing.read(){
-            let audio: HtmlAudioElement = audio.dyn_into().unwrap();
-            playing.set(false);
-            let _ = audio.pause();
-        }else{
-            let audio: HtmlAudioElement = audio.dyn_into().unwrap();
+        let audio: HtmlAudioElement = audio.dyn_into().unwrap();
+        
+        // Toggle the signal first
+        let is_play=*play.read();
+        play.set(!is_play);
+        
+        // Then control the audio element
+        if *play.read() {
             let _ = audio.play();
+        } else {
+            let _ = audio.pause();
         }
     }
 }

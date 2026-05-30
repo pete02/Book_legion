@@ -72,8 +72,13 @@ pub async fn get_chunks(
     use gloo_timers::future::sleep;
 
     use crate::assets;
+    if cursor.book_id=="b2"{
+        sleep(Duration::from_millis(10000000)).await;
+    }
 
     if cursor.book_id != "b1" {
+        sleep(Duration::from_millis(1000)).await;
+
         return Err("no chunks found".into());
     }
 
@@ -84,7 +89,7 @@ pub async fn get_chunks(
 
     let mut results = Vec::with_capacity(request_size);
 
-    sleep(Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(3000)).await;
     
     for i in 0..request_size {
         let chunk_json = serde_json::json!({
