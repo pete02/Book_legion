@@ -8,12 +8,6 @@ pub struct PrettySpineItem {
 
 
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CursorTextResponse {
-    pub cursor: domain::cursor::BookCursor,
-    pub text: String, // 
-}
-
 
 use crate::{domain, infra::auth::get_with_auth};
 #[cfg(not(feature = "mock"))]
@@ -97,62 +91,6 @@ pub async fn fetch_chapter(book_id: &str, chapter_index: usize) -> Result<String
     };
 
     Ok(chapter)
-}
-
-#[cfg(not(feature = "mock"))]
-pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, String> {
-    let url = format!("/api/v1/cursors/{}/text", book_id);
-
-    let resp = get_with_auth(&url)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !resp.ok() {
-        return Err(format!("Failed to fetch cursor text for {}: {}", book_id, resp.status()).into());
-    }
-
-    let cursor_text: CursorTextResponse = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(cursor_text)
-}
-
-#[cfg(feature = "mock")]
-pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, String> {
-    use serde_json::json;
-    use serde_json::Value;
-
-    // Define the JSON data per book_id
-    let json_data: Value = match book_id {
-        "b1" => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": "b1",
-                "cursor": { "chapter": 0, "chunk": 0 }
-            },
-            "text": ""
-        }),
-        "b2" => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": "b2",
-                "cursor": { "chapter": 1, "chunk": 0 }
-            },
-            "text": "<p>Sample text for chunk 0 of chapter 1.</p>"
-        }),
-        _ => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": book_id,
-                "cursor": { "chapter": 0, "chunk": 0 }
-            },
-            "text": "<p>Default cursor text.</p>"
-        }),
-    };
-
-    // Deserialize JSON into your CursorTextResponse
-    let cursor_text: CursorTextResponse = serde_json::from_value(json_data)
-        .map_err(|e| format!("Failed to deserialize mock JSON: {}", e))?;
-
-    Ok(cursor_text)
 }
 
 #[cfg(not(feature = "mock"))]

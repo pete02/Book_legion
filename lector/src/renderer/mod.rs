@@ -3,9 +3,11 @@ pub mod sentence_boundaries;
 pub mod find_page_boundary;
 pub mod layout_builder;
 pub mod html_healer;
+
+
 use web_sys::HtmlElement;
 use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
-
+use crate::domain;
 
 pub struct BookDriver {
     pub book_id: String,
@@ -17,15 +19,17 @@ pub struct BookDriver {
 }
 
 impl BookDriver {
-    pub async fn new(book_id: String, chapter_idx: usize, viewport: HtmlElement) -> Option<Self> {
-        let chapter_html = match infra::chapters::fetch_chapter(&book_id, chapter_idx).await{
+    pub async fn new(book_id: String, viewport: HtmlElement) -> Option<Self> {
+        let cursor=domain::cursor::fetch_cursor_text(&book_id).await;
+        let chapter_html = match infra::chapters::fetch_chapter(&book_id, cursor.cursor.cursor.chapter).await{
             Ok(text)=>text.replace("calibre", "replaced"),
             Err(e)=>format!("<p>Error in getting chapter: {}</p>",e)
         };
+
         Some(Self {
             book_id,
-            chapter_idx,
-            char_position: 0,
+            chapter_idx: cursor.cursor.cursor.chapter,
+            char_position: find_start_offset(&chapter_html, &cursor.text),
             next_chapter_pending: false,
             viewport,
             chapter_html,
@@ -90,6 +94,10 @@ impl BookDriver {
         }
 
         if self.char_position==0{
+            console("load prev chapter");
+            if self.chapter_idx==0{
+                return ;
+            }
             self.load_prev_chapter().await;
         }
 
@@ -150,6 +158,8 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 
 
 pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option<usize>{
+
+
     console(&format!("start backward: {}", char_end));
     if html.len() ==0{
         return None;
@@ -196,6 +206,11 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     }
 }
 
+pub fn find_start_offset(html: &str, cursor_text: &str) -> usize {
+    html.find(cursor_text).unwrap_or(0)
+}
+
+
 #[cfg(target_arch = "wasm32")]
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
@@ -206,3 +221,4 @@ pub fn console(text: &str){
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", text);
 }
+

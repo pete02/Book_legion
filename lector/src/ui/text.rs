@@ -2,7 +2,7 @@ use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 
-use crate::{Route, domain::{self, text_renderer::{Align, render, use_renderer}}, ui::components::{TopBar, TopBarEntry}};
+use crate::{Route, domain, ui::components::{TopBar, TopBarEntry}};
 use crate::renderer::{BookDriver, Direction};
 
 #[component]
@@ -29,7 +29,7 @@ pub fn Text(book_id: String) -> Element {
                 .dyn_into::<HtmlElement>()
                 .unwrap();
 
-            if let Some(d) = BookDriver::new(b_signal(), 0, el).await {
+            if let Some(d) = BookDriver::new(b_signal(), el).await {
                 driver.set(Some(d));
                 // Load first page
                 if let Some(ref mut d) = *driver.write() {
