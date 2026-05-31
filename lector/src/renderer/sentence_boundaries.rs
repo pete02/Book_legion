@@ -304,7 +304,7 @@ use web_sys::console;
 use wasm_bindgen::JsValue;
 fn console(text: &str){
     #[cfg(target_arch = "wasm32")]
-    console::log_1(&JsValue::from_str(text));
+    //console::log_1(&JsValue::from_str(text));
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", text);
 }

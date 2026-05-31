@@ -7,7 +7,7 @@ pub mod html_healer;
 
 use dioxus::logger::tracing;
 use web_sys::HtmlElement;
-use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
+use crate::{domain::book, infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
 
 pub struct BookDriver {
@@ -78,7 +78,7 @@ impl BookDriver {
     }
 
     async fn drive_forward(&mut self){
-        self.save();
+        self.save().await;
         if self.next_chapter_pending {
             self.load_next_chapter().await;
         }
@@ -89,18 +89,18 @@ impl BookDriver {
         }
     }
 
-    fn save(&mut self) {
-        save(&self.chapter_html, &self.book_id,self.chapter_idx,self.char_position)
+    async fn save(&mut self) {
+        save(&self.chapter_html, &self.book_id,self.chapter_idx,self.char_position).await;
     }
 
     async fn drive_backward(&mut self){
         if self.chapter_idx==0 && self.char_position==0{
-            console("end of book");
+            tracing::debug!("end of book");
             return ;
         }
 
         if self.char_position==0{
-            console("load prev chapter");
+            tracing::debug!("load prev chapter");
             if self.chapter_idx==0{
                 return ;
             }
@@ -111,7 +111,7 @@ impl BookDriver {
             Some(i) => self.char_position = i,
             None => {},
         }
-        self.save();
+        self.save().await;
     }
 }
 
@@ -167,22 +167,22 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option<usize>{
 
 
-    console(&format!("start backward: {}", char_end));
+    tracing::debug!("start backward: {}", char_end);
     if html.len() ==0{
         return None;
     }
 
     let healed=html_healer::heal_html(&html[..char_end]);
-    console(&format!("html: {}", healed));
+    tracing::debug!("html: {}", healed);
     
     let rect=viewport.get_bounding_client_rect();
     viewport.set_inner_html(&healed);
 
     viewport.set_scroll_top(viewport.scroll_height());
-    console(&format!("scroll height: {}, viweport:{}", viewport.scroll_height(), rect.height()));
+    tracing::debug!("scroll height: {}, viweport:{}", viewport.scroll_height(), rect.height());
 
     let layouts=build_layout_vec(viewport, &healed);
-    console(&format!("layout top: {}", (layouts[0].get_char_top)(0)));
+    tracing::debug!("layout top: {}", (layouts[0].get_char_top)(0));
 
     let cutoff_res=first_fitting_char_vec(&layouts, rect.top());
     let cutoff=match cutoff_res{
@@ -192,9 +192,9 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     };
 
 
-    console(&format!("Cutoff: {}", cutoff));
-    console(&healed[cutoff..]);
-    console(&format!("left over: {}", &html[..cutoff]));
+    tracing::debug!("Cutoff: {}", cutoff);
+    tracing::debug!("healed: {}", &healed[cutoff..]);
+    tracing::debug!("left over: {}", &html[..cutoff]);
     let first=layouts.first().unwrap();
     if cutoff as u32== first.char_start{
         return None
@@ -203,9 +203,9 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 
     match sentence_boundaries:: find_first_sentence_boundary(&healed, cutoff, healed.len()) {
         Some(start) => {
-            console(&format!("start: {}", start));
+            tracing::debug!("start: {}", start);
             let complete_html=heal_html(&healed[start..]);
-            console(&format!("complete: {}",complete_html ));
+            tracing::debug!("complete: {}",complete_html );
             viewport.set_inner_html(&complete_html);
             Some(start)
         },
@@ -217,17 +217,24 @@ pub fn find_start_offset(html: &str, cursor_text: &str) -> usize {
     html.find(cursor_text).unwrap_or(0)
 }
 
-fn save(chapter_html: &str, book_id: &str, index: usize, start: usize){
+async fn save(chapter_html: &str, book_id: &str, index: usize, start: usize){
+    console(&format!("trest: {}",book_id));
     let slice=get_save_slice(chapter_html,  start);
     if slice.len() > 50 {
-        let _=domain::cursor::save_cursor_text(&book_id, &slice, index);
+        console("saving");
+        match domain::cursor::save_cursor_text(&book_id, &slice, index).await {
+            Ok(()) => console("saved?"),
+            Err(e) => console(&format!("Error saving cursor text: {}", e)),
+        }
+    }else{
+        console(&format!("save skipped: slice too short ({}); given html: {}", slice.len(), chapter_html));
     }
 }
 
 pub fn get_save_slice(chapter_html: &str, start: usize)->String {
     
     if start >= chapter_html.chars().count() {
-        tracing::warn!("save skipped: start out of bounds ({})", start);
+        console(&format!("save skipped: start out of bounds ({})", start));
         return String::new();
     }
 
@@ -247,7 +254,7 @@ pub fn get_save_slice(chapter_html: &str, start: usize)->String {
             slice = slice[gt_pos + 1..].to_string();
         }
     }
-    tracing::debug!("saving: {}", slice);
+    console(&format!("saving: {}", slice));
     return slice;
 }
 

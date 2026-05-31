@@ -10,4 +10,6 @@ pub mod text;
 
 pub mod wake;
 
+pub mod tests;
+
 

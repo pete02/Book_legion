@@ -67,7 +67,7 @@ pub async fn fetch_cursor_text(book_id: &str) -> CursorTextResponse {
     match infra::fetch_cursor_text(book_id).await{
         Ok(resp) => resp,
         Err(e) => {
-            tracing::error!("Error fetching cursor text: {}", e);
+            console(&format!("Error fetching cursor text: {}", e));
             CursorTextResponse {
                 cursor: BookCursor::new("", book_id, 0, 0),
                 text: "".to_string(),
@@ -84,7 +84,7 @@ pub async fn save_cursor_text(book_id: &str, text: &str, chapter_idx:usize) -> R
             Ok(())
         }
         Err(e) => {
-            tracing::error!("Error saving cursor text: {}", e);
+            console(&format!("Error saving cursor text: {}", e));
             Err(e.into())
         }
     }
@@ -99,4 +99,15 @@ pub async fn save_bookcursor(cursor:BookCursor){
 use dioxus::logger::tracing;
 use serde::{Deserialize, Serialize};
 use crate::{domain, infra::cursor as infra};
+
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+pub fn console(text: &str){
+    #[cfg(target_arch = "wasm32")]
+    console::log_1(&JsValue::from_str(text));
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", text);
+}
 

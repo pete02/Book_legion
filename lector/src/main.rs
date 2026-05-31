@@ -59,6 +59,7 @@ pub(crate) fn PageNotFound(route: Vec<String>) -> Element {
 
 #[component]
 fn app() -> Element {
+    console_error_panic_hook::set_once();
     let load=login::restore_user_from_storage();
 
     let user = use_signal(|| load);
@@ -77,6 +78,7 @@ fn app() -> Element {
         }
     }
 }
+
 
 
 

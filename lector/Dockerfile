@@ -7,7 +7,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Dioxus CLI
-RUN cargo install dioxus-cli --locked --version 0.7.8
+RUN cargo install dioxus-cli --locked --version 0.7.9
 
 # Set working directory
 WORKDIR /app

@@ -14,7 +14,8 @@ pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
                 // Inject CSS into the document
                 if let Some(window) = web_sys::window() {
                     if let Some(document) = window.document() {
-                        inject_css(&document, &book_id, &css_text);
+                        let cleaned=strip_color_from_css(&css_text);
+                        inject_css(&document, &book_id, &cleaned);
                         css_redy.set(true);
                         tracing::debug!("CSS loaded");
                     }
@@ -24,8 +25,11 @@ pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
         }
     });
 }
-
-
+use regex::Regex;
+pub fn strip_color_from_css(css: &str) -> String {
+    let re = Regex::new(r"(?i)\b(background-)?color\s*:[^;]+;?\s*|\bfont-size\s*:[^;]+;?\s*").unwrap();
+    re.replace_all(css, "").to_string()
+}
 
 fn inject_css(document: &Document, book_id: &str, css: &str) {
     let style_id = format!("book-css-{}", book_id);
