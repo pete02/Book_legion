@@ -5,6 +5,7 @@ pub mod layout_builder;
 pub mod html_healer;
 
 
+use dioxus::logger::tracing;
 use web_sys::HtmlElement;
 use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
@@ -77,6 +78,7 @@ impl BookDriver {
     }
 
     async fn drive_forward(&mut self){
+        self.save();
         if self.next_chapter_pending {
             self.load_next_chapter().await;
         }
@@ -85,6 +87,10 @@ impl BookDriver {
             None=>self.next_chapter_pending=true,
             Some(i)=>self.char_position=i
         }
+    }
+
+    fn save(&mut self) {
+        save(&self.chapter_html, &self.book_id,self.chapter_idx,self.char_position)
     }
 
     async fn drive_backward(&mut self){
@@ -105,6 +111,7 @@ impl BookDriver {
             Some(i) => self.char_position = i,
             None => {},
         }
+        self.save();
     }
 }
 
@@ -208,6 +215,40 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 
 pub fn find_start_offset(html: &str, cursor_text: &str) -> usize {
     html.find(cursor_text).unwrap_or(0)
+}
+
+fn save(chapter_html: &str, book_id: &str, index: usize, start: usize){
+    let slice=get_save_slice(chapter_html,  start);
+    if slice.len() > 50 {
+        let _=domain::cursor::save_cursor_text(&book_id, &slice, index);
+    }
+}
+
+pub fn get_save_slice(chapter_html: &str, start: usize)->String {
+    
+    if start >= chapter_html.chars().count() {
+        tracing::warn!("save skipped: start out of bounds ({})", start);
+        return String::new();
+    }
+
+    // Safely take a slice by chars
+    let mut slice: String = chapter_html.chars().skip(start).take(1000).collect();
+
+    let first_lt = slice.find('<');
+    let first_gt = slice.find('>');
+
+    if let Some(gt_pos) = first_gt {
+        let should_trim = match first_lt {
+            Some(lt_pos) => gt_pos < lt_pos,
+            None => true,
+        };
+
+        if should_trim {
+            slice = slice[gt_pos + 1..].to_string();
+        }
+    }
+    tracing::debug!("saving: {}", slice);
+    return slice;
 }
 
 
