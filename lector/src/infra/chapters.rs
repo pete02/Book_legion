@@ -9,7 +9,7 @@ pub struct PrettySpineItem {
 
 
 
-use crate::{domain, infra::auth::get_with_auth};
+use crate::infra::auth::get_with_auth;
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, String> {
     let url = format!("/api/v1/books/{}/nav", book_id);
