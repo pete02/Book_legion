@@ -9,14 +9,14 @@ use dioxus::logger::tracing;
 use web_sys::HtmlElement;
 use crate::{domain::book, infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
-
+#[derive(Debug, Clone)]
 pub struct BookDriver {
     pub book_id: String,
     pub chapter_idx: usize,
     pub char_position: usize,
-    viewport: HtmlElement,
-    chapter_html: String,
-    next_chapter_pending: bool,
+    pub viewport: HtmlElement,
+    pub chapter_html: String,
+    pub next_chapter_pending: bool,
 }
 
 impl BookDriver {
@@ -78,7 +78,6 @@ impl BookDriver {
     }
 
     async fn drive_forward(&mut self){
-        self.save().await;
         if self.next_chapter_pending {
             self.load_next_chapter().await;
         }
@@ -87,10 +86,14 @@ impl BookDriver {
             None=>self.next_chapter_pending=true,
             Some(i)=>self.char_position=i
         }
+
+        self.save().await;
     }
 
-    async fn save(&mut self) {
+    pub async fn save(&mut self) {
+        console("BEFORE SAVE");
         save(&self.chapter_html, &self.book_id,self.chapter_idx,self.char_position).await;
+        console("AFTER SAVE");
     }
 
     async fn drive_backward(&mut self){
@@ -111,7 +114,6 @@ impl BookDriver {
             Some(i) => self.char_position = i,
             None => {},
         }
-        self.save().await;
     }
 }
 

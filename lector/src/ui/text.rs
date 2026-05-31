@@ -1,67 +1,47 @@
 use dioxus::{logger::tracing, prelude::*};
-use futures_util::StreamExt;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 
-use crate::{Route, domain, ui::components::{TopBar, TopBarEntry}};
+use crate::{Route, domain, renderer, ui::components::{TopBar, TopBarEntry}};
 use crate::renderer::{BookDriver, Direction};
-
-pub enum DriverMsg {
-    Init,
-    Go(Direction),
-}
 
 #[component]
 pub fn Text(book_id: String) -> Element {
     let b_signal = use_signal(|| book_id.clone());
     let css_ready: Signal<bool> = use_signal(|| false);
     let show_extra = use_signal(|| false);
+    let mut driver: Signal<Option<BookDriver>> = use_signal(|| None);
 
     use_effect(move || {
         tracing::debug!("here");
         domain::text::fetch_and_apply_book_css(b_signal(), css_ready);
     });
 
-    let driver_coroutine = use_coroutine(|mut rx: UnboundedReceiver<DriverMsg>| {
-        let book_id = book_id.clone();
-        async move {
-            let mut driver: Option<BookDriver> = None;
-
-            while let Some(msg) = rx.next().await {
-                match msg {
-                    DriverMsg::Init => {
-                        let window = web_sys::window().unwrap();
-                        let document = window.document().unwrap();
-                        let el = document
-                            .get_element_by_id("book-renderer")
-                            .unwrap()
-                            .dyn_into::<HtmlElement>()
-                            .unwrap();
-
-                        if let Some(mut d) = BookDriver::new(book_id.clone(), el).await {
-                            d.go(Direction::Forward).await;
-                            driver = Some(d);
-                        }
-                    }
-                    DriverMsg::Go(dir) => {
-                        if let Some(ref mut d) = driver {
-                            d.go(dir).await;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Once CSS is ready, send Init — runs once when css_ready flips to true
+    // Once CSS is ready, init the driver
     use_effect(move || {
         if !css_ready() { return; }
-        driver_coroutine.send(DriverMsg::Init);
+        spawn(async move {
+            let window = web_sys::window().unwrap();
+            let document = window.document().unwrap();
+            let el = document
+                .get_element_by_id("book-renderer")
+                .unwrap()
+                .dyn_into::<HtmlElement>()
+                .unwrap();
+
+            if let Some(d) = BookDriver::new(b_signal(), el).await {
+                driver.set(Some(d));
+                // Load first page
+                if let Some(ref mut d) = *driver.write() {
+                    d.go(Direction::Forward).await;
+                }
+            }
+        });
     });
 
     let top_entries = vec![
         TopBarEntry { name: "Library".into(), path: Route::Library {} },
-        TopBarEntry { name: "Book".into(), path: Route::Book { book_id: b_signal() } },
+        TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
     ];
 
     if !css_ready() {
@@ -81,16 +61,29 @@ pub fn Text(book_id: String) -> Element {
                 }
                 div {
                     style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex;",
+                    // Left — go back
                     button {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
-                            driver_coroutine.send(DriverMsg::Go(Direction::Back));
+                            spawn(async move {
+                                if let Some(ref mut d) = *driver.write() {
+                                    d.go(Direction::Back).await;
+                                    let slice=renderer::get_save_slice(&d.chapter_html, d.char_position);
+                                    tracing::error!("Saving cursor text{:?}", domain::cursor::save_cursor_text(&d.book_id, &slice, d.chapter_idx).await);
+
+                                }
+                            });
                         },
                     }
+                    // Right — go forward
                     button {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
-                            driver_coroutine.send(DriverMsg::Go(Direction::Forward));
+                            spawn(async move {
+                                if let Some(ref mut d)=*driver.write(){
+                                    d.go(Direction::Forward).await;
+                                }
+                            });
                         },
                     }
                 }
