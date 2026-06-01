@@ -94,6 +94,15 @@ pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std
                 series_order: 2,
                 file_path: "/path/to/book2.epub".into(),
             },
+            BookEntry {
+                id: "b3".into(),
+                title: "Book Three".into(),
+                author_id: "a1".into(),
+                series_id: "s1".into(),
+                series_name: Some("Series One".into()),
+                series_order: 3,
+                file_path: "/path/to/book3.epub".into(),
+            },
         ],
         "s2" => vec![
             BookEntry {

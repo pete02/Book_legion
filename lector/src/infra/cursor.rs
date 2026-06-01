@@ -158,7 +158,7 @@ pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, Stri
                 "book_id": "b2",
                 "cursor": { "chapter": 1, "chunk": 0 }
             },
-            "text": "<p>Sample text for chunk 0 of chapter 1.</p>"
+            "text": "Sample text for chunk 0 of chapter 1"
         }),
         _ => json!({
             "cursor": {

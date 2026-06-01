@@ -13,6 +13,7 @@ use crate::domain;
 pub struct BookDriver {
     pub book_id: String,
     pub chapter_idx: usize,
+    pub prev_char_position: usize,
     pub char_position: usize,
     pub viewport: HtmlElement,
     pub chapter_html: String,
@@ -31,6 +32,7 @@ impl BookDriver {
             book_id,
             chapter_idx: cursor.cursor.cursor.chapter,
             char_position: find_start_offset(&chapter_html, &cursor.text),
+            prev_char_position: find_start_offset(&chapter_html, &cursor.text),
             next_chapter_pending: false,
             viewport,
             chapter_html,
@@ -46,6 +48,7 @@ impl BookDriver {
     async fn load_next_chapter(&mut self){
         self.chapter_idx += 1;
         self.char_position = 0;
+        self.prev_char_position=0;
         self.next_chapter_pending=false;
 
         match infra::chapters::fetch_chapter(&self.book_id, self.chapter_idx).await{
@@ -66,7 +69,7 @@ impl BookDriver {
         match infra::chapters::fetch_chapter(&self.book_id, self.chapter_idx).await{
             Ok(chapter_text)=>{
                 self.chapter_html=decode_html(&chapter_text).replace("calibre", "replaced");
-                self.char_position=self.chapter_html.len();
+                self.prev_char_position=self.chapter_html.len();
             },
             Err(e)=>{
                 self.chapter_html=format!("<p>Error in loading the chapter: {}</p>", e);
@@ -83,36 +86,50 @@ impl BookDriver {
         }
         let cut=cut_forward(&self.viewport, &self.chapter_html, self.char_position);
         match cut{
-            None=>self.next_chapter_pending=true,
-            Some(i)=>self.char_position=i
+            None=>{
+                self.next_chapter_pending=true;
+                self.prev_char_position=self.chapter_html.len();
+            },
+            Some(i)=>{
+                self.prev_char_position=self.char_position;
+                self.char_position=i
+
+            }
         }
 
         self.save().await;
     }
 
     pub async fn save(&mut self) {
-        console("BEFORE SAVE");
         save(&self.chapter_html, &self.book_id,self.chapter_idx,self.char_position).await;
-        console("AFTER SAVE");
     }
 
     async fn drive_backward(&mut self){
-        if self.chapter_idx==0 && self.char_position==0{
-            tracing::debug!("end of book");
+        tracing::debug!("Driving backward: {}: {}",self.chapter_idx, self.prev_char_position);
+
+        if self.chapter_idx==0 && self.prev_char_position==0{
+            self.char_position=0;
+            tracing::debug!("start of book");
+            self.drive_forward().await;
             return ;
         }
 
-        if self.char_position==0{
+        if self.prev_char_position==0{
             tracing::debug!("load prev chapter");
             if self.chapter_idx==0{
                 return ;
             }
             self.load_prev_chapter().await;
+        }else{
+            self.next_chapter_pending=false;
         }
 
-        match cut_backward(&self.viewport, &self.chapter_html, self.char_position) {
-            Some(i) => self.char_position = i,
-            None => {},
+        match cut_backward(&self.viewport, &self.chapter_html, self.prev_char_position) {
+            Some(i) => {
+                self.prev_char_position = self.char_position;
+                self.prev_char_position = i;
+            },
+            None => self.prev_char_position = 0,
         }
     }
 }
@@ -130,7 +147,6 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         return None;
     }
 
-    tracing::debug!("html: {}", &html[char_start..]);
     let rect=viewport.get_bounding_client_rect();
     viewport.set_inner_html(&html_healer::heal_html(&html[char_start..]));
 
@@ -148,11 +164,7 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         (NoneFit,_)=>0,
         (LastFitting(j),i)=>(layouts[i].char_start+j) as usize,
     };
-    tracing::debug!("viewport height: {}bottom: {}", rect.height(), rect.height());
 
-
-    tracing::info!("Cutoff: {}", cutoff);
-    tracing::info!("Cutoff-html: {}", &html[char_start..cutoff]);
 
     let last=layouts.last().unwrap();
     if cutoff as u32== last.char_start+last.text_len(){
@@ -164,8 +176,7 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         Some(end) => {
             let complete_html=heal_html(&html[char_start..end]);
             viewport.set_inner_html(&complete_html);
-            tracing::debug!("found last sentence boundary: {}", end);
-            tracing::debug!("complete_html: {}", &html[char_start..end]);
+            
             Some(end)
         },
         None => Some(char_start+cutoff),
@@ -182,16 +193,13 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     }
 
     let healed=html_healer::heal_html(&html[..char_end]);
-    tracing::debug!("html: {}", healed);
     
     let rect=viewport.get_bounding_client_rect();
     viewport.set_inner_html(&healed);
 
     viewport.set_scroll_top(viewport.scroll_height());
-    tracing::debug!("scroll height: {}, viweport:{}", viewport.scroll_height(), rect.height());
 
     let layouts=build_layout_vec(viewport, &healed);
-    tracing::debug!("layout top: {}", (layouts[0].get_char_top)(0));
 
     let cutoff_res=first_fitting_char_vec(&layouts, rect.top());
     let cutoff=match cutoff_res{
@@ -202,8 +210,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 
 
     tracing::debug!("Cutoff: {}", cutoff);
-    tracing::debug!("healed: {}", &healed[cutoff..]);
-    tracing::debug!("left over: {}", &html[..cutoff]);
+
     let first=layouts.first().unwrap();
     if cutoff as u32== first.char_start{
         return None
@@ -214,9 +221,9 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     match sentence_boundaries:: find_first_sentence_boundary(&healed, cutoff, healed.len()) {
         Some(start) => {
             tracing::debug!("start: {}", start);
-            let complete_html=heal_html(&healed[start..]);
-            tracing::debug!("complete: {}",complete_html );
+            let complete_html: String=heal_html(&html[start..char_end]);
             viewport.set_inner_html(&complete_html);
+            
             Some(start)
         },
         None => Some(0),
@@ -268,7 +275,6 @@ pub fn get_save_slice(chapter_html: &str, start: usize)->String {
             slice = slice[gt_pos + 1..].to_string();
         }
     }
-    console(&format!("saving: {}", slice));
     return slice;
 }
 

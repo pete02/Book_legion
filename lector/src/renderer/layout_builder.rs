@@ -277,12 +277,6 @@ fn char_bottom(node: &Node, local_offset: u32) -> f64 {
         return 0.0;
     }
 
-    web_sys::console::log_1(&format!(
-        "char_bottom: node_type={} node_name={} offset={}", 
-        node.node_type(), 
-        node.node_name(),  // "#text" if correct, "P" etc if wrong
-        local_offset
-    ).into());
     range.get_bounding_client_rect().bottom()
 }
 
