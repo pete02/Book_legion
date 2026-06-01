@@ -3,6 +3,7 @@ pub mod sentence_boundaries;
 pub mod find_page_boundary;
 pub mod layout_builder;
 pub mod html_healer;
+pub mod place_finder;
 
 
 use dioxus::logger::tracing;
@@ -24,15 +25,15 @@ impl BookDriver {
     pub async fn new(book_id: String, viewport: HtmlElement) -> Option<Self> {
         let cursor=domain::cursor::fetch_cursor_text(&book_id).await;
         let chapter_html = match infra::chapters::fetch_chapter(&book_id, cursor.cursor.cursor.chapter).await{
-            Ok(text)=>text.replace("calibre", "replaced"),
+            Ok(text)=>decode_html(&text.replace("calibre", "replaced")),
             Err(e)=>format!("<p>Error in getting chapter: {}</p>",e)
         };
-
+        let start=place_finder::find_plain_text_start(&chapter_html, &cursor.text);
         Some(Self {
             book_id,
             chapter_idx: cursor.cursor.cursor.chapter,
-            char_position: find_start_offset(&chapter_html, &cursor.text),
-            prev_char_position: find_start_offset(&chapter_html, &cursor.text),
+            char_position: start.unwrap_or(0),
+            prev_char_position: start.unwrap_or(0),
             next_chapter_pending: false,
             viewport,
             chapter_html,
@@ -230,13 +231,6 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     }
 }
 
-pub fn find_start_offset(html: &str, cursor_text: &str) -> usize {
-    console(&format!("search: {}", cursor_text));
-    console(&format!("html: {}", html));
-    let found=html.find(cursor_text).unwrap_or(0);
-    console(&format!("found: {}",found));
-    return found;
-}
 
 async fn save(chapter_html: &str, book_id: &str, index: usize, start: usize){
     console(&format!("trest: {}",book_id));

@@ -158,7 +158,7 @@ pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, Stri
                 "book_id": "b2",
                 "cursor": { "chapter": 1, "chunk": 0 }
             },
-            "text": "Sample text for chunk 0 of chapter 1"
+            "text": "It was a slightly pastel ruby red, the subdued color setting off Lea’s clearly magical eyes all the more for the purity of their shade. The girl had put her hair into a braid,"
         }),
         _ => json!({
             "cursor": {
