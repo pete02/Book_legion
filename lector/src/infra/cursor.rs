@@ -156,15 +156,15 @@ pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, Stri
             "cursor": {
                 "user_id": "pete",
                 "book_id": "b2",
-                "cursor": { "chapter": 1, "chunk": 0 }
+                "cursor": { "chapter": 0, "chunk": 0 }
             },
-            "text": "It was a slightly pastel ruby red, the subdued color setting off Lea’s clearly magical eyes all the more for the purity of their shade. The girl had put her hair into a braid,"
+            "text": "The passengers on the ship called her “Girl,” which was fine by her. After traveling with them for a month, she didn’t know their real names either. Her dark hair and golden skin stood out in this crowd like a crooked screw on a brand-new sheet of metal. The twenty-seven Tawny refugees on the ship all had milky complexions and hair as blue as the deepest ocean. That was what happened in the All Black."
         }),
         _ => json!({
             "cursor": {
                 "user_id": "pete",
                 "book_id": book_id,
-                "cursor": { "chapter": 0, "chunk": 0 }
+                "cursor": { "chapter": 1, "chunk": 0 }
             },
             "text": "<p>Default cursor text.</p>"
         }),

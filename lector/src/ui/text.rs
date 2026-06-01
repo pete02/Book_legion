@@ -66,11 +66,8 @@ pub fn Text(book_id: String) -> Element {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
                             spawn(async move {
-                                if let Some(ref mut d) = *driver.write() {
+                                if let Some(ref mut d)=*driver.write(){
                                     d.go(Direction::Back).await;
-                                    let slice=renderer::get_save_slice(&d.chapter_html, d.char_position);
-                                    tracing::error!("Saving cursor text{:?}", domain::cursor::save_cursor_text(&d.book_id, &slice, d.chapter_idx).await);
-
                                 }
                             });
                         },

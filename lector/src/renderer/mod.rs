@@ -107,7 +107,7 @@ impl BookDriver {
 
     async fn drive_backward(&mut self){
         tracing::debug!("Driving backward: {}: {}",self.chapter_idx, self.prev_char_position);
-
+        self.save().await;
         if self.chapter_idx==0 && self.prev_char_position==0{
             self.char_position=0;
             tracing::debug!("start of book");
