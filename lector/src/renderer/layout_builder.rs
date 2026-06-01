@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use dioxus::logger::tracing;
 use wasm_bindgen::JsCast;
 use web_sys::{Element, Node, Range, Text};
 
@@ -18,7 +17,7 @@ pub struct LayoutQuery{
     pub char_start: u32,
     pub end_tag_len: u32,
     pub children: Vec<LayoutQuery>,
-    pub get_char_bottom: Arc<dyn Fn(u32) -> f64>,  // drop Send + Sync
+    pub get_char_bottom: Arc<dyn Fn(u32,u32) -> f64>,  // drop Send + Sync
     pub get_char_top: Arc<dyn Fn(u32) -> f64>,  
 
 }
@@ -45,7 +44,7 @@ impl LayoutQuery {
             char_start: 0,
             end_tag_len: 0,
             children: Vec::new(),
-            get_char_bottom: Arc::new(|_| 0.0),
+            get_char_bottom: Arc::new(|_,_| 0.0),
             get_char_top: Arc::new(|_| 0.0),
         }
     }
@@ -214,8 +213,8 @@ fn attach_text_node_char_functions(layout: &mut LayoutQuery, text_node: &Text, c
         char_top(&node_for_top.0, offset)
     });
 
-    layout.get_char_bottom = Arc::new(move |global_char: u32| {
-        let offset = global_char.saturating_sub(char_start).min(text_len.saturating_sub(1));
+    layout.get_char_bottom = Arc::new(move |char_start: u32, local_char: u32| {
+        let offset = char_start+local_char.min(text_len.saturating_sub(1));
         char_bottom(&node_for_bot.0, offset)
     });
 }
@@ -224,7 +223,7 @@ fn attach_element_char_functions(layout: &mut LayoutQuery) {
     let top    = layout.top;
     let bottom = layout.bottom;
     layout.get_char_top    = Arc::new(move |_| top);
-    layout.get_char_bottom = Arc::new(move |_| bottom);
+    layout.get_char_bottom = Arc::new(move |_,_| bottom);
 }
 
 fn attach_delegating_char_functions(layout: &mut LayoutQuery) {
@@ -239,9 +238,9 @@ fn attach_delegating_char_functions(layout: &mut LayoutQuery) {
             .unwrap_or(0.0)
     });
 
-    layout.get_char_bottom = Arc::new(move |global_char: u32| {
-        find_child_for_char(&children_bot, global_char)
-            .map(|c| (c.get_char_bottom)(global_char))
+    layout.get_char_bottom = Arc::new(move |char_start: u32,local_char: u32| {
+        find_child_for_char(&children_bot, char_start+local_char)
+            .map(|c| (c.get_char_bottom)(char_start,local_char))
             .unwrap_or(0.0)
     });
 }

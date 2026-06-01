@@ -32,7 +32,7 @@ pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
 
     let mut best_bottom=FitResult::NoneFit;
     for i in 0..layout.text_len() {
-        let char_bottom = (layout.get_char_bottom)(layout.char_start+i);
+        let char_bottom = (layout.get_char_bottom)(layout.char_start,i);
         if char_bottom <= page_bottom {
             best_bottom = FitResult::LastFitting(i);
         } else {
@@ -157,7 +157,7 @@ pub fn split_html_at_end(html: &str, byte_index: usize) -> &str {
     &html[..safe_index]
 }
 
-use dioxus::logger::tracing;
+
 #[cfg(target_arch = "wasm32")]
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]

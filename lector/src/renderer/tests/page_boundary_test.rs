@@ -11,7 +11,7 @@ mod last_fitting_char_tests_no_children {
         layout.text="x".repeat(text_len as usize);
         layout.bottom=char_bottoms.last().cloned().unwrap_or(0.0);
         layout.children=children;
-        layout.get_char_bottom=Arc::new(move |offset| char_bottoms[offset as usize]);
+        layout.get_char_bottom=Arc::new(move |_,offset| char_bottoms[offset as usize]);
         layout.get_char_top=Arc::new(|_| panic!("container must not call get_char_top"));
         return layout;
     }
@@ -220,7 +220,7 @@ mod last_fitting_char_tests_with_children {
         layout.top = 0.0;
         layout.bottom = char_bottoms.last().cloned().unwrap_or(0.0);
         layout.children = vec![];
-        layout.get_char_bottom = Arc::new(move |i| bottoms[i as usize]);
+        layout.get_char_bottom = Arc::new(move |_, i| bottoms[i as usize]);
         layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
         layout
     }
@@ -236,7 +236,7 @@ mod last_fitting_char_tests_with_children {
         layout.top = 0.0;
         layout.bottom = bottom;
         layout.children = children;
-        layout.get_char_bottom = Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_bottom = Arc::new(|_,_| panic!("container must not call get_char_bottom"));
         layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
         layout
     }
@@ -429,7 +429,7 @@ mod last_fitting_char_vec_tests {
         layout.top = 0.0;
         layout.bottom = char_bottoms.last().cloned().unwrap_or(0.0);
         layout.children = vec![];
-        layout.get_char_bottom = Arc::new(move |i| bottoms[i as usize]);
+        layout.get_char_bottom = Arc::new(move |_, i| bottoms[i as usize]);
         layout.get_char_top = Arc::new(|_| 0.0);
         layout
     }
@@ -443,7 +443,7 @@ mod last_fitting_char_vec_tests {
         layout.top = 0.0;
         layout.bottom = bottom;
         layout.children = children;
-        layout.get_char_bottom = Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_bottom = Arc::new(|_,_| panic!("container must not call get_char_bottom"));
         layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
         layout
     }
@@ -699,7 +699,7 @@ mod first_fitting_char_tests_no_children {
         layout.text="x".repeat(text_len as usize);
         layout.top=char_tops.last().cloned().unwrap_or(0.0);
         layout.children=children;
-        layout.get_char_bottom=Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_bottom=Arc::new(|_,_| panic!("container must not call get_char_bottom"));
         layout.get_char_top=Arc::new(move |offset: u32| char_tops[offset as usize]);
         return layout;
     }
@@ -908,7 +908,7 @@ mod first_fitting_char_tests_with_children {
         layout.top = char_tops.first().cloned().unwrap_or(0.0);
         layout.bottom = char_tops.last().cloned().unwrap_or(0.0);
         layout.children = vec![];
-        layout.get_char_bottom = Arc::new(|_| 0.0);
+        layout.get_char_bottom = Arc::new(|_,_| 0.0);
         layout.get_char_top = Arc::new(move |i| tops[i as usize]);
         layout
     }
@@ -925,7 +925,7 @@ mod first_fitting_char_tests_with_children {
         layout.top = top;
         layout.bottom = bottom;
         layout.children = children;
-        layout.get_char_bottom = Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_bottom = Arc::new(|_,_| panic!("container must not call get_char_bottom"));
         layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
         layout
     }
@@ -1194,7 +1194,7 @@ mod first_fitting_char_vec_tests {
         layout.top = char_tops.first().cloned().unwrap_or(0.0);
         layout.bottom = char_tops.last().cloned().unwrap_or(0.0);
         layout.children = vec![];
-        layout.get_char_bottom = Arc::new(|_| 0.0);
+        layout.get_char_bottom = Arc::new(|_,_| 0.0);
         layout.get_char_top = Arc::new(move |i| tops[i as usize]);
         layout
     }
@@ -1209,7 +1209,7 @@ mod first_fitting_char_vec_tests {
         layout.top = top;
         layout.bottom = bottom;
         layout.children = children;
-        layout.get_char_bottom = Arc::new(|_| panic!("container must not call get_char_bottom"));
+        layout.get_char_bottom = Arc::new(|_,_| panic!("container must not call get_char_bottom"));
         layout.get_char_top = Arc::new(|_| panic!("container must not call get_char_top"));
         layout
     }

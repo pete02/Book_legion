@@ -437,8 +437,8 @@ mod cut_forward{
             // Viewport fits only 2 of the remaining blocks (each 40px, viewport 100px).
             // Cut must happen after block 7 (0-indexed), and returned index must be
             // greater than the start of block 5.
-            let blocks: Vec<String> = (0..10)
-                .map(|i| format!(r#"<p style="margin:0;line-height:40px">Block {i}</p>"#))
+            let blocks: Vec<String> = (0..100)
+                .map(|i| format!(r#"<p style="margin:0;font-size:40px">Block {i}</p>"#))
                 .collect();
             let html = blocks.join("");
             let char_start: usize = blocks[..5].iter().map(|b| b.len()).sum();

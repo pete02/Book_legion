@@ -7,7 +7,7 @@ pub mod place_finder;
 
 
 use dioxus::logger::tracing;
-use web_sys::{Element, HtmlElement};
+use web_sys::HtmlElement;
 use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
 #[derive(Debug, Clone)]
@@ -153,12 +153,9 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 
     viewport.set_scroll_top(0);
 
-            let el =  web_sys::window().unwrap().document().unwrap()
-                .get_element_by_id("book-renderer")
-                .unwrap().get_bounding_client_rect();
 
     let layouts=build_layout_vec(viewport, &html);
-    tracing::debug!("test_viewport height: {}, bottom: {}", el.height(), el.bottom());
+
     let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom());
     let cutoff=match cutoff_res{
         (AllFit,i)=>(layouts[i].char_start+layouts[i].text_len()) as usize,
