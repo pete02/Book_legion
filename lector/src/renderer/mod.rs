@@ -142,13 +142,13 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 
     let layouts=build_layout_vec(viewport, &html);
     tracing::debug!("test_viewport height: {}, bottom: {}", el.height(), el.bottom());
-    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom()-11.0);
+    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom());
     let cutoff=match cutoff_res{
         (AllFit,i)=>(layouts[i].char_start+layouts[i].text_len()) as usize,
         (NoneFit,_)=>0,
         (LastFitting(j),i)=>(layouts[i].char_start+j) as usize,
     };
-    tracing::debug!("viewport height: {}bottom: {}", rect.height(), rect.bottom()-11.0);
+    tracing::debug!("viewport height: {}bottom: {}", rect.height(), rect.height());
 
 
     tracing::info!("Cutoff: {}", cutoff);

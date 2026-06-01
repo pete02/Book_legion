@@ -32,7 +32,7 @@ pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
 
     let mut best_bottom=FitResult::NoneFit;
     for i in 0..layout.text_len() {
-        let char_bottom = (layout.get_char_bottom)(i);
+        let char_bottom = (layout.get_char_bottom)(layout.char_start+i);
         if char_bottom <= page_bottom {
             tracing::debug!("found: {} at{}", layout.text.chars().take(i as usize).collect::<String>(), char_bottom);
             best_bottom = FitResult::LastFitting(i);
