@@ -3,7 +3,7 @@ pub mod sentence_boundaries;
 pub mod find_page_boundary;
 pub mod layout_builder;
 pub mod html_healer;
-pub mod place_finder;
+
 
 
 use dioxus::logger::tracing;
@@ -24,16 +24,21 @@ pub struct BookDriver {
 impl BookDriver {
     pub async fn new(book_id: String, viewport: HtmlElement) -> Option<Self> {
         let cursor=domain::cursor::fetch_cursor_text(&book_id).await;
+
+
         let chapter_html = match infra::chapters::fetch_chapter(&book_id, cursor.cursor.cursor.chapter).await{
             Ok(text)=>decode_html(&text.replace("calibre", "replaced")),
             Err(e)=>format!("<p>Error in getting chapter: {}</p>",e)
         };
-        let start=place_finder::find_plain_text_start(&chapter_html, &cursor.text);
+
+        let txtmap=domain::text::build_text_map_from_html(&chapter_html);
+        let offset=domain::text::find_sentence_offset_with_html_backtrack(&cursor.text, &txtmap);
+        console(&format!("offset: {}",offset));
         Some(Self {
             book_id,
             chapter_idx: cursor.cursor.cursor.chapter,
-            char_position: start.unwrap_or(0),
-            prev_char_position: start.unwrap_or(0),
+            char_position: offset,
+            prev_char_position: offset,
             next_chapter_pending: false,
             viewport,
             chapter_html,
@@ -85,6 +90,8 @@ impl BookDriver {
         if self.next_chapter_pending {
             self.load_next_chapter().await;
         }
+        self.save().await;
+
         let cut=cut_forward(&self.viewport, &self.chapter_html, self.char_position);
         match cut{
             None=>{
@@ -98,7 +105,6 @@ impl BookDriver {
             }
         }
 
-        self.save().await;
     }
 
     pub async fn save(&mut self) {
@@ -169,12 +175,13 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         return None
     }
 
+    tracing::debug!("set {}",&html[char_start..cutoff]);  
+
     tracing::info!("moving to find last sentence boundary");
     match sentence_boundaries::find_last_sentence_boundary(&html, cutoff, 0) {
         Some(end) => {
             let complete_html=heal_html(&html[char_start..end]);
             viewport.set_inner_html(&complete_html);
-            
             Some(end)
         },
         None => Some(char_start+cutoff),
@@ -253,19 +260,7 @@ pub fn get_save_slice(chapter_html: &str, start: usize)->String {
     // Safely take a slice by chars
     let mut slice: String = chapter_html.chars().skip(start).take(1000).collect();
 
-    let first_lt = slice.find('<');
-    let first_gt = slice.find('>');
 
-    if let Some(gt_pos) = first_gt {
-        let should_trim = match first_lt {
-            Some(lt_pos) => gt_pos < lt_pos,
-            None => true,
-        };
-
-        if should_trim {
-            slice = slice[gt_pos + 1..].to_string();
-        }
-    }
     return slice;
 }
 

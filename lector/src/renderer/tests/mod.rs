@@ -5,5 +5,3 @@ pub mod page_boundary_test;
 
 pub mod cut_tests;
 pub mod cursor_tests;
-
-pub mod place_finder_tests;

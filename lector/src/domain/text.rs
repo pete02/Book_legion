@@ -50,3 +50,90 @@ fn inject_css(document: &Document, book_id: &str, css: &str) {
         head.append_child(&style).unwrap();
     }
 }
+
+
+use std::collections::HashMap;
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TextMap {
+    pub plain: String,
+    pub html_offsets: HashMap<usize,usize>, // same length as plain.chars()
+}
+
+fn check_char_match(c:&char)->bool{
+    matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”' | ',')
+}
+
+fn normalize_char(c: &char) -> Option<char> {
+    if check_char_match(c) {
+        return None;
+    }
+
+    if c.is_ascii_alphanumeric() {
+        return Some(c.to_ascii_lowercase());
+    }
+
+
+    None
+}
+
+pub fn normalize_text(s: &str) -> String {
+    // Replace HTML entities if any
+    let s = replace_html_entities(s);
+    s.chars()
+        .filter_map(|c| normalize_char(&c))  // keep only ASCII letters/digits
+        .collect::<String>()
+}
+
+pub fn replace_html_entities(s: &str) -> String {
+    s.replace("&nbsp;", " ")
+     .replace("&amp;", "&")
+     .replace("&#39;", "'")
+     .replace("&quot;", "\"")
+}
+
+pub fn find_sentence_offset_with_html_backtrack(
+    start_snippet: &str,
+    map: &TextMap
+) -> usize {
+    let normalized = normalize_text(start_snippet);
+
+    if let Some(pos) = map.plain.find(&normalized) {
+        let val =map.html_offsets[&pos];
+        val
+    } else {
+        tracing::error!("no pos");
+        tracing::error!("update worked");
+        tracing::error!("tired to search for: {}",&normalized);
+        tracing::error!("Originally: {}",start_snippet);
+        tracing::error!("From: {}",map.plain);
+        0
+    }
+}
+
+pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
+    let mut plain = String::new();
+    let mut html_offsets = HashMap::new();
+    let mut inside_tag = false;
+
+    let mut idx_iter = chapter_html.char_indices().peekable();
+
+    while let Some((idx, c)) = idx_iter.next() {
+        // handle tags
+        if c == '<' {
+            inside_tag = true;
+            continue;
+        } else if c == '>' {
+            inside_tag = false;
+            continue;
+        }
+        if inside_tag { continue; }
+
+
+        if let Some(char)=normalize_char(&c){
+            plain.push(char);
+            html_offsets.insert(plain.len() - 1, idx);
+        }
+    }
+
+    TextMap { plain, html_offsets }
+}
