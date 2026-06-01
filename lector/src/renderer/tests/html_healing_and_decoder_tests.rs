@@ -141,11 +141,19 @@ mod html_healing_tests {
     }
 
     #[test]
-    fn drops_orphaned_close_tags() {
+    fn heals_orphaned_close_tags() {
         let html = "</p><p>Hello world</p>";
         let healed =html_healer::heal_html(html);
-        assert_eq!(healed, "<p>Hello world</p>");
+        assert_eq!(healed, "<p></p><p>Hello world</p>");
     }
+
+    #[test]
+    fn orphaned_close_tags_partner_is_at_beginning() {
+        let html = "Hello</p><p>world</p>";
+        let healed =html_healer::heal_html(html);
+        assert_eq!(healed, "<p>Hello</p><p>world</p>");
+    }
+
 
     #[test]
     fn void_elements_no_close_tags() {

@@ -6,8 +6,8 @@ pub mod html_healer;
 
 
 use dioxus::logger::tracing;
-use web_sys::HtmlElement;
-use crate::{domain::book, infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
+use web_sys::{Element, HtmlElement};
+use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
 #[derive(Debug, Clone)]
 pub struct BookDriver {
@@ -122,44 +122,51 @@ pub enum Direction {
     Back,
 }
 
-
+use web_sys;
 
 pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Option<usize>{
-    console("start forward");
+    tracing::debug!("start forward");
     if html.len() ==0{
         return None;
     }
 
-    let healed=html_healer::heal_html(&html[char_start..]);
-    console(&format!("html: {}", healed));
+    tracing::debug!("html: {}", &html[char_start..]);
     let rect=viewport.get_bounding_client_rect();
-    viewport.set_inner_html(&healed);
+    viewport.set_inner_html(&html_healer::heal_html(&html[char_start..]));
 
     viewport.set_scroll_top(0);
 
-    let layouts=build_layout_vec(viewport, &healed);
-    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom());
+            let el =  web_sys::window().unwrap().document().unwrap()
+                .get_element_by_id("book-renderer")
+                .unwrap().get_bounding_client_rect();
+
+    let layouts=build_layout_vec(viewport, &html);
+    tracing::debug!("test_viewport height: {}, bottom: {}", el.height(), el.bottom());
+    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom()-11.0);
     let cutoff=match cutoff_res{
         (AllFit,i)=>(layouts[i].char_start+layouts[i].text_len()) as usize,
         (NoneFit,_)=>0,
         (LastFitting(j),i)=>(layouts[i].char_start+j) as usize,
     };
+    tracing::debug!("viewport height: {}bottom: {}", rect.height(), rect.bottom()-11.0);
 
 
-    console(&format!("Cutoff: {}", cutoff));
-    console(&healed[..cutoff]);
+    tracing::info!("Cutoff: {}", cutoff);
+    tracing::info!("Cutoff-html: {}", &html[char_start..cutoff]);
 
     let last=layouts.last().unwrap();
     if cutoff as u32== last.char_start+last.text_len(){
         return None
     }
 
-
-    match sentence_boundaries::find_last_sentence_boundary(&healed, cutoff, 0) {
+    tracing::info!("moving to find last sentence boundary");
+    match sentence_boundaries::find_last_sentence_boundary(&html, cutoff, 0) {
         Some(end) => {
-            let complete_html=heal_html(&healed[..end]);
+            let complete_html=heal_html(&html[char_start..end]);
             viewport.set_inner_html(&complete_html);
-            Some(char_start+end)
+            tracing::debug!("found last sentence boundary: {}", end);
+            tracing::debug!("complete_html: {}", &html[char_start..end]);
+            Some(end)
         },
         None => Some(char_start+cutoff),
     }
@@ -203,6 +210,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     }
 
 
+    tracing::debug!("finding first sentence boundary");
     match sentence_boundaries:: find_first_sentence_boundary(&healed, cutoff, healed.len()) {
         Some(start) => {
             tracing::debug!("start: {}", start);
@@ -216,7 +224,11 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
 }
 
 pub fn find_start_offset(html: &str, cursor_text: &str) -> usize {
-    html.find(cursor_text).unwrap_or(0)
+    console(&format!("search: {}", cursor_text));
+    console(&format!("html: {}", html));
+    let found=html.find(cursor_text).unwrap_or(0);
+    console(&format!("found: {}",found));
+    return found;
 }
 
 async fn save(chapter_html: &str, book_id: &str, index: usize, start: usize){

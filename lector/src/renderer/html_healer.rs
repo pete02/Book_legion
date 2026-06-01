@@ -35,6 +35,7 @@ pub fn heal_html(html: &str) -> String {
     let mut output = String::with_capacity(html.len());
     let mut tag_stack: Vec<String> = Vec::new();
     let mut chars = html.char_indices().peekable();
+    let mut orphan_insert_pos: usize = 0; // where to back-insert an orphaned open tag
 
     while let Some((i, ch)) = chars.next() {
         if ch != '<' {
@@ -43,10 +44,11 @@ pub fn heal_html(html: &str) -> String {
         }
 
         if matches!(chars.peek(), Some((_, '/'))) {
-            chars.next(); // consume '/'
-            handle_closing_tag(&mut chars, &mut output, &mut tag_stack);
+            chars.next();
+            handle_closing_tag(&mut chars, &mut output, &mut tag_stack, &mut orphan_insert_pos);
         } else {
             handle_opening_tag(&mut chars, &mut output, &mut tag_stack, html, i);
+            orphan_insert_pos = output.len(); // reset after a real open tag is written
         }
     }
 
@@ -54,26 +56,37 @@ pub fn heal_html(html: &str) -> String {
     output
 }
 
-pub fn handle_closing_tag(
+fn handle_closing_tag(
     chars: &mut std::iter::Peekable<std::str::CharIndices>,
     output: &mut String,
     tag_stack: &mut Vec<String>,
+    orphan_insert_pos: &mut usize,
 ) {
     let tag_name = read_tag_name(chars);
-    skip_to_tag_end(chars);
-
-    let matches_top = tag_stack.last().map_or(false, |top| {
-        top.eq_ignore_ascii_case(&tag_name)
-    });
-
-    if matches_top {
-        tag_stack.pop();
-        output.push_str("</");
-        output.push_str(&tag_name);
-        output.push('>');
+    while let Some((_, ch)) = chars.next() {
+        if ch == '>' { break; }
     }
 
+    let matched_pos = tag_stack.iter().rposition(|t| t == &tag_name);
+
+    match matched_pos {
+        Some(pos) => {
+            for unclosed in tag_stack.drain(pos + 1..).rev() {
+                output.push_str(&format!("</{}>", unclosed));
+            }
+            tag_stack.pop();
+            output.push_str(&format!("</{}>", tag_name));
+            *orphan_insert_pos = output.len(); // reset after a matched close tag
+        }
+        None => {
+            // Back-insert the open tag before the text that preceded this close tag
+            output.insert_str(*orphan_insert_pos, &format!("<{}>", tag_name));
+            output.push_str(&format!("</{}>", tag_name));
+            *orphan_insert_pos = output.len();
+        }
+    }
 }
+
 
 pub fn handle_opening_tag(
     chars: &mut std::iter::Peekable<std::str::CharIndices>,

@@ -19,7 +19,7 @@ pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
         match res{
             (FitResult::AllFit, idx) => {
                 if idx == layout.children.len()-1{
-                    return FitResult::AllFit;
+                    return FitResult::AllFit;;
                 }else{
                     return FitResult::LastFitting(layout.children[idx].char_start + layout.children[idx].text_len() - layout.char_start-1);
                 }
@@ -34,11 +34,13 @@ pub fn last_fitting_char(layout: &LayoutQuery, page_bottom: f64) -> FitResult {
     for i in 0..layout.text_len() {
         let char_bottom = (layout.get_char_bottom)(i);
         if char_bottom <= page_bottom {
+            tracing::debug!("found: {} at{}", layout.text.chars().take(i as usize).collect::<String>(), char_bottom);
             best_bottom = FitResult::LastFitting(i);
         } else {
             break;
         }
     }
+
 
     if best_bottom == FitResult::LastFitting(layout.text_len()-1){
         return FitResult::AllFit;
@@ -156,6 +158,7 @@ pub fn split_html_at_end(html: &str, byte_index: usize) -> &str {
     &html[..safe_index]
 }
 
+use dioxus::logger::tracing;
 #[cfg(target_arch = "wasm32")]
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
