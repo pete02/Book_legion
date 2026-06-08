@@ -2,7 +2,7 @@ use dioxus::{logger::tracing, prelude::*};
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 
-use crate::{Route, domain, renderer, ui::components::{TopBar, TopBarEntry}};
+use crate::{Route, domain, ui::components::{TopBar, TopBarEntry}};
 use crate::renderer::{BookDriver, Direction};
 
 #[component]

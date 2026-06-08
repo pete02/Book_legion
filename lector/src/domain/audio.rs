@@ -128,6 +128,7 @@ pub async fn get_audio_urls(mut audio:AudioData){
                 c.cursor=e.cursor.cursor;
                 let url=create_blob(e.data);
                 audio.audio_urls.with_mut(|f: &mut HashMap<BookCursor, String>|f.insert(c.clone(),url));
+                audio.error.set(false);
             }
             audio.guard.set(false);
         }

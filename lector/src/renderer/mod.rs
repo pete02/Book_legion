@@ -6,7 +6,7 @@ pub mod html_healer;
 
 
 
-use dioxus::logger::tracing;
+use dioxus::logger::tracing::{self, error, warn};
 use web_sys::HtmlElement;
 use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
 use crate::domain;
@@ -86,6 +86,33 @@ impl BookDriver {
         }
     }
 
+    async fn drive_forward_for_recursive(&mut self){
+        if self.next_chapter_pending {
+            self.load_next_chapter().await;
+        }
+        self.save().await;
+
+        let cut=cut_forward(&self.viewport, &self.chapter_html, self.char_position);
+        match cut{
+            None=>{
+                self.next_chapter_pending=true;
+                self.prev_char_position=self.chapter_html.len();
+                
+            },
+            Some(i)=>{
+                if i==self.chapter_html.len(){
+                    self.next_chapter_pending=true;
+                    self.prev_char_position=self.chapter_html.len();
+                }
+
+                self.prev_char_position=self.char_position;
+                self.char_position=i
+
+            }
+        }
+
+    }
+
     async fn drive_forward(&mut self){
         if self.next_chapter_pending {
             self.load_next_chapter().await;
@@ -97,8 +124,14 @@ impl BookDriver {
             None=>{
                 self.next_chapter_pending=true;
                 self.prev_char_position=self.chapter_html.len();
+                self.drive_forward_for_recursive().await
             },
             Some(i)=>{
+                if i==self.chapter_html.len(){
+                    self.next_chapter_pending=true;
+                    self.prev_char_position=self.chapter_html.len();
+                }
+
                 self.prev_char_position=self.char_position;
                 self.char_position=i
 
@@ -133,10 +166,13 @@ impl BookDriver {
 
         match cut_backward(&self.viewport, &self.chapter_html, self.prev_char_position) {
             Some(i) => {
-                self.prev_char_position = self.char_position;
+                self.char_position = self.prev_char_position;
                 self.prev_char_position = i;
             },
-            None => self.prev_char_position = 0,
+            None =>{
+                self.char_position=self.prev_char_position;
+                self.prev_char_position = 0
+            },
         }
     }
 }
@@ -151,7 +187,7 @@ use web_sys;
 pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Option<usize>{
     tracing::debug!("start forward");
     if html.len() ==0{
-        return None;
+        return Some(html.len());
     }
 
     let rect=viewport.get_bounding_client_rect();
@@ -161,6 +197,9 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 
 
     let layouts=build_layout_vec(viewport, &html);
+    if layouts.len()==0{
+        return None;
+    }
 
     let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom());
     let cutoff=match cutoff_res{
@@ -172,7 +211,8 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
 
     let last=layouts.last().unwrap();
     if cutoff as u32== last.char_start+last.text_len(){
-        return None
+        warn!("no layout found");
+        return Some(html.len())
     }
 
     tracing::debug!("set {}",&html[char_start..cutoff]);  
@@ -256,12 +296,7 @@ pub fn get_save_slice(chapter_html: &str, start: usize)->String {
         console(&format!("save skipped: start out of bounds ({})", start));
         return String::new();
     }
-
-    // Safely take a slice by chars
-    let mut slice: String = chapter_html.chars().skip(start).take(1000).collect();
-
-
-    return slice;
+    return chapter_html.chars().skip(start).take(1000).collect();
 }
 
 
