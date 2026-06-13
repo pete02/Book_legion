@@ -30,6 +30,18 @@ pub fn strip_whitespace_between_tags(text: &str) -> String {
     WS_RE.replace_all(text, "$1$2").to_string()
 }
 
+pub fn slice_text(text: &str, start: Option<usize>, end: Option<usize>) -> &str {
+    let safe_boundary = |pos: usize| {
+        (pos..=text.len())
+            .find(|&i| text.is_char_boundary(i))
+            .unwrap_or(text.len())
+    };
+
+    let start = safe_boundary(start.unwrap_or(0));
+    let end = safe_boundary(end.unwrap_or(text.len()));
+
+    &text[start..end]
+}
 
 pub fn heal_html(html: &str) -> String {
     let mut output = String::with_capacity(html.len());

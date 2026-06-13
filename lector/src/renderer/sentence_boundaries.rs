@@ -17,7 +17,7 @@ const ABBREVIATIONS: &[&str] = &[
 
 use regex::Regex;
 
-use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_end}};
+use crate::renderer::{self, find_page_boundary::{split_html_at, split_html_at_end}, html_healer::slice_text};
 
 
 
@@ -31,7 +31,7 @@ pub fn find_first_sentence_boundary(text: &str, limit: usize, end: usize) -> Opt
     let split_text= split_html_at(text, new_limit);
     console("start return");
     if let Some(mut start)=return_start(split_text, end-split_text.len()) {
-        if let Some((tagstart,len))=next_closing_tag(&text[start..end]) {
+        if let Some((tagstart,len))=next_closing_tag(slice_text(text, Some(start), Some(end))) {
             if tagstart==0{
                 start +=len
             } 
@@ -54,17 +54,17 @@ fn return_start(split_text:&str, start: usize)->Option<usize>{
     match (tag_end,punct_end) {
         (Some(t), Some(p)) => {
             let max= t.min(p);
-            console(&format!("split: {}",&split_text[..max]));
+            console(&format!("split: {}",slice_text(split_text, None, Some(max))));
             console(&format!("split at: {}",max));
             return Some(start+max)
         }
         (Some(t), None) => {
-            console(&format!(" tag found: {}",&split_text[..t]));
+            console(&format!(" tag found: {}",slice_text(split_text, None, Some(t))));
             console(&format!(" tag found at: {}",start+t));
             return Some(start+t)
         },
         (None, Some(p)) => {
-            console(&format!(" pucnt found: {}",&split_text[..p]));
+            console(&format!(" pucnt found: {}",slice_text(split_text, None, Some(p))));
             console(&format!(" pucnt found at: {}",start+p));
             return Some(start+p)
         },
@@ -127,8 +127,8 @@ fn first_sentence_terminator(text: &str) -> Option<usize> {
     let re = Regex::new(r#"[.!?][!?.)}\]'"»』\s]*"#).unwrap();
     re.find_iter(text)
         .filter(|m| {
-            let before = text[..m.start()].chars().next_back();
-            let after = text[m.end()..].chars().next();
+            let before = slice_text(text, None, Some(m.start())).chars().next_back();
+            let after = slice_text(text, Some(m.end()), None).chars().next();
             
             // Skip decimal points: digit.digit
             if matches!((before, after), (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit()) {
@@ -151,7 +151,7 @@ fn first_sentence_terminator(text: &str) -> Option<usize> {
 /// Returns true if the period should NOT be treated as a sentence boundary
 fn is_abbreviation_period(text: &str, period_pos: usize) -> bool {
     // Get text before and after the period
-    let before = &text[..period_pos];
+    let before = slice_text(text, None, Some(period_pos));
 
     // Check if there's text before the period (abbreviation must have something before it)
     if before.is_empty() {
@@ -273,8 +273,8 @@ fn last_sentence_terminator(text: &str) -> Option<usize> {
     let re = Regex::new(r#"[.!?][!?.)}\]'"»』\s]*"#).unwrap();
     re.find_iter(text)
         .filter(|m| {
-            let before = text[..m.start()].chars().next_back();
-            let after = text[m.end()..].chars().next();
+            let before = slice_text(text, None, Some(m.start())).chars().next_back();
+            let after = slice_text(text, Some(m.end()), None).chars().next();
             // skip decimal points: digit.digit
             !matches!((before, after), (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit())
         })
@@ -291,7 +291,7 @@ fn walk_closing_punctuation(text: &str, limit: usize) -> usize {
         .unwrap_or(0);
 
     let re = Regex::new(r#"^[!?.)}\]'"»』]+"#).unwrap();
-    if let Some(m) = re.find(&text[safe_limit..]) {
+    if let Some(m) = re.find(&slice_text(text, Some(safe_limit), None)) {
         safe_limit + m.len()
     } else {
         safe_limit

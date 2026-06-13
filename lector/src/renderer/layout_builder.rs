@@ -176,7 +176,7 @@ fn inner_content_start(element: &Element, char_start: u32) -> u32 {
 
 fn build_element_child(el: &Element, current_char: u32, html: &str) -> Option<LayoutQuery> {
     let outer = el.outer_html();
-    let child_start = html[current_char as usize..]
+    let child_start = slice_text(html, Some(current_char as usize), None)
         .find(&outer)
         .map(|offset| current_char + offset as u32)
         .unwrap_or(current_char);
@@ -188,7 +188,8 @@ fn build_text_child(text_node: &Text, current_char: u32, html: &str) -> Option<L
     if raw.trim().is_empty() {
         return None;
     }
-    let text_start = html[current_char as usize..]
+    
+    let text_start = slice_text(html, Some(current_char as usize), None)
         .find(&raw)
         .map(|offset| current_char + offset as u32)
         .unwrap_or(current_char);
@@ -283,6 +284,8 @@ fn char_bottom(node: &Node, local_offset: u32) -> f64 {
 use web_sys::console;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
+
+use crate::renderer::html_healer::slice_text;
 #[allow(dead_code)]
 fn console(_text: &str){
     #[cfg(target_arch = "wasm32")]

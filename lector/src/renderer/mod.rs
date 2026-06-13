@@ -8,7 +8,7 @@ pub mod html_healer;
 
 use dioxus::logger::tracing::{self, error, warn};
 use web_sys::HtmlElement;
-use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html}, layout_builder::build_layout_vec}};
+use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html, slice_text}, layout_builder::build_layout_vec}};
 use crate::domain;
 #[derive(Debug, Clone)]
 pub struct BookDriver {
@@ -191,7 +191,7 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
     }
 
     let rect=viewport.get_bounding_client_rect();
-    viewport.set_inner_html(&html_healer::heal_html(&html[char_start..]));
+    viewport.set_inner_html(&html_healer::heal_html(slice_text(html, Some(char_start), None)));
 
     viewport.set_scroll_top(0);
 
@@ -215,12 +215,12 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         return Some(html.len())
     }
 
-    tracing::debug!("set {}",&html[char_start..cutoff]);  
+    tracing::debug!("set {}", slice_text(html, Some(char_start), Some(cutoff)));  
 
     tracing::info!("moving to find last sentence boundary");
     match sentence_boundaries::find_last_sentence_boundary(&html, cutoff, 0) {
         Some(end) => {
-            let complete_html=heal_html(&html[char_start..end]);
+            let complete_html=heal_html(slice_text(html, Some(char_start), Some(end)));
             viewport.set_inner_html(&complete_html);
             Some(end)
         },
@@ -266,7 +266,7 @@ pub fn cut_backward(viewport: &HtmlElement, html: &str, char_end: usize)->Option
     match sentence_boundaries:: find_first_sentence_boundary(&healed, cutoff, healed.len()) {
         Some(start) => {
             tracing::debug!("start: {}", start);
-            let complete_html: String=heal_html(&html[start..char_end]);
+            let complete_html: String=heal_html(slice_text(html, Some(start), Some(char_end)));
             viewport.set_inner_html(&complete_html);
             
             Some(start)

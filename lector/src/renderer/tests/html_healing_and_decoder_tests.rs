@@ -162,3 +162,96 @@ mod html_healing_tests {
         assert_eq!(healed, "<img src='x.jpg'><p>Text</p>");
     }
 }
+
+#[cfg(test)]
+mod slicing_tests {
+    use super::*;
+    use crate::renderer::html_healer::slice_text;
+    // Basic slicing
+    #[test]
+    fn test_basic_start_and_end() {
+        assert_eq!(slice_text("hello world", Some(6), Some(11)), "world");
+    }
+
+    #[test]
+    fn test_no_end_defaults_to_text_end() {
+        assert_eq!(slice_text("hello world", Some(6), None), "world");
+    }
+
+    #[test]
+    fn test_no_start_defaults_to_zero() {
+        assert_eq!(slice_text("hello world", None, Some(5)), "hello");
+    }
+
+    #[test]
+    fn test_no_start_no_end_returns_full_text() {
+        assert_eq!(slice_text("hello world", None, None), "hello world");
+    }
+
+    // Multi-byte / UTF-8
+    #[test]
+    fn test_multibyte_clean_boundary() {
+        // "café" — 'é' is 2 bytes, starts at byte 3
+        assert_eq!(slice_text("café", Some(0), Some(3)), "caf");
+    }
+
+    #[test]
+    fn test_multibyte_inside_char_snaps_forward() {
+        // 'é' occupies bytes 3..5, so byte 4 is inside it
+        // snapping forward should land at byte 5 (after 'é'), giving ""
+        assert_eq!(slice_text("café", Some(4), None), "");
+    }
+
+    #[test]
+    fn test_curly_quote_boundary() {
+        // "it\u{2019}s" — ' is 3 bytes (e2 80 99), starts at byte 2
+        let s = "it\u{2019}s";
+        assert_eq!(slice_text(s, Some(0), Some(2)), "it");
+    }
+
+    #[test]
+    fn test_curly_quote_mid_char_snaps_forward() {
+        // byte 3 and 4 are inside the 3-byte ', snapping lands at byte 5 → "s"
+        let s = "it\u{2019}s";
+        assert_eq!(slice_text(s, Some(3), None), "s");
+        assert_eq!(slice_text(s, Some(4), None), "s");
+    }
+
+    // Edge cases: out-of-bounds numbers
+    #[test]
+    fn test_start_beyond_len_returns_empty() {
+        assert_eq!(slice_text("hello", Some(999), None), "");
+    }
+
+    #[test]
+    fn test_end_beyond_len_clamps_to_end() {
+        assert_eq!(slice_text("hello", None, Some(999)), "hello");
+    }
+
+    #[test]
+    fn test_start_and_end_beyond_len_returns_empty() {
+        assert_eq!(slice_text("hello", Some(999), Some(1000)), "");
+    }
+
+    // Edge cases: empty input
+    #[test]
+    fn test_empty_string_no_options() {
+        assert_eq!(slice_text("", None, None), "");
+    }
+
+    #[test]
+    fn test_empty_string_with_options() {
+        assert_eq!(slice_text("", Some(0), Some(0)), "");
+    }
+
+    // Edge cases: zero-length slice
+    #[test]
+    fn test_start_equals_end_returns_empty() {
+        assert_eq!(slice_text("hello", Some(2), Some(2)), "");
+    }
+
+    #[test]
+    fn test_start_zero_end_zero_returns_empty() {
+        assert_eq!(slice_text("hello", Some(0), Some(0)), "");
+    }
+}
