@@ -277,13 +277,13 @@ mod cut_forward{
         }
 
         #[wasm_bindgen_test]
-        fn returns_none_when_everything_fits() {
+        fn returns_length_when_everything_fits() {
             // Content short enough to fully fit — no cut needed.
-            // cut_forward() should return None, meaning "everything from char_start onward fit".
+            // cut_forward() should return Some(html.len()), meaning "everything from char_start onward fit".
             let viewport = make_viewport(400);
             let html = r#"<p style="margin:0;line-height:40px">Only line</p>"#;
             let result = cut_forward(&viewport, html, 0);
-            assert!(result.is_none(), "Expected None when all content fits, got {:?}", result);
+            assert_eq!(result, Some(html.len()), "Expected length when all content fits, got {:?}", result);
             assert_no_overflow(&viewport);
             cleanup(&viewport);
         }
@@ -417,16 +417,16 @@ mod cut_forward{
         }
     
         #[wasm_bindgen_test]
-        fn char_start_at_last_block_returns_none_when_it_fits() {
+        fn char_start_at_last_block_returns_length_when_it_fits() {
             // char_start points to the last block, which fits entirely.
-            // No cut needed → None.
+            // No cut needed → Some(html.len()).
             let block_a = r#"<p style="margin:0;line-height:40px">Block A</p>"#;
             let block_b = r#"<p style="margin:0;line-height:40px">Block B</p>"#;
             let html = format!("{block_a}{block_b}");
             let char_start = block_a.len();
             let viewport = make_viewport(200);
             let result = cut_forward(&viewport, &html, char_start);
-            assert!(result.is_none(), "Expected None when last block fits entirely, got {:?}", result);
+            assert_eq!(result, Some(html.len()), "Expected length when last block fits entirely, got {:?}", result);
             assert_no_overflow(&viewport);
             cleanup(&viewport);
         }
@@ -756,7 +756,7 @@ mod cut_backward {
             let result = cut_backward(&viewport, html, html.len());
 
             assert!(
-                result.is_none(),
+                result == None,
                 "Expected None when all content fits, got {:?}",
                 result
             );
