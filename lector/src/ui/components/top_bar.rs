@@ -34,7 +34,11 @@ pub fn TopBar(
 
         // Re-check whenever the window is resized
         let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || check());
-        window.add_event_listener_with_callback("resize", cb.as_ref().unchecked_ref()).ok();
+        web_sys::window()
+            .unwrap()
+            .add_event_listener_with_callback("resize", cb.as_ref().unchecked_ref())
+            .ok();
+        cb.forget();
     });
 
     rsx! {
