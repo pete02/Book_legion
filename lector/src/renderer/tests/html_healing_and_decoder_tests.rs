@@ -165,7 +165,6 @@ mod html_healing_tests {
 
 #[cfg(test)]
 mod slicing_tests {
-    use super::*;
     use crate::renderer::html_healer::slice_text;
     // Basic slicing
     #[test]

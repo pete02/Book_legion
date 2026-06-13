@@ -6,7 +6,7 @@ pub mod html_healer;
 
 
 
-use dioxus::logger::tracing::{self, error, warn};
+use dioxus::logger::tracing::{self, warn};
 use web_sys::HtmlElement;
 use crate::{infra, renderer::{find_page_boundary::{FitResult::{AllFit, LastFitting, NoneFit}, first_fitting_char_vec, last_fitting_char_vec}, html_healer::{decode_html, heal_html, slice_text}, layout_builder::build_layout_vec}};
 use crate::domain;
