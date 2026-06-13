@@ -201,7 +201,7 @@ pub fn cut_forward(viewport: &HtmlElement, html: &str, char_start: usize)->Optio
         return None;
     }
 
-    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom());
+    let cutoff_res=last_fitting_char_vec(&layouts, rect.bottom()-20.0);
     let cutoff=match cutoff_res{
         (AllFit,i)=>(layouts[i].char_start+layouts[i].text_len()) as usize,
         (NoneFit,_)=>0,
