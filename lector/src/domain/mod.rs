@@ -10,5 +10,6 @@ pub mod text;
 
 pub mod wake;
 
+pub mod tests;
 
-pub mod text_renderer;
+

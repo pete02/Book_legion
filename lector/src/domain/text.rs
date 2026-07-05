@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use dioxus::{logger::tracing, prelude::*};
 
 
@@ -9,36 +7,57 @@ use web_sys::HtmlElement;
 
 use crate::infra;
 
+pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
+    spawn(async move{
+        match infra::chapters::fetch_book_css(&book_id).await {
+            Ok(css_text) => {
+                // Inject CSS into the document
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        let cleaned=strip_color_from_css(&css_text);
+                        inject_css(&document, &book_id, &cleaned);
+                        css_redy.set(true);
+                        tracing::debug!("CSS loaded");
+                    }
+                }
+            }
+            Err(e) => tracing::error!("Failed to fetch book CSS: {}", e),
+        }
+    });
+}
+use regex::Regex;
+pub fn strip_color_from_css(css: &str) -> String {
+    let re = Regex::new(r"(?i)\b(background-)?color\s*:[^;]+;?\s*|\bfont-size\s*:[^;]+;?\s*").unwrap();
+    re.replace_all(css, "").to_string()
+}
 
+fn inject_css(document: &Document, book_id: &str, css: &str) {
+    let style_id = format!("book-css-{}", book_id);
+    if let Some(existing) = document.get_element_by_id(&style_id) {
+        existing.set_inner_html(css);
+        return;
+    }
+
+    let style: HtmlElement = document
+        .create_element("style")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    style.set_id(&style_id);
+    style.set_inner_html(css);
+
+    if let Some(head) = document.head() {
+        head.append_child(&style).unwrap();
+    }
+}
+
+
+use std::collections::HashMap;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TextMap {
     pub plain: String,
     pub html_offsets: HashMap<usize,usize>, // same length as plain.chars()
 }
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct TextHandler{
-    pub book_id: String,
-    pub chapter: Signal<String>,
-    pub visible_text: Signal<String>,
-    pub map: Signal<TextMap>,
-    pub chapter_idx: Signal<usize>,
-    pub cur_text: Signal<String>,
-    pub next_text: Signal<String>,
-    pub chapter_end: Signal<bool>,
-    pub chapter_start: Signal<bool>,
-    pub start_at_end: Signal<bool>,
-    pub start_offset: Signal<usize>,
-    pub end_offset: Signal<usize>
-}
-
-impl TextHandler {
-    pub fn new(book_id: String)->TextHandler{
-        return TextHandler {chapter_start: use_signal(||false),end_offset: use_signal(||0),start_offset: use_signal(||0), start_at_end: use_signal(|| false),map: use_signal(||TextMap { plain: "".to_owned(), html_offsets: HashMap::new() }), book_id:book_id,chapter:use_signal(||"".to_owned()), visible_text: use_signal(||"".to_owned()), next_text: use_signal(||"".to_owned()), cur_text: use_signal(||"".to_owned()), chapter_idx: use_signal(||0),chapter_end: use_signal(||false) }
-    }
-}
-
-
 
 fn check_char_match(c:&char)->bool{
     matches!(c, '.'| ' ' | '!' | '?' | '…' | '"' | '\'' | '“' | '”' | ',')
@@ -117,44 +136,4 @@ pub fn build_text_map_from_html(chapter_html: &str) -> TextMap {
     }
 
     TextMap { plain, html_offsets }
-}
-
-pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
-    spawn(async move{
-        match infra::chapters::fetch_book_css(&book_id).await {
-            Ok(css_text) => {
-                // Inject CSS into the document
-                if let Some(window) = web_sys::window() {
-                    if let Some(document) = window.document() {
-                        inject_css(&document, &book_id, &css_text);
-                        css_redy.set(true);
-                        tracing::debug!("CSS loaded");
-                    }
-                }
-            }
-            Err(e) => tracing::error!("Failed to fetch book CSS: {}", e),
-        }
-    });
-}
-
-
-
-fn inject_css(document: &Document, book_id: &str, css: &str) {
-    let style_id = format!("book-css-{}", book_id);
-    if let Some(existing) = document.get_element_by_id(&style_id) {
-        existing.set_inner_html(css);
-        return;
-    }
-
-    let style: HtmlElement = document
-        .create_element("style")
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    style.set_id(&style_id);
-    style.set_inner_html(css);
-
-    if let Some(head) = document.head() {
-        head.append_child(&style).unwrap();
-    }
 }

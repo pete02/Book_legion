@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{core::use_drop, prelude::*};
 use crate::{Route, styles};
 use wasm_bindgen::JsCast;
 
@@ -25,10 +25,12 @@ pub fn TopBar(
             let Some(doc) = window.document() else { return };
             let Some(probe) = doc.get_element_by_id("topbar-probe") else { return };
             let Some(root)  = doc.get_element_by_id("topbar-root")  else { return };
-            hamburger.set(probe.scroll_width() > root.client_width());
+            let _ = hamburger.try_write().map(|mut h| *h = probe.scroll_width() > root.client_width());
+
         };
 
         check(); // measure on first mount
+        let Some(window) = web_sys::window() else { return };
 
         // Re-check whenever the window is resized
         let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || check());

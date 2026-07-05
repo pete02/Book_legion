@@ -4,6 +4,10 @@ mod infra;
 mod domain;
 mod ui;
 mod styles;
+
+
+mod renderer;
+
 use crate::{domain::login, ui::{Library, LoginGuard, Series, Book, Audio, Text, BookEdit, SeriesEdit}};
 
 
@@ -55,6 +59,7 @@ pub(crate) fn PageNotFound(route: Vec<String>) -> Element {
 
 #[component]
 fn app() -> Element {
+    console_error_panic_hook::set_once();
     let load=login::restore_user_from_storage();
 
     let user = use_signal(|| load);
@@ -73,6 +78,7 @@ fn app() -> Element {
         }
     }
 }
+
 
 
 

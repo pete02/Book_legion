@@ -8,3 +8,4 @@ investigation
 temp
 .env
 *.epub
+.envrc
