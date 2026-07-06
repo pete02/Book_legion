@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cursor {
     pub chapter: usize,
-    pub chunk: usize,
+    pub index: usize,
 }
 
 impl PartialOrd for Cursor {
@@ -15,7 +15,7 @@ impl PartialOrd for Cursor {
 impl Ord for Cursor {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.chapter.cmp(&other.chapter) {
-            Ordering::Equal => self.chunk.cmp(&other.chunk),
+            Ordering::Equal => self.index.cmp(&other.index),
             ord => ord,
         }
     }
@@ -41,11 +41,11 @@ impl Ord for BookCursor {
 }
 
 impl BookCursor {
-    pub fn new(user_id: &str, book_id: &str, chapter: usize, chunk: usize) -> BookCursor {
+    pub fn new(user_id: &str, book_id: &str, chapter: usize, index: usize) -> BookCursor {
         BookCursor {
             user_id: user_id.to_owned(),
             book_id: book_id.to_owned(),
-            cursor: Cursor { chapter, chunk },
+            cursor: Cursor { chapter, index },
         }
     }
 }

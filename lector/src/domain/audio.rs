@@ -151,10 +151,10 @@ pub fn move_cursor(mut audio: AudioData){
     if (audio.chapter_change)().contains(&(audio.current_cursor)().cursor){
         audio.current_cursor.with_mut(|f|{
             f.cursor.chapter+=1;
-            f.cursor.chunk=0;
+            f.cursor.index=0;
         });
     }else{
-        audio.current_cursor.with_mut(|f|f.cursor.chunk +=1);
+        audio.current_cursor.with_mut(|f|f.cursor.index +=1);
     }
 }
 
@@ -186,8 +186,8 @@ pub fn skip_forward(mut audio: AudioData) {
 
 pub fn skip_backward(mut audio: AudioData) {
     audio.current_cursor.with_mut(|c| {
-        if c.cursor.chunk > 0 {
-            c.cursor.chunk -= 1;
+        if c.cursor.index > 0 {
+            c.cursor.index -= 1;
         }
     });
 

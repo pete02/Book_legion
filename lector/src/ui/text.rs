@@ -1,39 +1,91 @@
-use dioxus::{logger::tracing, prelude::*};
-use wasm_bindgen::JsCast;
-use web_sys::HtmlElement;
+use std::thread::current;
 
-use crate::{Route, domain, ui::components::{TopBar, TopBarEntry}};
-use crate::renderer::{BookDriver, Direction};
+use dioxus::{logger::tracing, prelude::*};
+
+use crate::{Route, domain::{self, text}, infra, ui::components::{TopBar, TopBarEntry}};
 
 #[component]
 pub fn Text(book_id: String) -> Element {
     let b_signal = use_signal(|| book_id.clone());
     let css_ready: Signal<bool> = use_signal(|| false);
     let show_extra = use_signal(|| false);
-    let mut driver: Signal<Option<BookDriver>> = use_signal(|| None);
+
+    let mut chapter_html: Signal<Option<String>> = use_signal(|| None);
+    let mut current_page: Signal<i32> = use_signal(|| 0);
+    let mut column_width_px: Signal<Option<f64>> = use_signal(|| None);
+    let mut total_pages: Signal<Option<i32>> = use_signal(|| None);
+    let mut offset: Signal<Option<i64>> = use_signal(|| Some(0));
+    let mut chapter_idx: Signal<Option<usize>> = use_signal(|| None);
 
     use_effect(move || {
-        tracing::debug!("here");
-        domain::text::fetch_and_apply_book_css(b_signal(), css_ready);
+        text::fetch_and_apply_book_css(b_signal(), css_ready);
     });
 
-    // Once CSS is ready, init the driver
     use_effect(move || {
-        if !css_ready() { return; }
+        if !css_ready() {
+            return;
+        }
+        let book_id = b_signal();
         spawn(async move {
-            let window = web_sys::window().unwrap();
-            let document = window.document().unwrap();
-            let el = document
-                .get_element_by_id("book-renderer")
-                .unwrap()
-                .dyn_into::<HtmlElement>()
-                .unwrap();
+            text::get_new_chapter(0, &book_id, chapter_html).await;
+        });
+    });
 
-            if let Some(d) = BookDriver::new(b_signal(), el).await {
-                driver.set(Some(d));
-                // Load first page
-                if let Some(ref mut d) = *driver.write() {
-                    d.go(Direction::Forward).await;
+    use_effect(move || {
+        
+        spawn(async move{
+            let bc=domain::cursor::load_bookcursor(b_signal()).await;
+            chapter_idx.set(Some(bc.cursor.chapter));
+            offset.set(Some(bc.cursor.index as i64));
+        });
+    });
+
+    use_effect(move || {
+        if chapter_html().is_none() {
+            return;
+        }
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(0).await;
+            if let Some(width) = text::measure_element_width("book-renderer") {
+                column_width_px.set(Some(width));
+            }
+        });
+    });
+
+    use_effect(move || {
+        let Some(total) = total_pages() else { return; };
+        if let Some(saved_offset) = offset() {
+            spawn(async move {
+                let page = text::find_page_for_offset(
+                    saved_offset,
+                    total,
+                    |p| current_page.set(p),
+                ).await;
+                current_page.set(page);
+            });
+        }
+    });
+
+    use_effect(move || {
+        let Some(_) = column_width_px() else { return; };
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(0).await;
+            if let Some(pages) = text::measure_total_pages("book-content") {
+                total_pages.set(Some(pages));
+            }
+        });
+    });
+    use_effect(move || {
+        let page = current_page();
+        let Some(total) = total_pages() else { return; };
+        if page < 0 || page >= total {
+            return;
+        }
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(0).await;
+            if let Some(index) = text::measure_current_page_html_offset().await {
+                if let Some(chapter_idx) = chapter_idx() {
+                    text::save_cursor(page, index, chapter_idx).await;
                 }
             }
         });
@@ -44,9 +96,22 @@ pub fn Text(book_id: String) -> Element {
         TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
     ];
 
-    if !css_ready() {
+    if !css_ready() || chapter_html().is_none() {
         return rsx!(div { id: "book-renderer", "Loading reader…" });
     }
+
+    let page = current_page();
+
+    let column_style = match column_width_px() {
+        Some(w) => format!("column-width: {w}px; column-gap: 0; column-fill: auto;"),
+        None => String::new(),
+    };
+    let transform_style = format!("transform: translateX(-{}00%);", page);
+
+    let can_go_forward = match total_pages() {
+        Some(total) => page + 1 < total,
+        None => false,
+    };
 
     rsx! {
         div {
@@ -58,29 +123,48 @@ pub fn Text(book_id: String) -> Element {
                 div {
                     id: "book-renderer",
                     style: "height: 90dvh; overflow: hidden; position: relative; width: 90%; margin-left: 5%; margin-bottom: 0%; padding-bottom: 10px; text-align: left !important;",
+                    div {
+                        id: "book-content",
+                        style: "height: 100%; {column_style} {transform_style}",
+                        dangerous_inner_html: "{chapter_html().unwrap()}",
+                    }
                 }
                 div {
+                    id: "page-nav-overlay",
                     style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex;",
-                    // Left — go back
                     button {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
-                            spawn(async move {
-                                if let Some(ref mut d)=*driver.write(){
-                                    d.go(Direction::Back).await;
-                                }
-                            });
+                            let id = b_signal();
+                            let should_load_prev_chapter = *current_page.read() <= 0;
+
+                            if !should_load_prev_chapter {
+                                *current_page.write() -= 1;
+                            } else {
+                                spawn(async move {
+                                    text::get_new_chapter(0, &id, chapter_html).await;
+                                    match total_pages() {
+                                        Some(total) => *current_page.write() = total - 1,
+                                        None => *current_page.write() = 0,
+                                    }
+                                });
+                            }
                         },
                     }
-                    // Right — go forward
                     button {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
-                            spawn(async move {
-                                if let Some(ref mut d)=*driver.write(){
-                                    d.go(Direction::Forward).await;
-                                }
-                            });
+                            let id=b_signal();
+                            if can_go_forward {
+                                *current_page.write() += 1;
+                            }else{
+                                
+                                spawn(async move{
+                                    text::get_new_chapter(1, &id, chapter_html).await;
+                                    *current_page.write() =0;
+                                    
+                                });
+                            }
                         },
                     }
                 }

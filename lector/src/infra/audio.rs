@@ -85,7 +85,7 @@ pub async fn get_chunks(
     let bytes = dioxus::asset_resolver::read_asset_bytes(&assets::MOCK_MP3).await.unwrap();
     let base64_string = general_purpose::STANDARD.encode(&bytes);
     let start_chapter = cursor.cursor.chapter;
-    let start_chunk = cursor.cursor.chunk;
+    let start_chunk = cursor.cursor.index;
 
     let mut results = Vec::with_capacity(request_size);
 
