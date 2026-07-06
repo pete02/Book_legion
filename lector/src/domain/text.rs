@@ -6,6 +6,7 @@ use web_sys::Document;
 use web_sys::HtmlElement;
 
 use crate::domain;
+use crate::domain::cursor::BookCursor;
 use crate::infra;
 
 pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
@@ -150,16 +151,17 @@ pub async fn measure_current_page_html_offset() -> Option<i64> {
 }
 
 
-pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize){
+pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize, book_id: &str){
     dioxus::logger::tracing::info!(
         "page {page} -> html offset at top of page: {index}"
     );
+    let cursor=BookCursor::new(book_id, chapter_idx, index as usize);
+    domain::cursor::save_bookcursor(cursor).await;
 }
 
 pub async fn get_new_chapter(chapter_idx: usize, book_id: &str, mut chapter_signal: Signal<Option<String>>) {
     match infra::chapters::fetch_chapter(book_id, chapter_idx).await{
         Ok(text)=>{
-            tracing::info!("got: {}",text);
             chapter_signal.set(Some(text))
         },
         Err(err)=>{

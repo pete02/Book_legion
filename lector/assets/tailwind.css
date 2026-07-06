@@ -208,24 +208,6 @@
   .left-1\/2 {
     left: calc(1/2 * 100%);
   }
-  .container {
-    width: 100%;
-    @media (width >= 40rem) {
-      max-width: 40rem;
-    }
-    @media (width >= 48rem) {
-      max-width: 48rem;
-    }
-    @media (width >= 64rem) {
-      max-width: 64rem;
-    }
-    @media (width >= 80rem) {
-      max-width: 80rem;
-    }
-    @media (width >= 96rem) {
-      max-width: 96rem;
-    }
-  }
   .my-2 {
     margin-block: calc(var(--spacing) * 2);
   }
@@ -234,12 +216,6 @@
   }
   .flex {
     display: flex;
-  }
-  .hidden {
-    display: none;
-  }
-  .inline {
-    display: inline;
   }
   .h-3 {
     height: calc(var(--spacing) * 3);

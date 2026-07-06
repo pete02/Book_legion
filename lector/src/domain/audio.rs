@@ -34,7 +34,7 @@ fn error_audio(book_id: String)->AudioData{
         name: use_signal(||"error in getting audio data".to_string()),
         audio_url: use_signal(||"".to_owned()),
         progress: use_signal(||0.0),
-        current_cursor: use_signal(||BookCursor::new("u1", "b1", 0, 0)),
+        current_cursor: use_signal(||BookCursor::new( "b1", 0, 0)),
         play: use_signal(||true),
         loading: use_signal(||false),
         audio_urls: use_signal(||HashMap::new()),
