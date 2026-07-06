@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cursor {
     pub chapter: usize,
+    #[serde(rename = "chunk")]
     pub index: usize,
 }
 
@@ -41,9 +42,13 @@ impl Ord for BookCursor {
 }
 
 impl BookCursor {
-    pub fn new(user_id: &str, book_id: &str, chapter: usize, index: usize) -> BookCursor {
+    pub fn new( book_id: &str, chapter: usize, index: usize) -> BookCursor {
+        let username=domain::login::current_name();
+        if username ==""{
+            tracing::error!("Could not get any username");
+        }
         BookCursor {
-            user_id: user_id.to_owned(),
+            user_id: username,
             book_id: book_id.to_owned(),
             cursor: Cursor { chapter, index },
         }
@@ -57,7 +62,7 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
     }
     match infra::fetch_cursor(&book_id).await{
         Ok(c) => return c,
-        Err(_) => return  BookCursor::new(&username, &book_id, 0, 0),
+        Err(_) => return  BookCursor::new(&book_id, 0, 0),
     }
 }
 use crate::infra::cursor::CursorTextResponse;
@@ -69,7 +74,7 @@ pub async fn fetch_cursor_text(book_id: &str) -> CursorTextResponse {
         Err(e) => {
             console(&format!("Error fetching cursor text: {}", e));
             CursorTextResponse {
-                cursor: BookCursor::new("", book_id, 0, 0),
+                cursor: BookCursor::new(book_id, 0, 0),
                 text: "".to_string(),
             }
         },
