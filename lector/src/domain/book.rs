@@ -104,7 +104,7 @@ pub fn select_chapter(book: Signal<BookData>, progress:Signal<f64>, index: usize
     spawn(async move {
         let mut cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
         cursor.cursor.chapter = index;
-        cursor.cursor.chunk = 0;
+        cursor.cursor.index = 0;
 
         let _ = domain::cursor::save_bookcursor(cursor).await;
         match infra::book::fetch_book_progress(&book_id).await{

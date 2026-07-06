@@ -75,7 +75,7 @@ pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
         book_id: book_id.to_string(),
         cursor: Cursor {
             chapter: 0,
-            chunk: 0,
+            index: 0,
         },
     });
 
@@ -203,7 +203,7 @@ pub async fn get_cursor_from_text(
         user_id: "mock-user".to_string(),
         cursor: Cursor {
             chapter: chapter_index,
-            chunk: chunk,
+            index: chunk,
         },
     })
 }

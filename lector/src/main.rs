@@ -6,8 +6,6 @@ mod ui;
 mod styles;
 
 
-mod renderer;
-
 use crate::{domain::login, ui::{Library, LoginGuard, Series, Book, Audio, Text, BookEdit, SeriesEdit}};
 
 
