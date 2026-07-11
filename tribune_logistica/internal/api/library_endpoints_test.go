@@ -13,7 +13,7 @@ import (
 
 func TestLibraryEndpoints(t *testing.T) {
 	api, validToken := setupAPIWithAuth(t) // Returns api and a valid auth token
-	if _, ok := login.VerifyAuthToken(validToken); !ok {
+	if err := login.VerifyUserSession("user", validToken); err != nil {
 		t.Fatal("Bad auth token")
 	}
 
