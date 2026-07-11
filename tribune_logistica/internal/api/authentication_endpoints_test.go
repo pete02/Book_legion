@@ -63,8 +63,8 @@ func TestRegisterAndLogin(t *testing.T) {
 		t.Fatal("Login success: missing expires_in")
 	}
 
-	if str, ok := login.VerifyAuthToken(auth_token); !ok || str != username {
-		t.Fatalf("Bad auth token, %v", str)
+	if err := login.VerifyUserSession(username, auth_token); err != nil {
+		t.Fatalf("Bad auth token, %v", err)
 	}
 
 	// ----- LOGIN FAILURE -----
@@ -94,7 +94,7 @@ func TestRefreshAuthToken(t *testing.T) {
 	refreshToken, _ := setupUser(t, api, username, password)
 
 	// ----- TEST 1: SUCCESSFUL REFRESH -----
-	refreshBody := map[string]string{"refresh_token": refreshToken}
+	refreshBody := map[string]string{"refresh_token": refreshToken, "username": username}
 	buf, _ := json.Marshal(refreshBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/refreshtoken", bytes.NewBuffer(buf))

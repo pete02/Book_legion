@@ -27,6 +27,7 @@ type RegisterResponse struct {
 }
 
 type RefreshRequest struct {
+	Username     string `json:"username"`
 	RefreshToken string `json:"refresh_token"`
 }
 
@@ -103,20 +104,15 @@ func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Printf("Logging in: %v\n", req.Username)
-	refresh_token, err := login.VerifyUser(api.DB, req.Username, req.Password)
+	user, err := login.NewUserSession(req.Username, req.Password, api.DB)
 	if err != nil {
 		http.Error(w, "Wrong credentials", http.StatusUnauthorized)
 		return
 	}
 
-	auth_token, err := login.GenerateAuthToken(api.DB, refresh_token)
-	if err != nil {
-		http.Error(w, "Could not generate auth token", http.StatusInternalServerError)
-	}
-
 	resp := LoginResponse{
-		AuthToken:    auth_token,
-		RefreshToken: refresh_token,
+		AuthToken:    user.GetAuthToken(),
+		RefreshToken: user.GetRefreshToken(),
 		ExpiresIn:    int(login.GetAuthTokenTTL().Seconds()),
 	}
 
@@ -142,7 +138,7 @@ func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newAuthToken, err := login.GenerateAuthToken(api.DB, req.RefreshToken)
+	user, err := login.RefreshAuthToken(req.Username, req.RefreshToken)
 	if err != nil {
 		http.Error(w, "Could not generate auth token", http.StatusUnauthorized)
 		return
@@ -152,7 +148,7 @@ func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	expiresIn := login.GetAuthTokenTTL().Seconds()
 
 	resp := RefreshResponse{
-		AuthToken: newAuthToken,
+		AuthToken: user.GetAuthToken(),
 		ExpiresIn: int(expiresIn),
 	}
 
