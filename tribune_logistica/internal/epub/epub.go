@@ -329,6 +329,12 @@ func (e *Epub) findNavPath() (string, error) {
 		return "", fmt.Errorf("spine toc idref %q not found in manifest", pkg.Spine.TOC)
 	}
 
+	for _, it := range pkg.Manifest.Items {
+		if it.MediaType == "application/x-dtbncx+xml" {
+			return path.Join(opfDir, it.Href), nil
+		}
+	}
+
 	return "", errors.New("no navigation document found (no EPUB3 nav item, no EPUB2 toc.ncx reference)")
 }
 
