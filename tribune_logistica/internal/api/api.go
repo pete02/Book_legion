@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/manager"
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
@@ -12,14 +11,12 @@ import (
 type API struct {
 	Manager *manager.Organizer
 	DB      storage.Storage
-	Policy  epub.ChunkPolicy
 }
 
-func New(manager *manager.Organizer, db storage.Storage, policy epub.ChunkPolicy) API {
+func New(manager *manager.Organizer, db storage.Storage) API {
 	return API{
 		Manager: manager,
 		DB:      db,
-		Policy:  policy,
 	}
 }
 

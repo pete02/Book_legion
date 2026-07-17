@@ -3,13 +3,10 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/book_legion-tribune_logistica/internal/types"
-	"golang.org/x/net/html"
 )
 
 func createTestEpub(t *testing.T, files map[string]string) string {
@@ -72,13 +69,13 @@ func TestExtractChapter_HappyPath(t *testing.T) {
 		},
 	}
 
-	data, err := e.ExtractChapter(0)
+	data, err := e.GetChapter(0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	got := string(data)
-	want := "<p>Chapter 1</p>"
+	want := "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\t\t<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\t\t\t<head>\n\t\t\t\t<title>Chapter 1</title>\n\t\t\t</head>\n\t\t\t<body>\n\t\t\t\t<p>Chapter 1</p>\n\t\t\t</body>\n\t\t</html>"
 
 	if got != want {
 		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
@@ -178,7 +175,7 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.epub.ExtractChapter(tt.index)
+			data, err := tt.epub.GetChapter(tt.index)
 
 			if tt.expectErr {
 				if err == nil {
@@ -194,90 +191,19 @@ func TestExtractChapter_UnhappyPaths(t *testing.T) {
 	}
 }
 
-func TestEpub_ExtractChunk(t *testing.T) {
-
-	// in-memory EPUB contents
-	files := map[string]string{
-		"chapter1.xhtml": "<html><body>Hello world. This is chapter 1.</body></html>",
-		"chapter2.xhtml": "<html><body>Second chapter content here!</body></html>",
-	}
-
-	path := createTestEpub(t, files)
-
-	epub := Epub{
-		Path: path,
-		Spine: []SpineItem{
-			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
-			{Index: 1, ID: "c2", Href: "chapter2.xhtml"},
-		},
-		Nav: []PrettySpineItem{
-			{
-				Index:  0,
-				Number: 1,
-				Title:  "test",
-				Href:   "chapter1.xhtml",
-			}, {
-				Index:  1,
-				Number: 2,
-				Title:  "test2",
-				Href:   "chapter2.xhtml",
-			},
-		},
-	}
-
-	policy := ChunkPolicy{TargetSize: 50, MaxSize: 60}
-
-	tests := []struct {
-		name       string
-		spineIndex int
-		chunkIndex int
-		want       string
-		wantErr    bool
-	}{
-		{
-			name:       "first chunk of chapter 1",
-			spineIndex: 0,
-			chunkIndex: 0,
-			want:       "Hello world. This is chapter 1.",
-			wantErr:    false,
-		},
-		{
-			name:       "first chunk of chapter 2",
-			spineIndex: 1,
-			chunkIndex: 0,
-			want:       "Second chapter content here!",
-			wantErr:    false,
-		},
-		{
-			name:       "spine index out of range",
-			spineIndex: 2,
-			chunkIndex: 0,
-			want:       "",
-			wantErr:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := epub.ExtractChunk(tt.spineIndex, tt.chunkIndex, policy)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ExtractChunk() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Errorf("ExtractChunk() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEpub_ExtractCover(t *testing.T) {
+func TestEpub_GetCover(t *testing.T) {
 	coverData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG signature (dummy)
 	otherData := []byte("not the cover")
 
 	// EPUB with OPF metadata declaring cover
 	files := map[string]string{
 		"OEBPS/cover.png": string(coverData),
-
+		"META-INF/container.xml": `<?xml version="1.0" encoding="UTF-8"?>
+			<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+			<rootfiles>
+				<rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml" />
+			</rootfiles>
+			</container>`,
 		"OEBPS/content.opf": `<?xml version="1.0" encoding="UTF-8"?>
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -307,17 +233,17 @@ func TestEpub_ExtractCover(t *testing.T) {
 		{
 			name:     "find cover via metadata",
 			wantData: coverData,
-			wantName: "OEBPS/cover.png",
+			wantName: "image/png",
 			wantErr:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotData, gotName, err := epub.ExtractCover()
+			gotData, gotName, err := epub.GetCover()
 
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("ExtractCover() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("GetCover() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
@@ -347,13 +273,13 @@ func TestEpub_ExtractCover(t *testing.T) {
 	epubNoCover := Epub{Path: noCoverPath}
 
 	t.Run("no cover present", func(t *testing.T) {
-		if _, _, err := epubNoCover.ExtractCover(); err == nil {
+		if _, _, err := epubNoCover.GetCover(); err == nil {
 			t.Errorf("expected error when cover metadata missing")
 		}
 	})
 }
 
-func TestEpub_ExtractCSS(t *testing.T) {
+func TestEpub_GetCSS(t *testing.T) {
 	// in-memory EPUB with multiple CSS files
 	files := map[string]string{
 		"OEBPS/style1.css":     "body { color: red; }",
@@ -361,7 +287,7 @@ func TestEpub_ExtractCSS(t *testing.T) {
 		"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
 	}
 
-	data := createMinimalEPUB(t, files)
+	data := createTestEpub(t, files)
 
 	epub := Epub{
 		Path: data,
@@ -379,13 +305,13 @@ func TestEpub_ExtractCSS(t *testing.T) {
 	}
 
 	t.Run("concatenate all CSS files", func(t *testing.T) {
-		got, err := epub.ExtractCSS()
+		got, err := epub.GetCSS()
 		if err != nil {
-			t.Fatalf("ExtractCSS() error = %v", err)
+			t.Fatalf("GetCSS() error = %v", err)
 		}
 		want := "body { color: red; }\n" + "p { margin: 0; }\n"
 		if string(got) != want {
-			t.Errorf("ExtractCSS() = %q, want %q", string(got), want)
+			t.Errorf("GetCSS() = %q, want %q", string(got), want)
 		}
 	})
 
@@ -393,416 +319,14 @@ func TestEpub_ExtractCSS(t *testing.T) {
 		filesNoCSS := map[string]string{
 			"OEBPS/chapter1.xhtml": "<html><body>Chapter 1 content</body></html>",
 		}
-		dataNoCSS := createMinimalEPUB(t, filesNoCSS)
+		dataNoCSS := createTestEpub(t, filesNoCSS)
 		epubNoCSS := Epub{Path: dataNoCSS}
 
-		_, err := epubNoCSS.ExtractCSS()
+		_, err := epubNoCSS.GetCSS()
 		if err == nil {
-			t.Errorf("ExtractCSS() expected error, got nil")
+			t.Errorf("GetCSS() expected error, got nil")
 		}
 	})
-}
-
-func TestEpub_MaxChunkIndex(t *testing.T) {
-	files := map[string]string{
-		"chapter1.xhtml": "<html><body>Hello world. This is a test chapter. It has multiple sentences.</body></html>",
-	}
-	data := createMinimalEPUB(t, files)
-
-	epub := Epub{
-		Path: data,
-		Spine: []SpineItem{
-			{Index: 0, ID: "c1", Href: "chapter1.xhtml"},
-		},
-		Nav: []PrettySpineItem{
-			{
-				Index:  0,
-				Number: 1,
-				Title:  "test",
-				Href:   "chapter1.xhtml",
-			},
-		},
-	}
-
-	policy := ChunkPolicy{TargetSize: 20, MaxSize: 25}
-
-	t.Run("last chunk index is correct", func(t *testing.T) {
-		maxIdx, err := epub.MaxChunkIndex(0, policy)
-		if err != nil {
-			t.Fatalf("MaxChunkIndex() error = %v", err)
-		}
-
-		chapterBytes, _ := epub.ExtractChapter(0)
-		doc, _ := html.Parse(bytes.NewReader(chapterBytes))
-		linear := LinearizeChapter(doc)
-		chunks := TextChunk(linear, policy)
-
-		if maxIdx != chunks[len(chunks)-1].Index {
-			t.Errorf("MaxChunkIndex() = %d, want last chunk index %d", maxIdx, chunks[len(chunks)-1].Index)
-		}
-	})
-}
-
-func make_cursor(chapter int, chunk int) types.UserCursor {
-	return types.NewUserCursor("u1", "b1", chapter, chunk)
-}
-
-func TestChapterProgress(t *testing.T) {
-	policy := ChunkPolicy{TargetSize: 12, MaxSize: 20}
-
-	// HTML wrapper is important because MaxChunkIndex parses HTML
-	chapterHTML := []byte(`
-		<html>
-			<body>
-				<p>Hello world. This is a test. Split nicely.</p>
-			</body>
-		</html>
-	`)
-
-	epub := &Epub{
-		Nav: []PrettySpineItem{{}},
-		extractChapter: func(navIndex int) ([]byte, error) {
-			return chapterHTML, nil
-		},
-	}
-
-	tests := []struct {
-		name    string
-		cursor  types.UserCursor
-		want    float32
-		wantErr bool
-	}{
-		{
-			name:    "chunk 0 of 2",
-			cursor:  make_cursor(0, 0),
-			want:    0.0,
-			wantErr: false,
-		},
-		{
-			name:    "chunk 1 of 2",
-			cursor:  make_cursor(0, 1),
-			want:    0.5,
-			wantErr: false,
-		},
-		{
-			name:    "chunk 2 of 2",
-			cursor:  make_cursor(0, 2),
-			want:    1.0,
-			wantErr: false,
-		},
-		{
-			name:    "Too large",
-			cursor:  make_cursor(0, 3),
-			want:    1.0,
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := epub.ChapterProgress(tt.cursor, policy)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if got != tt.want {
-				t.Fatalf("got %f, want %f", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBookProgress(t *testing.T) {
-	policy := ChunkPolicy{TargetSize: 12, MaxSize: 20}
-
-	epub := &Epub{
-		Nav: []PrettySpineItem{{}, {}, {}}, // 3 chapters
-	}
-
-	epub.maxChunkMap = func(policy ChunkPolicy) map[int]int {
-		return map[int]int{
-			0: 2, // chapter 0 has 3 chunks (0,1,2)
-			1: 1, // chapter 1 has 2 chunks (0,1)
-			2: 3, // chapter 2 has 4 chunks (0,1,2,3)
-		}
-	}
-
-	tests := []struct {
-		name   string
-		cursor types.UserCursor
-		want   float32
-	}{
-		{
-			name: "start of book",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 0, Chunk: 0},
-			},
-			want: 0.0,
-		},
-		{
-			name: "middle of first chapter",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 0, Chunk: 1},
-			},
-			want: float32(1) / float32(2+1+3),
-		},
-		{
-			name: "end of first chapter",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 0, Chunk: 2},
-			},
-			want: float32(2) / float32(2+1+3),
-		},
-		{
-			name: "start of second chapter",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 1, Chunk: 0},
-			},
-			want: float32(2) / float32(2+1+3),
-		},
-		{
-			name: "middle of second chapter",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 1, Chunk: 1},
-			},
-			want: float32(2+1) / float32(2+1+3),
-		},
-		{
-			name: "last chunk of last chapter",
-			cursor: types.UserCursor{
-				Cursor: types.Cursor{Chapter: 2, Chunk: 4},
-			},
-			want: 1.0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := epub.BookProgress(tt.cursor, policy)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("got %f, want %f", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCalculateCursorPlace_Success(t *testing.T) {
-	e := &Epub{}
-
-	// Mock chapter content
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<div>
-				<p>Chapter 1</p>
-				<p>Tala looked around the room, ignoring the man.</p>
-				<p>A waist-high stone wall stood in a circle halfway between her and the smooth granite of the outer walls.</p>
-			</div>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     80,
-		MinSize:        40,
-		MaxSize:        120,
-		MinSnippetSize: 30,
-	}
-
-	exampleHTML := `<p>Tala looked around the room, ignoring the man.</p>`
-
-	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if cursor.Chapter != 0 {
-		t.Errorf("expected chapter 0, got %d", cursor.Chapter)
-	}
-
-	if cursor.Chunk < 0 {
-		t.Errorf("expected valid chunk index, got %d", cursor.Chunk)
-	}
-}
-
-func TestCalculateCursorPlace_SnippetTooShort(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`<p>This is a chapter</p>`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     80,
-		MinSize:        40,
-		MaxSize:        120,
-		MinSnippetSize: 20,
-	}
-
-	exampleHTML := `<p>Hi</p>`
-
-	_, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !errors.Is(err, errors.New("snippet too short to uniquely locate cursor")) &&
-		err.Error() != "snippet too short to uniquely locate cursor" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestCalculateCursorPlace_SnippetNotFound(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<p>This is the first paragraph.</p>
-			<p>This is the second paragraph.</p>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     80,
-		MinSize:        40,
-		MaxSize:        120,
-		MinSnippetSize: 20,
-	}
-
-	exampleHTML := `<p>This text does not exist in the chapter.</p>`
-
-	_, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if err.Error() != "example text not found in chapter" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestCalculateCursorPlace_ChunkBoundary(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<p>This is sentence one. This is sentence two.</p>
-			<p>This is sentence three. This is sentence four.</p>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     30, // force multiple chunks
-		MinSize:        20,
-		MaxSize:        40,
-		MinSnippetSize: 22,
-	}
-
-	exampleHTML := `<p>This is sentence three.</p>`
-
-	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if cursor.Chunk == 0 {
-		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
-	}
-}
-
-func TestCalculateCursorPlace_MissingSpace(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<p>This is sentence one. This is sentence two.</p>
-			<p>This is sentence three. This is sentence four.</p>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     30, // force multiple chunks
-		MinSize:        20,
-		MaxSize:        40,
-		MinSnippetSize: 20,
-	}
-
-	exampleHTML := `<p>This is sentencethree.</p>`
-
-	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if cursor.Chunk == 0 {
-		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
-	}
-}
-
-func TestCalculateCursorPlace_Punctuations(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<p>This is sentence one. This is sentence two.</p>
-			<p>This is sentence three. This is sentence four.</p>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     30, // force multiple chunks
-		MinSize:        20,
-		MaxSize:        40,
-		MinSnippetSize: 20,
-	}
-
-	exampleHTML := `<p>This is sentence three!!!</p>`
-
-	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if cursor.Chunk == 0 {
-		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
-	}
-}
-
-func TestCalculateCursorPlace_DifferentQuotes(t *testing.T) {
-	e := &Epub{}
-
-	e.extractChapter = func(navIndex int) ([]byte, error) {
-		return []byte(`
-			<p>This is sentence one. This is sentence two.</p>
-			<p>”This is sentence three.” This is sentence four.</p>
-		`), nil
-	}
-
-	policy := ChunkPolicy{
-		TargetSize:     30, // force multiple chunks
-		MinSize:        20,
-		MaxSize:        40,
-		MinSnippetSize: 20,
-	}
-
-	exampleHTML := `<p>"This is sentence three."</p>`
-
-	cursor, err := e.CalculateCursorPlace(0, exampleHTML, policy)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if cursor.Chunk == 0 {
-		t.Errorf("expected cursor to land in later chunk, got chunk %d", cursor.Chunk)
-	}
 }
 
 func TestExtractChapter_SelfClosingScript(t *testing.T) {
@@ -832,7 +356,7 @@ func TestExtractChapter_SelfClosingScript(t *testing.T) {
 		},
 	}
 
-	data, err := e.ExtractChapter(0)
+	data, err := e.GetChapter(0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -842,8 +366,292 @@ func TestExtractChapter_SelfClosingScript(t *testing.T) {
 		t.Fatal("extracted chapter body is empty: self-closing <script/> likely caused HTML parser to consume <body> as script text")
 	}
 
-	want := "<p>Chapter 1 content</p>"
+	want := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\t<head>\n\t\t<title>Chapter 1</title>\n\t\t<script type=\"text/javascript\" src=\"js/kobo.js\"/>\n\t\t<style type=\"text/css\" id=\"kobostylehacks\">div#book-inner p { font-size: 1.0em; }</style>\n\t</head>\n\t<body>\n\t\t<p>Chapter 1 content</p>\n\t</body>\n</html>"
 	if got != want {
 		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
+	}
+}
+
+func TestLoadSpine_SimpleTwoChapters(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+
+		"OEBPS/content.opf": `
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+  </spine>
+</package>`,
+
+		"OEBPS/text/ch1.xhtml": "<html><body>Chapter 1</body></html>",
+		"OEBPS/text/ch2.xhtml": "<html><body>Chapter 2</body></html>",
+	}
+
+	epubPath := createTestEpub(t, files)
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatalf("failed to load epub: %v", err)
+	}
+
+	spine, err := epub.LoadSpine()
+	if err != nil {
+		t.Fatalf("LoadSpine failed: %v", err)
+	}
+	fmt.Println(spine)
+	if len(spine) != 2 {
+		t.Fatalf("expected 2 spine items, got %d", len(spine))
+	}
+
+	// Verify order, ID, href, number
+	expectedIDs := []string{"chap1", "chap2"}
+
+	for i, item := range spine {
+		if item.ID != expectedIDs[i] {
+			t.Errorf("item %d: expected ID %q, got %q", i, expectedIDs[i], item.ID)
+		}
+		expectedFiles := []string{"ch1.xhtml", "ch2.xhtml"}
+		if filepath.Base(item.Href) != expectedFiles[i] {
+			t.Errorf("item %d: unexpected Href %q", i, item.Href)
+		}
+
+	}
+}
+
+func TestLoadSpine_MissingContainer(t *testing.T) {
+	epubPath := createTestEpub(t, map[string]string{})
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatal("failed to load epub")
+	}
+
+	_, err = epub.LoadSpine()
+	if err == nil {
+		t.Fatal("expected error due to missing container.xml")
+	}
+}
+
+func TestLoadSpine_SpineIDNotInManifest(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `
+<package version="3.0">
+  <manifest>
+    <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap2"/>
+  </spine>
+</package>`,
+		"OEBPS/text/ch1.xhtml": "<html></html>",
+	}
+
+	epubPath := createTestEpub(t, files)
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatal("failed to load epub")
+	}
+	_, err = epub.LoadSpine()
+	if err == nil {
+		t.Fatal("expected error due to spine ID not in manifest")
+	}
+}
+
+func TestLoadSpine_EmptySpine(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `
+<package version="3.0">
+  <manifest>
+    <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+  </spine>
+</package>`,
+		"OEBPS/text/ch1.xhtml": "<html></html>",
+	}
+
+	epubPath := createTestEpub(t, files)
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatal("failed to load epub")
+	}
+	_, err = epub.LoadSpine()
+	if err == nil {
+		t.Fatal("expected error due to empty spine")
+	}
+}
+
+func TestLoadSpine_NonLinearItemSkipped(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `
+<package version="3.0">
+  <manifest>
+    <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2" linear="no"/>
+  </spine>
+</package>`,
+		"OEBPS/text/ch1.xhtml": "<html></html>",
+		"OEBPS/text/ch2.xhtml": "<html></html>",
+	}
+
+	epubPath := createTestEpub(t, files)
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatal("failed to load epub")
+	}
+	spine, err := epub.LoadSpine()
+	if err != nil {
+		t.Fatalf("LoadSpine failed: %v", err)
+	}
+
+	if len(spine) != 1 {
+		t.Fatalf("expected 1 spine item (non-linear skipped), got %d", len(spine))
+	}
+	if spine[0].ID != "chap1" {
+		t.Errorf("expected first item ID 'chap1', got %q", spine[0].ID)
+	}
+}
+
+func TestLoadSpine_OPFInSubdirectory(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0">
+  <rootfiles>
+    <rootfile full-path="OPS/EPUB/content.opf"/>
+  </rootfiles>
+</container>`,
+		"OPS/EPUB/content.opf": `
+<package version="3.0">
+  <manifest>
+    <item id="c1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OPS/EPUB/text/ch1.xhtml": "<html></html>",
+	}
+
+	epubPath := createTestEpub(t, files)
+	epub, err := New(epubPath)
+	if err != nil {
+		t.Fatal("failed to load epub")
+	}
+	spine, err := epub.LoadSpine()
+	if err != nil {
+		t.Fatalf("LoadSpine failed: %v", err)
+	}
+
+	if len(spine) != 1 {
+		t.Fatalf("expected 1 spine item, got %d", len(spine))
+	}
+	expectedPath := filepath.Join("OPS", "EPUB", "text", "ch1.xhtml")
+	if spine[0].Href != expectedPath {
+		t.Errorf("expected Href %q, got %q", expectedPath, spine[0].Href)
+	}
+}
+
+func TestLoadPrettySpine_SimpleChapters(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+
+		"OEBPS/content.opf": `
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="chap1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
+	<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+  </spine>
+</package>`,
+
+		"OEBPS/text/ch1.xhtml": "<html><body>Chapter 1</body></html>",
+		"OEBPS/text/ch2.xhtml": "<html><body>Chapter 2</body></html>",
+
+		// nav.toc in NCX format
+		"OEBPS/toc.ncx": `
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="uid"/>
+    <meta name="dtb:depth" content="1"/>
+  </head>
+  <docTitle><text>Test Book</text></docTitle>
+  <navMap>
+    <navPoint id="np1" playOrder="0">
+      <navLabel><text>Chapter One</text></navLabel>
+      <content src="text/ch1.xhtml"/>
+    </navPoint>
+    <navPoint id="np2" playOrder="1">
+      <navLabel><text>Chapter Two</text></navLabel>
+      <content src="text/ch2.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>`}
+
+	epubPath := createTestEpub(t, files)
+
+	// load mechanical spine
+	e, err := New(epubPath)
+	if err != nil {
+		t.Fatalf("failed to create Epub: %v", err)
+	}
+	e.Nav, err = e.GetToc()
+	if err != nil {
+		t.Fatalf("failed to get TOC: %v", err)
+	}
+
+	// verify pretty spine
+	if len(e.Nav) != 2 {
+		t.Fatalf("expected 2 pretty spine items, got %d", len(e.Nav))
+	}
+
+	expectedTitles := []string{"Chapter One", "Chapter Two"}
+	expectedNumbers := []int{1, 2}
+
+	for i, item := range e.Nav {
+		if item.Title != expectedTitles[i] {
+			t.Errorf("item %d: expected title %q, got %q, Nav: %v", i, expectedTitles[i], item.Title, e.Nav)
+		}
+		if item.Number != expectedNumbers[i] {
+			t.Errorf("item %d: expected number %d, got %d, Nav: %v", i, expectedNumbers[i], item.Number, e.Nav)
+		}
 	}
 }

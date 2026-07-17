@@ -3,43 +3,29 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"path"
-	"regexp"
+	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
-	"github.com/book_legion-tribune_logistica/internal/types"
-	"golang.org/x/net/html"
 )
 
 type Epub struct {
-	Path           string
-	Spine          []SpineItem
-	Nav            []PrettySpineItem
-	extractChapter func(navIndex int) ([]byte, error)
-	maxChunkMap    func(policy ChunkPolicy) map[int]int
+	Path  string
+	Spine []SpineItem
+	Nav   []PrettySpineItem
 }
 
 func New(path string) (Epub, error) {
-	spine, err := LoadSpine(path)
-	if err != nil {
-		return Epub{}, err
-	}
 	epub := Epub{
 		Path:  path,
-		Spine: spine,
+		Spine: []SpineItem{},
 	}
-	nav, err := epub.LoadPrettySpine()
-	if err != nil {
-		return epub, err
-	}
-
-	epub.Nav = nav
 
 	return epub, nil
 }
@@ -52,470 +38,398 @@ func Load(db storage.Storage, bookID string) (Epub, error) {
 	return New(book.FilePath)
 }
 
-func (e *Epub) MaxChunkIndex(navIndex int, policy ChunkPolicy) (int, error) {
-	chapterBytes, err := e.ExtractChapter(navIndex)
+func (e *Epub) GetFile(filepath string) ([]byte, error) {
+	r, err := zip.OpenReader(e.Path)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("opening epub %q: %w", e.Path, err)
 	}
+	defer r.Close()
 
-	doc, err := html.Parse(bytes.NewReader(chapterBytes))
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse chapter HTML: %w", err)
-	}
+	for _, f := range r.File {
+		if f.Name == filepath {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("opening %q in epub: %w", filepath, err)
+			}
+			defer rc.Close()
 
-	linear := LinearizeChapter(doc)
-	chunks := TextChunk(linear, policy)
-
-	if len(chunks) == 0 {
-		return 0, fmt.Errorf("no chunks generated for chapter %d", navIndex)
-	}
-
-	return chunks[len(chunks)-1].Index, nil
-}
-
-func (e *Epub) MaxChunkMap(policy ChunkPolicy) map[int]int {
-	if e.maxChunkMap != nil {
-		return e.maxChunkMap(policy)
-	} else {
-		return e.realMaxChunkMap(policy)
-	}
-}
-
-func (e *Epub) realMaxChunkMap(policy ChunkPolicy) map[int]int {
-	chunkmap := map[int]int{}
-	for index := range e.Nav {
-		i, err := e.MaxChunkIndex(index, policy)
-
-		if err == nil {
-			chunkmap[index] = i
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, fmt.Errorf("reading %q: %w", filepath, err)
+			}
+			return data, nil
 		}
 	}
 
-	return chunkmap
+	return nil, fmt.Errorf("file %q not found in epub", filepath)
 }
 
-func (e *Epub) BookProgress(u types.UserCursor, policy ChunkPolicy) (float32, error) {
-	chunkMap := e.MaxChunkMap(policy)
-	if len(chunkMap) == 0 {
-		return 0.0, nil
+func (e *Epub) GetCover() ([]byte, string, error) {
+	opfPath, err := e.findOPFPath()
+	if err != nil {
+		return nil, "", err
 	}
-
-	totalChunks := 0
-	for _, maxChunk := range chunkMap {
-		totalChunks += maxChunk
+	pkg, err := e.parseOPF()
+	if err != nil {
+		return nil, "", err
 	}
+	opfDir := path.Dir(opfPath)
 
-	if totalChunks == 0 {
-		return 0.0, nil
-	}
-
-	completedChunks := 0
-	for i := 0; i < u.Cursor.Chapter; i++ {
-		if max, ok := chunkMap[i]; ok {
-			completedChunks += max
+	// 1. EPUB3: properties="cover-image"
+	for _, it := range pkg.Manifest.Items {
+		for _, p := range strings.Fields(it.Properties) {
+			if p == "cover-image" {
+				data, err := e.GetFile(path.Join(opfDir, it.Href))
+				if err != nil {
+					return nil, "", fmt.Errorf("reading cover image: %w", err)
+				}
+				return data, it.MediaType, nil
+			}
 		}
 	}
-	completedChunks += u.Cursor.Chunk
 
-	progress := float32(completedChunks) / float32(totalChunks)
-	if progress > 1.0 {
-		return 1.0, nil
+	// 2. EPUB2: <meta name="cover" content="manifest-id"/>
+	for _, meta := range pkg.Metadata.Metas {
+		if meta.Name != "cover" || meta.Content == "" {
+			continue
+		}
+		for _, it := range pkg.Manifest.Items {
+			if it.ID == meta.Content {
+				data, err := e.GetFile(path.Join(opfDir, it.Href))
+				if err != nil {
+					return nil, "", fmt.Errorf("reading cover image: %w", err)
+				}
+				return data, it.MediaType, nil
+			}
+		}
+		return nil, "", fmt.Errorf("cover meta content %q not found in manifest", meta.Content)
 	}
 
-	return progress, nil
+	// 3. Guide fallback: <reference type="cover" href="..."/>
+	for _, ref := range pkg.Guide.References {
+		if ref.Type == "cover" {
+			fullPath := path.Join(opfDir, ref.Href)
+			data, err := e.GetFile(fullPath)
+			if err != nil {
+				return nil, "", fmt.Errorf("reading cover image: %w", err)
+			}
+			return data, mediaTypeFromExt(fullPath), nil
+		}
+	}
+
+	return nil, "", errors.New("no cover image found")
 }
 
-func (e *Epub) ChapterProgress(u types.UserCursor, policy ChunkPolicy) (float32, error) {
-	max, err := e.MaxChunkIndex(u.Cursor.Chapter, policy)
-	if err != nil {
-		return 0.0, err
-	}
-
-	if max == 0 {
-		return 0.0, nil
-	}
-
-	progress := float32(u.Cursor.Chunk) / float32(max)
-	if progress > 1.0 {
-		return 1.0, nil
-	}
-
-	return progress, nil
-}
-
-func (e *Epub) ExtractChapter(navIndex int) ([]byte, error) {
-	if e.extractChapter != nil {
-		return e.extractChapter(navIndex)
-	}
-	return e.extractChapterFromFile(navIndex)
-}
-
-func (e *Epub) extractChapterFromFile(navIndex int) ([]byte, error) {
-	if e.Nav == nil {
-		return nil, fmt.Errorf("Nav cannot be Nil")
-	}
-
-	if navIndex < 0 || navIndex >= len(e.Nav) {
-		return nil, fmt.Errorf("Nav index %d out of range", navIndex)
-	}
-
-	nav := e.Nav[navIndex]
-
+func (e *Epub) GetCSS() ([]byte, error) {
 	zr, err := zip.OpenReader(e.Path)
+	if err != nil {
+		return nil, fmt.Errorf("open epub: %w", err)
+	}
+	defer zr.Close()
+
+	var names []string
+	for _, f := range zr.File {
+		if strings.EqualFold(path.Ext(f.Name), ".css") {
+			names = append(names, f.Name)
+		}
+	}
+
+	if len(names) == 0 {
+		return nil, errors.New("no CSS files found in epub")
+	}
+
+	sort.Strings(names)
+
+	var buf bytes.Buffer
+	for _, name := range names {
+		data, err := e.GetFile(name)
+		if err != nil {
+			return nil, fmt.Errorf("reading css %q: %w", name, err)
+		}
+		buf.Write(data)
+		buf.WriteByte('\n')
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (e *Epub) GetChapter(index int) ([]byte, error) {
+	if index < 0 || index >= len(e.Nav) {
+		return nil, fmt.Errorf("chapter index out of bounds")
+	}
+	data, err := e.GetFile(e.Nav[index].Href)
 	if err != nil {
 		return nil, err
 	}
-	defer zr.Close()
+	return bytes.TrimSpace(data), nil
+}
 
-	for _, f := range zr.File {
-		if path.Clean(f.Name) != path.Clean(nav.Href) {
+func (e *Epub) LoadSpine() ([]SpineItem, error) {
+	// Step 1: locate OPF via container.xml
+	opfPath, err := e.findOPFPath()
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: parse OPF
+	opf, err := e.parseOPF()
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 3: build manifest lookup
+	manifest := make(map[string]manifestItem, len(opf.Manifest.Items))
+	for _, it := range opf.Manifest.Items {
+		manifest[it.ID] = manifestItem{
+			Href:      it.Href,
+			MediaType: it.MediaType,
+		}
+	}
+
+	// Step 4: resolve spine
+	opfDir := path.Dir(opfPath)
+	var spine []SpineItem
+
+	for _, ref := range opf.Spine.Itemrefs {
+		if ref.Linear == "no" {
 			continue
 		}
 
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-
-		data, err := io.ReadAll(rc)
-		if err != nil {
-			return nil, err
+		mi, ok := manifest[ref.IDRef]
+		if !ok {
+			return nil, fmt.Errorf("spine idref %q not found in manifest", ref.IDRef)
 		}
 
-		data = fixSelfClosingTags(data)
-
-		doc, err := html.Parse(bytes.NewReader(data))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse chapter HTML: %w", err)
+		fullPath := path.Join(opfDir, mi.Href)
+		if _, err := e.GetFile(fullPath); err != nil {
+			return nil, fmt.Errorf("spine file %q not found in epub", fullPath)
 		}
 
-		body := findBodyNode(doc)
-		if body == nil {
-			return nil, fmt.Errorf("no <body> found in chapter %s", nav.Href)
+		item := SpineItem{
+			Index: len(spine),
+			ID:    ref.IDRef,
+			Href:  fullPath,
 		}
-
-		removeWhitespaceTextNodes(body)
-
-		var buf bytes.Buffer
-		for c := body.FirstChild; c != nil; c = c.NextSibling {
-			if err := html.Render(&buf, c); err != nil {
-				return nil, err
-			}
-		}
-
-		if buf.Len() == 0 {
-			return nil, fmt.Errorf("chapter %s parsed to empty body", nav.Href)
-		}
-
-		return buf.Bytes(), nil
+		spine = append(spine, item)
 	}
 
-	return nil, fmt.Errorf("extract chapter error: chapter href not found in epub: %s\n", nav.Href)
+	if len(spine) == 0 {
+		return nil, errors.New("epub spine is empty")
+	}
+
+	return spine, nil
 }
 
-func (e *Epub) ExtractChunk(navIndex, chunkIndex int, policy ChunkPolicy) (string, error) {
-	chapterBytes, err := e.ExtractChapter(navIndex)
+func (e *Epub) GetToc() ([]PrettySpineItem, error) {
+	navPath, err := e.findNavPath()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	doc, err := html.Parse(bytes.NewReader(chapterBytes))
+	navData, err := e.GetFile(navPath)
 	if err != nil {
-		return "", err
-	}
-	linear := LinearizeChapter(doc)
-	chunks := TextChunk(linear, policy)
-
-	if chunkIndex < 0 || chunkIndex >= len(chunks) {
-		return "", fmt.Errorf("chunk index %d out of range (0-%d)", chunkIndex, len(chunks)-1)
+		return nil, fmt.Errorf("loading nav file %q: %w", navPath, err)
 	}
 
-	chunkStrings := PrettyChunks(chunks, linear)
-
-	return chunkStrings[chunkIndex], nil
-}
-
-func (e *Epub) CalculateCursorPlace(navIndex int, example string, policy ChunkPolicy) (types.Cursor, error) {
-	// --- 1. Extract chapter and linearize ---
-	chapterBytes, err := e.ExtractChapter(navIndex)
-	if err != nil {
-		return types.Cursor{}, err
+	var nav NavToc
+	if err := xml.Unmarshal(navData, &nav); err != nil {
+		return nil, fmt.Errorf("unmarshal nav toc: %w", err)
 	}
 
-	doc, err := html.Parse(bytes.NewReader(chapterBytes))
-	if err != nil {
-		return types.Cursor{}, err
-	}
-	linear := LinearizeChapter(doc)
-
-	// --- 2. Linearize example text ---
-	docExample, err := html.Parse(bytes.NewReader([]byte(example)))
-	if err != nil {
-		return types.Cursor{}, err
-	}
-	linearExample := LinearizeChapter(docExample)
-	linearExample.FullText = trimTrailingPunctuation(linearExample.FullText)
-
-	if len(linearExample.FullText) < policy.MinSnippetSize {
-		return types.Cursor{}, errors.New("snippet too short to uniquely locate cursor")
-	}
-
-	// --- 3. Normalize both texts and build mapping ---
-	normalizedChapter, chapterMap := buildNormalizedMapping(linear.FullText)
-	normalizedExample, _ := buildNormalizedMapping(linearExample.FullText) // mapping not needed for example
-
-	// --- 4. Find normalized offset ---
-	normOffset := strings.Index(normalizedChapter, normalizedExample)
-	if normOffset == -1 {
-		return types.Cursor{}, errors.New("example text not found in chapter")
-	}
-
-	// --- 5. Map normalized offset back to original text ---
-	if normOffset >= len(chapterMap) {
-		return types.Cursor{}, errors.New("offset mapping failed")
-	}
-	origOffset := chapterMap[normOffset]
-
-	// --- 6. Find target chunk ---
-	chunks := TextChunk(linear, policy)
-	var targetChunk Chunk
-	for _, c := range chunks {
-		if origOffset >= c.Start && origOffset < c.End {
-			targetChunk = c
-			break
-		}
-	}
-
-	return types.Cursor{Chapter: navIndex, Chunk: targetChunk.Index}, nil
-}
-
-func (e *Epub) ExtractCover() ([]byte, string, error) {
-	zr, err := zip.OpenReader(e.Path)
-	if err != nil {
-		return nil, "", err
-	}
-	defer zr.Close()
-
-	files := BuildFileMap(zr)
-
-	opfPath, err := FindOPFPath(zr)
-	if err != nil {
-		return nil, "", err
-	}
-
-	pkg, err := ParseOPF(files, opfPath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	baseDir := path.Dir(opfPath)
-
-	loadImage := func(href string) ([]byte, string, error) {
-		href = strings.SplitN(href, "#", 2)[0]
-		coverPath := path.Join(baseDir, href)
-		data, err := ReadFromMap(files, coverPath)
-		if err != nil {
-			return nil, "", err
-		}
-		return data, coverPath, nil
-	}
-
-	isImageType := func(mediaType string) bool {
-		return strings.HasPrefix(mediaType, "image/")
-	}
-
-	// Strategy 1: EPUB3 properties="cover-image"
-	for _, item := range pkg.Manifest.Items {
-		if strings.Contains(item.Properties, "cover-image") && isImageType(item.MediaType) {
-			if data, p, err := loadImage(item.Href); err == nil {
-				return data, p, nil
+	// flatten nav points recursively, preserving document order
+	var flat []NavPoint
+	var flatten func([]NavPoint)
+	flatten = func(points []NavPoint) {
+		for _, np := range points {
+			flat = append(flat, np)
+			if len(np.Children) > 0 {
+				flatten(np.Children)
 			}
 		}
 	}
+	flatten(nav.NavPoints)
 
-	// Strategy 2: EPUB2 <meta name="cover" content="item-id">
-	for _, meta := range pkg.Metadata.Metas {
-		if strings.EqualFold(meta.Name, "cover") && meta.Content != "" {
-			for _, item := range pkg.Manifest.Items {
-				if item.ID == meta.Content {
-					if isImageType(item.MediaType) {
-						if data, p, err := loadImage(item.Href); err == nil {
-							return data, p, nil
-						}
-					} else if strings.Contains(item.MediaType, "html") {
-						if data, p, err := extractImageFromHTML(files, path.Join(baseDir, item.Href)); err == nil {
-							return data, p, nil
-						}
-					}
+	navDir := path.Dir(navPath)
+	pretty := make([]PrettySpineItem, 0, len(flat))
+
+	for i, np := range flat {
+		href := strings.SplitN(np.Content.Src, "#", 2)[0] // strip fragment
+		if href == "" {
+			continue
+		}
+
+		pretty = append(pretty, PrettySpineItem{
+			Index:  i,
+			Number: i + 1,
+			Title:  np.Label,
+			Href:   path.Join(navDir, href),
+		})
+	}
+
+	if len(pretty) == 0 {
+		return nil, errors.New("nav toc contained no usable entries")
+	}
+
+	return pretty, nil
+}
+
+func (e *Epub) findOPFPath() (string, error) {
+	containerData, err := e.GetFile("META-INF/container.xml")
+	if err == nil {
+		type RootFile struct {
+			FullPath  string `xml:"full-path,attr"`
+			MediaType string `xml:"media-type,attr"`
+		}
+		type RootFiles struct {
+			RootFiles []RootFile `xml:"rootfile"`
+		}
+		type Container struct {
+			RootFiles RootFiles `xml:"rootfiles"`
+		}
+		var container Container
+		if err := xml.Unmarshal(containerData, &container); err == nil {
+			for _, rf := range container.RootFiles.RootFiles {
+				if rf.MediaType == "application/oebps-package+xml" || strings.HasSuffix(rf.FullPath, ".opf") {
+					return rf.FullPath, nil
 				}
 			}
 		}
 	}
-
-	// Strategy 3: <guide type="cover">
-	for _, ref := range pkg.Guide.References {
-		if strings.EqualFold(ref.Type, "cover") {
-			if data, p, err := extractImageFromHTML(files, path.Join(baseDir, ref.Href)); err == nil {
-				return data, p, nil
-			}
-		}
-	}
-
-	// Strategy 4: Heuristic — href contains "cover"
-	for _, item := range pkg.Manifest.Items {
-		if isImageType(item.MediaType) && strings.Contains(strings.ToLower(item.Href), "cover") {
-			if data, p, err := loadImage(item.Href); err == nil {
-				return data, p, nil
-			}
-		}
-	}
-
-	return nil, "", fmt.Errorf("cover image not found")
+	return "", fmt.Errorf("container.xml not found")
 }
 
-func extractImageFromHTML(files map[string]*zip.File, htmlPath string) ([]byte, string, error) {
-	htmlPath = strings.SplitN(htmlPath, "#", 2)[0]
-	htmlData, err := ReadFromMap(files, htmlPath)
+func (e *Epub) findNavPath() (string, error) {
+	opfPath, err := e.findOPFPath()
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-
-	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
-	matches := re.FindSubmatch(htmlData)
-	if matches == nil {
-		return nil, "", fmt.Errorf("no img found in %s", htmlPath)
-	}
-
-	imgPath := path.Join(path.Dir(htmlPath), string(matches[1]))
-	data, err := ReadFromMap(files, imgPath)
+	pkg, err := e.parseOPF()
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return data, imgPath, nil
-}
 
-// readZipFile reads a file from the zip by exact path.
-func readZipFile(zr *zip.ReadCloser, name string) ([]byte, error) {
-	for _, f := range zr.File {
-		if f.Name == name {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
+	opfDir := path.Dir(opfPath)
+
+	// EPUB3: manifest item with properties="nav"
+	for _, it := range pkg.Manifest.Items {
+		for _, p := range strings.Fields(it.Properties) {
+			if p == "nav" {
+				return path.Join(opfDir, it.Href), nil
 			}
-			defer rc.Close()
-			return io.ReadAll(rc)
 		}
 	}
-	return nil, fmt.Errorf("file not found in epub: %s", name)
+
+	// EPUB2 fallback: <spine toc="idref"> points at the NCX manifest item
+	if pkg.Spine.TOC != "" {
+		for _, it := range pkg.Manifest.Items {
+			if it.ID == pkg.Spine.TOC {
+				return path.Join(opfDir, it.Href), nil
+			}
+		}
+		return "", fmt.Errorf("spine toc idref %q not found in manifest", pkg.Spine.TOC)
+	}
+
+	return "", errors.New("no navigation document found (no EPUB3 nav item, no EPUB2 toc.ncx reference)")
 }
 
-func (e *Epub) ExtractCSS() ([]byte, error) {
-	zr, err := zip.OpenReader(e.Path)
+func (e *Epub) parseOPF() (*opfPackage, error) {
+	opfPath, err := e.findOPFPath()
 	if err != nil {
 		return nil, err
 	}
-	defer zr.Close()
-
-	var allCSS bytes.Buffer
-
-	for _, f := range zr.File {
-		if strings.HasSuffix(strings.ToLower(f.Name), ".css") {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, fmt.Errorf("failed to open %s: %w", f.Name, err)
-			}
-
-			data, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				return nil, fmt.Errorf("failed to read %s: %w", f.Name, err)
-			}
-
-			// Append with newline separator to avoid accidental concatenation issues
-			allCSS.Write(data)
-			allCSS.WriteString("\n")
-		}
+	f, err := e.GetFile(opfPath)
+	if err != nil {
+		return nil, fmt.Errorf("opf file %q not found", opfPath)
 	}
 
-	if allCSS.Len() == 0 {
-		return nil, fmt.Errorf("no CSS files found in EPUB")
+	var pkg opfPackage
+	if err := xml.Unmarshal(f, &pkg); err != nil {
+		return nil, fmt.Errorf("parse opf: %w", err)
 	}
 
-	return allCSS.Bytes(), nil
+	return &pkg, nil
 }
 
-func findBodyNode(n *html.Node) *html.Node {
-	if n.Type == html.ElementNode && n.Data == "body" {
-		return n
+type opfPackage struct {
+	Metadata struct {
+		Metas []struct {
+			Name     string `xml:"name,attr"`
+			Content  string `xml:"content,attr"`
+			Property string `xml:"property,attr"`
+			CharData string `xml:",chardata"`
+		} `xml:"meta"`
+	} `xml:"metadata"`
+
+	Manifest struct {
+		Items []struct {
+			ID         string `xml:"id,attr"`
+			Href       string `xml:"href,attr"`
+			MediaType  string `xml:"media-type,attr"`
+			Properties string `xml:"properties,attr"` // EPUB3 cover-image / nav
+		} `xml:"item"`
+	} `xml:"manifest"`
+
+	Spine struct {
+		TOC      string `xml:"toc,attr"` // EPUB2: manifest id of the NCX file
+		Itemrefs []struct {
+			IDRef  string `xml:"idref,attr"`
+			Linear string `xml:"linear,attr"`
+		} `xml:"itemref"`
+	} `xml:"spine"`
+
+	Guide struct {
+		References []struct {
+			Type string `xml:"type,attr"`
+			Href string `xml:"href,attr"`
+		} `xml:"reference"`
+	} `xml:"guide"`
+}
+
+type manifestItem struct {
+	Href      string
+	MediaType string
+}
+
+type SpineItem struct {
+	Index int    // 0-based, stable, internal
+	ID    string // manifest ID
+	Href  string // resolved path
+}
+
+type PrettySpineItem struct {
+	Index  int    `json:"index"`
+	Number int    `json:"number"`
+	Href   string `json:"href"`
+	Title  string `json:"title"`
+}
+type NavToc struct {
+	NavPoints []NavPoint `xml:"navMap>navPoint"`
+}
+type Content struct {
+	Src string `xml:"src,attr"`
+}
+
+type NavPoint struct {
+	ID        string     `xml:"id,attr"`
+	PlayOrder string     `xml:"playOrder,attr"`
+	Label     string     `xml:"navLabel>text"`
+	Content   Content    `xml:"content"`
+	Children  []NavPoint `xml:"navPoint"`
+}
+
+func mediaTypeFromExt(p string) string {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if found := findBodyNode(c); found != nil {
-			return found
-		}
-	}
-	return nil
-}
-
-func removeWhitespaceTextNodes(n *html.Node) {
-	for c := n.FirstChild; c != nil; {
-		next := c.NextSibling
-
-		if c.Type == html.TextNode && strings.TrimSpace(c.Data) == "" {
-			n.RemoveChild(c)
-		} else {
-			removeWhitespaceTextNodes(c)
-		}
-
-		c = next
-	}
-}
-
-func trimTrailingPunctuation(s string) string {
-	return strings.TrimRightFunc(s, func(r rune) bool {
-		return r == ' ' || r == '.' || r == '!' || r == '?'
-	})
-}
-
-type NormalizedIndex struct {
-	NormPos int // position in normalized string
-	OrigPos int // position in original string
-}
-
-var htmlEntityRe = regexp.MustCompile(`&#\d+;|&[a-zA-Z]+;`)
-
-func normalizeEntities(s string) string {
-	return htmlEntityRe.ReplaceAllStringFunc(s, func(entity string) string {
-		switch entity {
-		case "&#39;", "&apos;":
-			return "'"
-		case "&quot;":
-			return `"`
-		case "&amp;":
-			return "&"
-		default:
-			return "" // remove unknown entities
-		}
-	})
-}
-
-func buildNormalizedMapping(orig string) (string, []int) {
-	orig = normalizeEntities(orig)
-	var norm strings.Builder
-	var mapping []int
-
-	for i, r := range orig {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			norm.WriteRune(unicode.ToLower(r))
-			mapping = append(mapping, i)
-		}
-		// optionally include space if you want normalized spacing
-	}
-	return norm.String(), mapping
-}
-
-var selfClosingTagRe = regexp.MustCompile(`(?i)<(script|style)(\s[^>]*)?\s*/>`)
-
-func fixSelfClosingTags(data []byte) []byte {
-	return selfClosingTagRe.ReplaceAll(data, []byte("<$1$2></$1>"))
 }

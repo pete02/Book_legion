@@ -2,72 +2,11 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
-
-// Cursor represents a location in the audiobook
-type Cursor struct {
-	Chapter int `json:"chapter"`
-	Chunk   int `json:"chunk"`
-}
-
-func (c *Cursor) Next(maxChunk int, maxChapter int) {
-	if c.Chunk == maxChunk {
-		if c.Chapter < maxChapter {
-			c.Chapter += 1
-			c.Chunk = 0
-		}
-	} else {
-		c.Chunk += 1
-	}
-}
-
-func (c *Cursor) Prev(maxChunk int, minChapter int) {
-	if c.Chunk == 0 {
-		if c.Chapter > minChapter {
-			c.Chapter -= 1
-			c.Chunk = maxChunk
-		}
-	} else {
-		c.Chunk -= 1
-	}
-}
-
-func (c Cursor) StepBack(steps int, minChapter int, maxChunks map[int]int) Cursor {
-	cur := c
-	for range steps {
-		maxChunk, ok := maxChunks[cur.Chapter-1]
-		if !ok {
-			maxChunk = 0
-		}
-		cur.Prev(maxChunk, minChapter)
-	}
-	return cur
-}
-
-// compareCursor returns -1 if a < b, 0 if a == b, 1 if a > b
-func (a Cursor) CompareCursor(b Cursor) int {
-	if a.Chapter < b.Chapter {
-		return -1
-	} else if a.Chapter > b.Chapter {
-		return 1
-	} else { // same chapter
-		if a.Chunk < b.Chunk {
-			return -1
-		} else if a.Chunk > b.Chunk {
-			return 1
-		}
-		return 0
-	}
-}
-
-// Chunk represents an audio Chunk
-type Chunk struct {
-	ID   UserCursor `json:"cursor"`
-	Data []byte     `json:"data"`
-}
 
 type TextCursor struct {
 	Cursor UserCursor `json:"cursor"`
@@ -88,7 +27,7 @@ func NewUserCursor(user string, book string, chapter int, chunk int) UserCursor 
 		BookID: book,
 		Cursor: Cursor{
 			Chapter: chapter,
-			Chunk:   chunk,
+			Index:   chunk,
 		},
 	}
 }
@@ -100,7 +39,7 @@ func SaveUserCursor(store storage.Storage, c UserCursor) error {
 		"user_id": c.UserID,
 		"book_id": c.BookID,
 		"chapter": c.Cursor.Chapter,
-		"chunk":   c.Cursor.Chunk,
+		"chunk":   c.Cursor.Index,
 	}
 	return store.Insert("UserCursors", "id", row)
 }
@@ -116,7 +55,7 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		user := UserCursor{
 			UserID: userID,
 			BookID: bookID,
-			Cursor: Cursor{Chapter: 0, Chunk: 0},
+			Cursor: Cursor{Chapter: 0, Index: 0},
 		}
 		SaveUserCursor(store, user)
 		return user, nil
@@ -126,7 +65,7 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		return UserCursor{
 			UserID: userID,
 			BookID: bookID,
-			Cursor: Cursor{Chapter: 0, Chunk: 0},
+			Cursor: Cursor{Chapter: 0, Index: 0},
 		}, nil
 	}
 
@@ -160,7 +99,7 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 
 	cursr := Cursor{
 		Chapter: chapter,
-		Chunk:   chunk,
+		Index:   chunk,
 	}
 
 	return UserCursor{
@@ -168,6 +107,33 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 		BookID: row["book_id"].(string),
 		Cursor: cursr,
 	}, nil
+}
+
+func (uc UserCursor) ValidateCursor(maxIndexs map[int]int) (UserCursor, error) {
+	currentChapter := uc.Cursor.Chapter
+	currentIndex := uc.Cursor.Index
+
+	// Check if current chapter exists in maxIndexs
+	maxIndex, ok := maxIndexs[currentChapter]
+	if !ok {
+		return uc, errors.New("chapter does not exist")
+	}
+
+	// If chunk is within the valid range, return as is
+	if currentIndex <= maxIndex {
+		return uc, nil
+	}
+
+	// Move to next chapter
+	nextChapter := currentChapter + 1
+	if _, ok := maxIndexs[nextChapter]; !ok {
+		return uc, errors.New("cursor is past the last chapter")
+	}
+
+	// Return cursor at next chapter, chunk 0
+	uc.Cursor.Chapter = nextChapter
+	uc.Cursor.Index = 0
+	return uc, nil
 }
 
 type CursorLocateRequest struct {

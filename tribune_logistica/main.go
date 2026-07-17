@@ -10,13 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	_ "modernc.org/sqlite"
 
-	"github.com/book_legion-tribune_logistica/internal/api"
-	"github.com/book_legion-tribune_logistica/internal/buffer"
-	"github.com/book_legion-tribune_logistica/internal/epub"
-	"github.com/book_legion-tribune_logistica/internal/manager"
 	"github.com/book_legion-tribune_logistica/internal/storage"
-	"github.com/book_legion-tribune_logistica/internal/tts"
-	"github.com/book_legion-tribune_logistica/internal/types"
 	// replace with actual module path
 )
 
@@ -41,31 +35,18 @@ type Config struct {
 }
 
 func main() {
-	config, err := FromEnv()
-	if err != nil {
-		fmt.Printf("Error in fetching Env values: %v", err)
-	}
 
-	buf := buffer.NewBuffer("id")
-	manager := manager.NewOrganizer(buf, 10)
-
-	pol := epub.NewPolicy(500, 400, 700, 50)
-
-	storage, err := createStorage(*config)
-
-	api := api.New(manager, storage, pol)
-
-	if config.TTSBackend == TTSMock {
-		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-			return tts.TTS_fetch_mock(c, api)
-		}
-		go manager.StartOrderProcessor(fetchFn)
-	} else {
-		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-			return tts.TTS_fetch(c, api, config.TTSAPIURL)
-		}
-		go manager.StartOrderProcessor(fetchFn)
-	}
+	/* 	if config.TTSBackend == TTSMock {
+	   		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
+	   			return tts.TTS_fetch_mock(c, api)
+	   		}
+	   		go manager.StartOrderProcessor(fetchFn)
+	   	} else {
+	   		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
+	   			return tts.TTS_fetch(c, api, config.TTSAPIURL)
+	   		}
+	   		go manager.StartOrderProcessor(fetchFn)
+	   	} */
 
 	r := chi.NewRouter()
 	/*
