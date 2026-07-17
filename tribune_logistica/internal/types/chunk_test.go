@@ -17,6 +17,9 @@ func TestBuildTextChunk_BasicSentenceSplit(t *testing.T) {
 	if chunk.Data != "The cat sat." {
 		t.Fatalf("got Data %q, want %q", chunk.Data, "The cat sat.")
 	}
+	if chunk.Id.EndOffset != 19 {
+		t.Fatalf("Got: %v, wanted 19", chunk.Id.EndOffset)
+	}
 
 	// Continue from where this chunk left off; should pick up the second
 	// sentence cleanly, with the intervening tags stripped and ignored.
@@ -27,6 +30,13 @@ func TestBuildTextChunk_BasicSentenceSplit(t *testing.T) {
 	}
 	if chunk2.Data != "The dog ran fast today." {
 		t.Fatalf("got Data %q, want %q", chunk2.Data, "The dog ran fast today.")
+	}
+	if chunk2.Id.StartOffset != 19 {
+		t.Fatalf("Got Start offset: %v, wanted 19", chunk2.Id.StartOffset)
+	}
+
+	if chunk2.Id.EndOffset != 49 {
+		t.Fatalf("Got End offset: %v, wanted 49", chunk2.Id.EndOffset)
 	}
 }
 
@@ -45,6 +55,10 @@ func TestBuildTextChunk_MinSplitWordsRejectsShortCandidate(t *testing.T) {
 	want := "Hi. This is a test."
 	if chunk.Data != want {
 		t.Fatalf("got Data %q, want %q (the too-short 'Hi.' split should have been skipped)", chunk.Data, want)
+	}
+
+	if chunk.Id.EndOffset != 26 {
+		t.Fatalf("Got: %v, wanted 23", chunk.Id.EndOffset)
 	}
 }
 

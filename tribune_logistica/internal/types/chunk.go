@@ -23,25 +23,6 @@ type AudioChunk struct {
 	Data []byte
 }
 
-// --- nearestAllowedSplit ---
-//
-// ASSUMPTION FLAGGED: this implements split-point detection (sentence-end
-// punctuation + block tag boundaries) from scratch, since I don't have
-// visibility into whatever nearestAllowedSplit implementation already
-// exists elsewhere in the codebase per the design doc's issue list. If
-// that logic already exists, this should probably be replaced with a call
-// into it instead of maintaining a second, possibly-inconsistent notion of
-// "allowed split."
-//
-// ASSUMPTION FLAGGED: offsets are treated as rune indices into the HTML
-// string (i.e. "character" offsets, matching htmlCharOffset in the design
-// doc), not byte indices. If the frontend computes offsets as JS
-// string.length (UTF-16 code units), this will disagree with it for any
-// character outside the Basic Multilingual Plane.
-
-// SplitResult is a single scanned segment: starting from wherever the scan
-// began, the nearest position at or after that point where it's valid to
-// stop.
 type SplitResult struct {
 	Offset       int    // rune offset of the split point (first rune NOT included in Text)
 	Words        int    // word count contained in Text
@@ -49,37 +30,15 @@ type SplitResult struct {
 	EndOfContent bool   // true if this stopped because the content ran out, not because a real split point was found
 }
 
-// blockBoundaryTags are tags that count as a valid place to stop even
-// without terminal sentence punctuation — e.g. a list item or heading with
-// no trailing period — when encountered closing or self-closing. Adjust
-// this set once real chapter HTML structure is available; it's a
-// reasonable starting guess, not verified against actual book markup.
 var blockBoundaryTags = map[string]bool{
 	"p": true, "div": true, "li": true, "blockquote": true, "tr": true,
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 }
 
-// NearestAllowedSplit scans html starting at the rune offset `start` and
-// returns the nearest position at or after start where it's valid to stop:
-// either a sentence-ending word or a closing/self-closing block-level tag,
-// with at least minWords words accumulated since start. Candidates with
-// fewer than minWords are skipped over, not returned. If the content ends
-// before such a point is found, everything scanned is returned with
-// EndOfContent set — running out of content is always an implicit valid
-// place to stop, regardless of minWords.
-//
-// This is the single primitive behind both chunk building (BuildTextChunk
-// calls it repeatedly to accumulate a target word count) and, later,
-// snapping an arbitrary seek position to a valid chunk boundary — both are
-// fundamentally "find the next place it's OK to cut, from here."
 func NearestAllowedSplit(html string, start int, minWords int) SplitResult {
 	return nearestAllowedSplit([]rune(html), start, minWords)
 }
 
-// nearestAllowedSplit is the rune-slice-based implementation. Exposed
-// separately from NearestAllowedSplit so repeated calls against the same
-// chapter (as BuildTextChunk makes) don't each pay to re-convert the whole
-// string to []rune.
 func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 	if start >= len(runes) {
 		return SplitResult{Offset: start, Words: 0, EndOfContent: true}
@@ -123,13 +82,7 @@ func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 
 			isBlock, isBreakPoint := blockTagKind(tag)
 			if isBlock {
-				// Only block-level tags (paragraph/list/heading/etc.) break
-				// a word. Inline tags like <em> or <strong> are stripped
-				// silently, letting the word accumulate across them — HTML
-				// markup like "<strong>world</strong>." has no whitespace
-				// between the tag and the period, and treating every tag
-				// as a word boundary would incorrectly split that into
-				// "world" and "." as two separate words.
+
 				flushWord()
 				if isBreakPoint && words >= minWords {
 					return SplitResult{Offset: i, Words: words, Text: buf.String()}
@@ -153,10 +106,6 @@ func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 	return SplitResult{Offset: len(runes), Words: words, Text: buf.String(), EndOfContent: true}
 }
 
-// endsSentence reports whether word ends a sentence, after trimming common
-// trailing closing punctuation (quotes, parens) that can follow a
-// terminator. This is a simple heuristic — it does not attempt to handle
-// abbreviations (e.g. "Mr.", "e.g.") and will over-split on those.
 func endsSentence(word string) bool {
 	word = strings.TrimRight(word, "\"')]”’")
 	if word == "" {
@@ -166,11 +115,6 @@ func endsSentence(word string) bool {
 	return last == '.' || last == '!' || last == '?'
 }
 
-// blockTagKind reports whether tag (the full "<...>" text) is a block-level
-// tag at all, and if so, whether it's a valid split point on its own
-// (closing or self-closing — e.g. </p>, <br>) as opposed to just an opening
-// tag (<p>, <li>), which still breaks a word but isn't itself a place to
-// stop, since it opens new content rather than concluding any.
 func blockTagKind(tag string) (isBlock, isBreakPoint bool) {
 	inner := strings.Trim(tag, "<>")
 	inner = strings.TrimSpace(inner)
@@ -199,19 +143,10 @@ func blockTagKind(tag string) (isBlock, isBreakPoint bool) {
 
 // ChunkConfig tunes chunk sizing.
 type ChunkConfig struct {
-	// TargetWords is the word count a chunk aims for. Scanning continues
-	// past this only if no qualifying split point has been found yet.
-	TargetWords int
-	// MinSplitWords is the minimum word count a candidate split point must
-	// have accumulated to be usable. A sentence boundary reached after only
-	// a couple of words is rejected as a split point (though those words
-	// still count toward the eventual chunk once a later split qualifies).
+	TargetWords   int
 	MinSplitWords int
 }
 
-// DefaultChunkConfig targets ~15s of speech at ~140 WPM (a round number
-// between the typical 130-160 WPM speech range), with a minimum split size
-// chosen to avoid producing near-empty leftover chunks.
 func DefaultChunkConfig() ChunkConfig {
 	return ChunkConfig{
 		TargetWords:   35,
@@ -219,13 +154,6 @@ func DefaultChunkConfig() ChunkConfig {
 	}
 }
 
-// ErrEndOfChapter is returned when id.StartOffset is already at or past the
-// end of the chapter's content, i.e. there is nothing left to build a chunk
-// from. A chunk that runs up against the end of the chapter mid-build is
-// still returned successfully (as a final, possibly-short chunk); this
-// error only fires on the *next* call after that, when StartOffset points
-// past the end. Callers doing chapter-transition handling should treat this
-// as their end-of-chapter signal.
 var ErrEndOfChapter = errors.New("start offset is at or past end of chapter content")
 
 // BuildTextChunk implements types.TextChunkBuilder's contract: id.EndOffset
