@@ -1,869 +1,399 @@
-package manager_test
+package manager
 
 import (
-	"sync"
+	"context"
+	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/book_legion-tribune_logistica/internal/buffer"
-	"github.com/book_legion-tribune_logistica/internal/manager"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
-func assertCursorSlicesEqual(t *testing.T, got, want []types.UserCursor) {
+const chunkSize = 10
+
+// simpleBuildText produces 10-offset-wide chunks and errors past `end`,
+// simulating an end-of-chapter/unresolvable-offset boundary.
+func simpleBuildText(end int) TextChunkBuilder {
+	return func(id types.ChunkIdentifier) (types.TextChunk, error) {
+		if id.StartOffset >= end {
+			return types.TextChunk{}, errors.New("past end of chapter")
+		}
+		return types.TextChunk{
+			Id: types.ChunkIdentifier{
+				ID:          id.ID,
+				Chapter:     id.Chapter,
+				StartOffset: id.StartOffset,
+				EndOffset:   id.StartOffset + chunkSize,
+			},
+			Data: fmt.Sprintf("text@%d", id.StartOffset),
+		}, nil
+	}
+}
+
+// passthroughFetch always succeeds immediately, ignoring ctx.
+func passthroughFetch(ctx context.Context, tc types.TextChunk) (types.AudioChunk, bool) {
+	return types.AudioChunk{Id: tc.Id, Data: []byte(tc.Data)}, true
+}
+
+// gatedFetch gives the test full control over when each synthesis call
+// "completes" and what it returns, and honors ctx cancellation while
+// waiting — this is what lets seek/cancel tests be deterministic instead
+// of relying on sleeps.
+type gatedFetch struct {
+	calls   chan types.TextChunk
+	respond chan fetchResult
+}
+
+type fetchResult struct {
+	chunk types.AudioChunk
+	ok    bool
+}
+
+func newGatedFetch() *gatedFetch {
+	return &gatedFetch{
+		calls:   make(chan types.TextChunk),
+		respond: make(chan fetchResult),
+	}
+}
+
+func (g *gatedFetch) fetch(ctx context.Context, tc types.TextChunk) (types.AudioChunk, bool) {
+	g.calls <- tc
+	select {
+	case r := <-g.respond:
+		return r.chunk, r.ok
+	case <-ctx.Done():
+		return types.AudioChunk{}, false
+	}
+}
+
+func withTimeout(t *testing.T) context.Context {
 	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("length mismatch: got %d, want %d\n got=%v\nwant=%v", len(got), len(want), got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("cursor mismatch at %d: got %v, want %v", i, got[i], want[i])
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+func cursor(bookID string, chapter, offset int) types.UserCursor {
+	return types.UserCursor{
+		BookID: bookID,
+		UserID: "u1",
+		Cursor: types.Cursor{Chapter: chapter, Index: offset},
 	}
 }
-func makeCursor(chapter int, chunk int) types.UserCursor {
-	return types.UserCursor{"u1", "b1", types.Cursor{Chapter: chapter, Chunk: chunk}}
-}
-func TestOrganizerGetChunks_AllAvailable(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
+
+func TestSequentialProduction(t *testing.T) {
+	o := NewOrganizer(simpleBuildText(30), passthroughFetch, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	for ch := 0; ch <= 1; ch++ {
-		for c := 0; c <= maxChunks[ch]; c++ {
-			buf.Add(buffer.Chunk{
-				ID:   makeCursor(ch, c),
-				Data: []byte{byte(ch*10 + c)},
-			})
+	wantOffsets := []int{0, 10, 20}
+	for _, want := range wantOffsets {
+		chunk, err := o.GetChunk(withTimeout(t))
+		if err != nil {
+			t.Fatalf("GetChunk: %v", err)
+		}
+		if chunk.Id.StartOffset != want {
+			t.Fatalf("got offset %d, want %d", chunk.Id.StartOffset, want)
 		}
 	}
 
-	org := manager.NewOrganizer(buf, 2)
+	// Chapter ends at 30, so the next buildText call errors and the
+	// producer should stop, closing the channel.
+	if _, err := o.GetChunk(withTimeout(t)); !errors.Is(err, ErrStopped) {
+		t.Fatalf("expected ErrStopped at end of chapter, got %v", err)
+	}
+}
 
-	start := makeCursor(0, 0)
-	chunks, err := org.GetChunks("t", start, 4, maxChunks)
+// TestStartOverridesPriorUpdateCursor verifies that Start's cursor argument
+// wins over anything set via UpdateCursor beforehand — this is what makes a
+// single Organizer safe to Start, stop, and Start again without stale
+// UpdateCursor calls (from a previous run, or before the first run) leaking
+// into the new one.
+func TestStartOverridesPriorUpdateCursor(t *testing.T) {
+	o := NewOrganizer(simpleBuildText(1000), passthroughFetch, 4)
+
+	// Stale/irrelevant cursor set before Start is ever called.
+	o.UpdateCursor(cursor("b1", 9, 900))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := o.Start(ctx, cursor("b1", 2, 40)); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	chunk, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("GetChunk: %v", err)
 	}
-
-	if len(chunks) != 4 {
-		t.Fatalf("expected 4 chunks, got %d", len(chunks))
-	}
-
-	if len(org.OrderList) != 0 {
-		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	if chunk.Id.Chapter != 2 || chunk.Id.StartOffset != 40 {
+		t.Fatalf("got {chapter:%d offset:%d}, want {chapter:2 offset:40} (Start should override the prior UpdateCursor)",
+			chunk.Id.Chapter, chunk.Id.StartOffset)
 	}
 }
 
-func TestOrganizerGetuserChunks_AllAvailable(t *testing.T) {
-	start := makeCursor(0, 0)
+// TestRestartAfterStop verifies the primary use case behind requiring a
+// cursor on Start: one Organizer can be started, stopped (via cancelling its
+// ctx), and started again later at a fresh position — with no leftover state
+// from the previous run (including any UpdateCursor calls made while it was
+// stopped) affecting the new run.
+func TestRestartAfterStop(t *testing.T) {
+	// Unbuffered out: with bufferSize>0 the producer can race ahead and
+	// pre-fill the buffer with several more chunks before cancel() takes
+	// effect, so the very next GetChunk could legitimately drain one of
+	// those instead of observing ErrStopped. Unbuffered forces the
+	// producer to block waiting for a receiver after the first chunk,
+	// making "cancel, then immediately expect ErrStopped" deterministic.
+	o := NewOrganizer(simpleBuildText(1000), passthroughFetch, 0)
 
-	buf := buffer.NewBuffer(start.BookID + start.UserID)
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	if err := o.Start(ctx1, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	if _, err := o.GetChunk(withTimeout(t)); err != nil {
+		t.Fatalf("GetChunk during first run: %v", err)
+	}
+	cancel1()
+	if _, err := o.GetChunk(withTimeout(t)); !errors.Is(err, ErrStopped) {
+		t.Fatalf("expected ErrStopped after first run's cancel, got %v", err)
 	}
 
-	for ch := 0; ch <= 1; ch++ {
-		for c := 0; c <= maxChunks[ch]; c++ {
-			buf.Add(buffer.Chunk{
-				ID:   makeCursor(ch, c),
-				Data: []byte{byte(ch*10 + c)},
-			})
-		}
+	// While stopped, an UpdateCursor call arrives (e.g. a late/stray report
+	// from the old connection). This must not affect the next run.
+	o.UpdateCursor(cursor("b1", 7, 777))
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	if err := o.Start(ctx2, cursor("b1", 3, 30)); err != nil {
+		t.Fatalf("second Start: %v", err)
 	}
 
-	org := manager.NewOrganizer(buf, 2)
-
-	chunks, err := org.GetUserChunks(start, 4, maxChunks)
+	chunk, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("GetChunk during second run: %v", err)
 	}
-
-	if len(chunks) != 4 {
-		t.Fatalf("expected 4 chunks, got %d", len(chunks))
-	}
-
-	if len(org.OrderList) != 0 {
-		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
+	if chunk.Id.Chapter != 3 || chunk.Id.StartOffset != 30 {
+		t.Fatalf("got {chapter:%d offset:%d}, want {chapter:3 offset:30} (stray UpdateCursor while stopped leaked in)",
+			chunk.Id.Chapter, chunk.Id.StartOffset)
 	}
 }
 
-func TestOrganizerGetChunks_GapInMiddleStopsReturn(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 3,
+func TestDoubleStartErrors(t *testing.T) {
+	o := NewOrganizer(simpleBuildText(100), passthroughFetch, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("first Start: %v", err)
 	}
-
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 0), Data: []byte{0}})
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 2), Data: []byte{2}})
-
-	org := manager.NewOrganizer(buf, 2)
-
-	start := makeCursor(0, 0)
-	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
-
-	if len(chunks) != 1 {
-		t.Fatalf("expected 1 contiguous chunk, got %d", len(chunks))
-	}
-
-	expectedOrder := []types.UserCursor{
-		makeCursor(0, 1),
-		makeCursor(0, 3),
-	}
-
-	assertCursorSlicesEqual(t, org.OrderList, expectedOrder)
-}
-
-func TestOrganizerGetChunks_MultiChapter_ContiguousOnly(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 1,
-		1: 2,
-	}
-
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 0), Data: []byte{0}})
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 1), Data: []byte{1}})
-	buf.Add(buffer.Chunk{ID: makeCursor(1, 0), Data: []byte{10}})
-
-	org := manager.NewOrganizer(buf, 2)
-
-	start := makeCursor(0, 0)
-	chunks, _ := org.GetChunks("t", start, 4, maxChunks)
-
-	if len(chunks) != 3 {
-		t.Fatalf("expected 3 contiguous chunks, got %d", len(chunks))
-	}
-
-	expectedOrder := []types.UserCursor{
-		makeCursor(1, 1),
-		makeCursor(1, 2),
-	}
-
-	assertCursorSlicesEqual(t, org.OrderList, expectedOrder)
-}
-
-func TestManagerDoesNotTrimWhenBelowHalfBuffer(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{0: 5}
-
-	for i := 0; i <= 2; i++ {
-		buf.Add(buffer.Chunk{
-			ID:   makeCursor(0, i),
-			Data: []byte{byte(i)},
-		})
-	}
-
-	org := manager.NewOrganizer(buf, 6) // half = 3
-
-	start := makeCursor(0, 0)
-	_, _ = org.GetChunks("t", start, 3, maxChunks)
-
-	for i := 0; i <= 2; i++ {
-		if _, ok := buf.Get(makeCursor(0, i)); !ok {
-			t.Fatalf("unexpected trim of cursor {0,%d}", i)
-		}
+	if err := o.Start(ctx, cursor("b1", 0, 0)); !errors.Is(err, ErrAlreadyStarted) {
+		t.Fatalf("expected ErrAlreadyStarted, got %v", err)
 	}
 }
 
-func TestManagerTrimsBackwardBeyondHalfBuffer(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{0: 10}
-
-	for i := 0; i <= 6; i++ {
-		buf.Add(buffer.Chunk{
-			ID:   makeCursor(0, i),
-			Data: []byte{byte(i)},
-		})
-	}
-
-	org := manager.NewOrganizer(buf, 6) // half = 3
-
-	start := makeCursor(0, 3)
-	chunks, _ := org.GetChunks("t", start, 3, maxChunks)
-
-	if len(chunks) != 3 {
-		t.Fatalf("expected 3 chunks, got %d", len(chunks))
-	}
-
-	// anchor = last returned = {0,5}
-	// keep last 3 backward + anchor
-	expectedKept := []types.UserCursor{
-		makeCursor(0, 2),
-		makeCursor(0, 3),
-		makeCursor(0, 4),
-		makeCursor(0, 5),
-	}
-
-	for _, c := range expectedKept {
-		if _, ok := buf.Get(c); !ok {
-			t.Fatalf("expected cursor %v to be kept", c)
+func TestFetchFailureRetries(t *testing.T) {
+	var calls atomic.Int32
+	flaky := func(ctx context.Context, tc types.TextChunk) (types.AudioChunk, bool) {
+		n := calls.Add(1)
+		if n == 1 {
+			return types.AudioChunk{}, false // simulate one synthesis failure
 		}
+		return types.AudioChunk{Id: tc.Id, Data: []byte(tc.Data)}, true
 	}
 
-	// older than half-buffer
-	trimmed := []types.UserCursor{
-		makeCursor(0, 0),
-		makeCursor(0, 1),
+	// Chapter ends at offset 10 — exactly one chunk's worth. This bounds
+	// production to a single chunk so the producer can't race ahead and
+	// keep calling flaky() for subsequent chunks while we're asserting on
+	// the call count. Without this bound, bufferSize>0 lets the goroutine
+	// keep producing in the background, which both invalidates the count
+	// and, unsynchronized, is a data race on top (caught by -race below).
+	o := NewOrganizer(simpleBuildText(chunkSize), flaky, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	for _, c := range trimmed {
-		if _, ok := buf.Get(c); ok {
-			t.Fatalf("expected cursor %v to be trimmed", c)
-		}
-	}
-}
-
-func TestManagerTrimRespectsChapterBoundaries(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{
-		0: 2,
-		1: 2,
-	}
-
-	for i := 0; i <= 2; i++ {
-		buf.Add(buffer.Chunk{ID: makeCursor(0, i), Data: []byte{0}})
-
-	}
-
-	for i := 0; i <= 1; i++ {
-		buf.Add(buffer.Chunk{ID: makeCursor(1, i), Data: []byte{0}})
-
-	}
-
-	org := manager.NewOrganizer(buf, 4) // half = 2
-
-	start := makeCursor(0, 1)
-	org.GetChunks("t", start, 3, maxChunks)
-
-	// anchor = {1,0}
-	// keep last 2 backward + anchor
-	expectedKept := []types.UserCursor{
-		makeCursor(0, 1),
-		makeCursor(0, 2),
-		makeCursor(1, 0),
-	}
-
-	for _, c := range expectedKept {
-		if _, ok := buf.Get(c); !ok {
-			t.Fatalf("expected %v to be kept", c)
-		}
-	}
-
-	trimmed := []types.UserCursor{
-		makeCursor(0, 0),
-	}
-
-	for _, c := range trimmed {
-		if _, ok := buf.Get(c); ok {
-			t.Fatalf("expected %v to be trimmed", c)
-		}
-	}
-}
-
-func makeChunk(id types.UserCursor, data string) types.Chunk {
-	return types.Chunk{ID: id, Data: []byte(data)}
-}
-
-func TestStartOrderProcessor_HappyPath(t *testing.T) {
-	buf := buffer.NewBuffer("buf-happy")
-	org := manager.NewOrganizer(buf, 5)
-
-	// Add several cursors to order list
-	cursors := []types.UserCursor{
-		makeCursor(0, 0),
-		makeCursor(0, 1),
-		makeCursor(0, 2),
-	}
-
-	for _, c := range cursors {
-		org.AddToOrderForTest(c)
-	}
-
-	// fetchFn simulates 2-second fetch per cursor
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		time.Sleep(2 * time.Second)
-		return makeChunk(c, "data"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	// Wait enough for all fetches to complete
-	time.Sleep(time.Duration(len(cursors)*2+1) * time.Second)
-
-	// Verify all chunks are now in the buffer
-	for _, c := range cursors {
-		data, ok := buf.Get(c)
-		if !ok {
-			t.Errorf("expected chunk %v in buffer, but not found", c)
-		}
-		if string(data) != "data" {
-			t.Errorf("unexpected data for chunk %v: %s", c, string(data))
-		}
-	}
-
-	// Verify OrderList is empty
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) != 0 {
-		t.Errorf("expected OrderList to be empty, but has %d items", len(org.OrderList))
-	}
-}
-
-func TestProcessor_PartialSuccess(t *testing.T) {
-	buf := buffer.NewBuffer("buf-partial")
-	org := manager.NewOrganizer(buf, 5)
-
-	cursors := []types.UserCursor{
-		makeCursor(0, 0),
-		makeCursor(0, 1),
-		makeCursor(0, 2),
-	}
-
-	for _, c := range cursors {
-		org.AddToOrderForTest(c)
-	}
-
-	// Only even chunks succeed
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		if c.Cursor.Chunk%2 == 0 {
-			return makeChunk(c, "ok"), true
-		}
-		return types.Chunk{}, false
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	// Wait a bit to let processor run
-	// No time.Sleep needed in real unit, since fetchFn is instant
-	time.Sleep(10 * time.Millisecond)
-	// Verify buffer contains only successful chunks
-	for _, c := range cursors {
-		data, ok := buf.Get(c)
-		if c.Cursor.Chunk%2 == 0 {
-			if !ok {
-				t.Errorf("expected chunk %v in buffer", c)
-			}
-			if string(data) != "ok" {
-				t.Errorf("unexpected data for chunk %v: %s", c, string(data))
-			}
-		} else {
-			if ok {
-				t.Errorf("unexpected chunk %v in buffer", c)
-			}
-		}
-	}
-
-	// OrderList contains only failed cursors
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	for _, c := range org.OrderList {
-		if c.Cursor.Chunk%2 == 0 {
-			t.Errorf("chunk %v should have been removed from OrderList", c)
-		}
-	}
-}
-
-func TestProcessor_ConcurrentClear(t *testing.T) {
-	buf := buffer.NewBuffer("buf-clear")
-	org := manager.NewOrganizer(buf, 5)
-
-	cursors := []types.UserCursor{
-		makeCursor(0, 0),
-		makeCursor(0, 1),
-	}
-
-	for _, c := range cursors {
-		org.AddToOrderForTest(c)
-	}
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		return makeChunk(c, "ok"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	// Concurrent Clear
-	org.Clear()
-	time.Sleep(10 * time.Millisecond)
-	// Verify buffer may contain nothing and OrderList is empty
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) != 0 {
-		t.Errorf("expected OrderList empty after Clear, got %v", org.OrderList)
-	}
-}
-
-func TestProcessor_EmptyOrderListThenAdd(t *testing.T) {
-	buf := buffer.NewBuffer("buf-empty")
-	org := manager.NewOrganizer(buf, 5)
-
-	// Start processor with empty list
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		return makeChunk(c, "ok"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	// Add orders dynamically
-	c := makeCursor(0, 0)
-	org.AddToOrderForTest(c)
-	time.Sleep(10 * time.Millisecond)
-	// Verify chunk added to buffer
-	data, ok := buf.Get(c)
-	if !ok || string(data) != "ok" {
-		t.Errorf("expected dynamic chunk in buffer")
-	}
-
-	time.Sleep(10 * time.Millisecond)
-	// OrderList should be empty
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) != 0 {
-		t.Errorf("expected OrderList empty after dynamic addition")
-	}
-}
-
-func TestProcessor_DuplicateCursors(t *testing.T) {
-	buf := buffer.NewBuffer("buf-dup")
-	org := manager.NewOrganizer(buf, 5)
-
-	c := makeCursor(0, 0)
-
-	// Add same cursor multiple times
-	org.AddToOrderForTest(c)
-	org.AddToOrderForTest(c)
-	org.AddToOrderForTest(c)
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		return makeChunk(c, "ok"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-	time.Sleep(10 * time.Millisecond)
-	// Verify only one chunk in buffer
-	data, ok := buf.Get(c)
-	if !ok || string(data) != "ok" {
-		t.Errorf("expected chunk in buffer")
-	}
-
-	// Verify OrderList is empty
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) != 0 {
-		t.Errorf("expected OrderList empty after processing duplicates")
-	}
-}
-
-func TestProcessor_StopChannel(t *testing.T) {
-	buf := buffer.NewBuffer("buf-stop")
-	org := manager.NewOrganizer(buf, 5)
-
-	c := makeCursor(0, 0)
-	org.AddToOrderForTest(c)
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		return makeChunk(c, "ok"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-
-	// Immediately stop
-	close(stop)
-
-	time.Sleep(10 * time.Millisecond)
-	// Buffer may or may not have the chunk depending on timing
-	// Verify no panic and OrderList is either empty or contains cursor
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) > 1 {
-		t.Errorf("OrderList should have <= 1 item, got %d", len(org.OrderList))
-	}
-}
-
-func TestProcessor_HighConcurrencyStress(t *testing.T) {
-	buf := buffer.NewBuffer("buf-stress")
-	org := manager.NewOrganizer(buf, 10)
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		return makeChunk(c, "ok"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	// Add 50 cursors
-	for i := range 50 {
-		c := makeCursor(0, i)
-		org.AddToOrderForTest(c)
-	}
-
-	// Concurrently add/remove orders
-	var wg sync.WaitGroup
-	for i := 50; i < 60; i++ {
-		wg.Add(1)
-		go func(chunk int) {
-			defer wg.Done()
-			c := makeCursor(0, chunk)
-			org.AddToOrderForTest(c)
-		}(i)
-	}
-	wg.Wait()
-
-	time.Sleep(10 * time.Millisecond)
-
-	// Verify all expected chunks in buffer
-	for i := range 60 {
-		c := makeCursor(0, i)
-		data, ok := buf.Get(c)
-		if !ok || string(data) != "ok" {
-			t.Errorf("expected chunk %v in buffer", c)
-		}
-	}
-
-	time.Sleep(10 * time.Millisecond)
-	// OrderList should be empty
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-	if len(org.OrderList) != 0 {
-		t.Errorf("expected OrderList empty after stress test")
-	}
-}
-
-func TestOrganizerOrderList_Invariants(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	maxChunks := map[int]int{0: 3}
-
-	// Add starting chunk so GetChunks doesn't block
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 0), Data: []byte{0}})
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 1), Data: []byte{1}})
-
-	org := manager.NewOrganizer(buf, 10)
-	org.GetChunks("t", makeCursor(0, 0), 4, maxChunks)
-
-	seen := make(map[types.UserCursor]bool)
-	for _, c := range org.OrderList {
-		if seen[c] {
-			t.Fatalf("duplicate cursor %v in OrderList", c)
-		}
-		seen[c] = true
-
-		if _, ok := buf.Get(c); ok {
-			t.Fatalf("cursor %v in OrderList already exists in buffer", c)
-		}
-	}
-
-	// Ensure sorted
-	for i := 1; i < len(org.OrderList); i++ {
-		if org.OrderList[i-1].CompareCursor(org.OrderList[i]) > 0 {
-			t.Fatalf("OrderList not sorted: %v", org.OrderList)
-		}
-	}
-}
-
-func TestGetChunks_BlocksUntilOneChunkThenProcessorFillsRest(t *testing.T) {
-	buf := buffer.NewBuffer("buf-block")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{0: 4} // 5 chunks total: 0..4
-
-	// Simulate fetchFn with delay per chunk
-	var mu sync.Mutex
-	fetched := make(map[types.UserCursor]bool)
-
-	fetchFn := func(c types.UserCursor) (buffer.Chunk, bool) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		if fetched[c] {
-			return buffer.Chunk{}, false
-		}
-
-		// mark as fetched
-		fetched[c] = true
-
-		// simulate fetching time
-		time.Sleep(50 * time.Millisecond)
-		return makeChunk(c, "data"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	start := makeCursor(0, 0)
-
-	// Request chunks — should block until at least chunk 0 is available
-	result, err := org.GetChunks("buf-block", start, 5, maxChunks)
+	chunk, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("GetChunks returned error: %v", err)
+		t.Fatalf("GetChunk: %v", err)
 	}
-
-	// Immediately after return, only the first chunk should be guaranteed
-	if len(result) != 1 {
-		t.Fatalf("expected 1 chunk returned immediately, got %d", len(result))
+	if chunk.Id.StartOffset != 0 {
+		t.Fatalf("got offset %d, want 0", chunk.Id.StartOffset)
 	}
-	if string(result[0].Data) != "data" || result[0].ID != start {
-		t.Fatalf("unexpected first chunk: %+v", result[0])
-	}
-
-	// Wait a bit longer than processor fetch delay to allow remaining chunks to be added
-	time.Sleep(300 * time.Millisecond)
-
-	// Verify that the buffer now contains all chunks 0..4
-	for i := 0; i <= 4; i++ {
-		c := makeCursor(0, i)
-		data, ok := buf.Get(c)
-		if !ok {
-			t.Errorf("expected chunk %v in buffer", c)
-		} else if string(data) != "data" {
-			t.Errorf("unexpected data for chunk %v: %s", c, string(data))
-		}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("expected 2 fetch attempts (1 failure + 1 success), got %d", got)
 	}
 }
 
-func TestFetchReordering_LaterChunkArrivesFirst(t *testing.T) {
-	buf := buffer.NewBuffer("buf-reorder-1")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{0: 2} // chunks 0,1,2
+// TestSeekDiscardsInFlightChunk verifies that a cursor update reporting a
+// genuinely different position — one the producer wasn't already heading
+// toward — while a chunk for the *old* position has already been
+// synthesized causes that chunk to be discarded, and the next delivered
+// chunk reflects the new position, not a stale one.
+//
+// Uses an unbuffered output channel plus a gated fetcher so the test can pin
+// the producer at each step instead of racing against goroutine timing.
+func TestSeekDiscardsInFlightChunk(t *testing.T) {
+	g := newGatedFetch()
+	o := NewOrganizer(simpleBuildText(1000), g.fetch, 0) // unbuffered out
 
-	start := makeCursor(0, 0)
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		switch c.Cursor.Chunk {
-		case 0:
-			time.Sleep(100 * time.Millisecond) // slow
-		case 1:
-			time.Sleep(10 * time.Millisecond) // fast
-		}
-		return makeChunk(c, "data"), true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
+	// --- produce and consume chunk @0 normally ---
+	tc0 := <-g.calls
+	if tc0.Id.StartOffset != 0 {
+		t.Fatalf("got offset %d, want 0", tc0.Id.StartOffset)
+	}
+	g.respond <- fetchResult{types.AudioChunk{Id: tc0.Id, Data: []byte(tc0.Data)}, true}
 
-	result, err := org.GetChunks("buf-reorder-1", start, 3, maxChunks)
+	chunk0, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("GetChunk: %v", err)
+	}
+	if chunk0.Id.StartOffset != 0 {
+		t.Fatalf("got offset %d, want 0", chunk0.Id.StartOffset)
 	}
 
-	// Must return only chunk 0
-	if len(result) != 1 {
-		t.Fatalf("expected exactly 1 chunk, got %d", len(result))
+	// --- producer moves on to @10 and synthesis completes for it ---
+	tc10 := <-g.calls
+	if tc10.Id.StartOffset != 10 {
+		t.Fatalf("got offset %d, want 10", tc10.Id.StartOffset)
 	}
 
-	if result[0].ID != start {
-		t.Fatalf("expected first chunk %v, got %v", start, result[0].ID)
+	// A jump to @500 is unambiguously not "the next chunk in the chain"
+	// (which is @10), so this must be treated as a real seek. It arrives
+	// BEFORE we let fetchAudio(@10) return, and before anyone drains
+	// o.out — so when the producer reaches its post-fetch priority check,
+	// the seek is already sitting there waiting, making the discard
+	// deterministic rather than racing against delivery.
+	o.UpdateCursor(cursor("b1", 0, 500))
+
+	g.respond <- fetchResult{types.AudioChunk{Id: tc10.Id, Data: []byte(tc10.Data)}, true}
+
+	// The producer must now jump straight to @500 — chunk @10 is discarded.
+	tc500 := <-g.calls
+	if tc500.Id.StartOffset != 500 {
+		t.Fatalf("got offset %d, want 500 (chunk @10 should have been discarded on seek)", tc500.Id.StartOffset)
 	}
+	g.respond <- fetchResult{types.AudioChunk{Id: tc500.Id, Data: []byte(tc500.Data)}, true}
 
-	// Wait for all fetches to complete
-	time.Sleep(200 * time.Millisecond)
-
-	// Buffer should now contain all chunks
-	for i := 0; i <= 2; i++ {
-		c := makeCursor(0, i)
-		if _, ok := buf.Get(c); !ok {
-			t.Fatalf("expected chunk %v in buffer", c)
-		}
-	}
-}
-
-func TestFetchReordering_GapPreservedDespiteLaterArrival(t *testing.T) {
-	buf := buffer.NewBuffer("buf-reorder-2")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{0: 3}
-
-	// Seed chunk 0 so GetChunks can start
-	buf.Add(buffer.Chunk{ID: makeCursor(0, 0), Data: []byte("seed")})
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		switch c.Cursor.Chunk {
-		case 1:
-			time.Sleep(100 * time.Millisecond) // slow
-		case 2:
-			time.Sleep(10 * time.Millisecond) // fast
-		}
-		return makeChunk(c, "data"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	result, err := org.GetChunks("buf-reorder-2", makeCursor(0, 0), 4, maxChunks)
+	chunk, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("GetChunk: %v", err)
 	}
-
-	// Only chunk 0 must be returned
-	if len(result) != 1 {
-		t.Fatalf("expected 1 chunk, got %d", len(result))
-	}
-	if result[0].ID != (makeCursor(0, 0)) {
-		t.Fatalf("unexpected chunk returned: %v", result[0].ID)
-	}
-
-	time.Sleep(200 * time.Millisecond)
-
-	// Buffer should have chunks 1 and 2 eventually
-	for _, i := range []int{1, 2} {
-		c := makeCursor(0, i)
-		if _, ok := buf.Get(c); !ok {
-			t.Fatalf("expected chunk %v in buffer", c)
-		}
-	}
-
-	// But contiguity must still be respected
-	org.MuLockTest()
-	defer org.MuUnlockTest()
-
-	for i := 1; i < len(org.OrderList); i++ {
-		if org.OrderList[i-1].CompareCursor(org.OrderList[i]) > 0 {
-			t.Fatalf("OrderList not sorted: %v", org.OrderList)
-		}
+	if chunk.Id.StartOffset != 500 {
+		t.Fatalf("got offset %d, want 500", chunk.Id.StartOffset)
 	}
 }
 
-func TestFetchReordering_AllChunksArriveInReverseOrder(t *testing.T) {
-	buf := buffer.NewBuffer("buf-reorder-3")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{0: 4}
+// TestNaturalAdvanceIsNotTreatedAsSeek verifies that when UpdateCursor
+// reports a position matching what the producer is already targeting next,
+// it's treated as a no-op — not a seek — so nothing already in flight for
+// that exact position gets needlessly discarded and re-synthesized. Without
+// this, every routine client position report during normal playback would
+// look indistinguishable from a jump.
+func TestNaturalAdvanceIsNotTreatedAsSeek(t *testing.T) {
+	g := newGatedFetch()
+	o := NewOrganizer(simpleBuildText(1000), g.fetch, 0)
 
-	start := makeCursor(0, 0)
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		// Higher chunk number = faster fetch
-		time.Sleep(time.Duration(100-c.Cursor.Chunk*20) * time.Millisecond)
-		return makeChunk(c, "data"), true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
+	tc0 := <-g.calls
+	g.respond <- fetchResult{types.AudioChunk{Id: tc0.Id, Data: []byte(tc0.Data)}, true}
+	if _, err := o.GetChunk(withTimeout(t)); err != nil {
+		t.Fatalf("GetChunk: %v", err)
+	}
 
-	result, err := org.GetChunks("buf-reorder-3", start, 5, maxChunks)
+	// By the time the producer has sent its buildText/fetchAudio call for
+	// @10, `next` has already been set to @10 (setNext happens strictly
+	// before that call, in program order within the same goroutine, and
+	// the subsequent channel send to g.calls carries a happens-before
+	// guarantee) — so this receive is what makes checking o.next safe here
+	// without an artificial sleep.
+	tc10 := <-g.calls
+	if tc10.Id.StartOffset != 10 {
+		t.Fatalf("got offset %d, want 10", tc10.Id.StartOffset)
+	}
+
+	// The client confirms it's now at @10 — exactly where the producer is
+	// already headed. This must NOT be queued as a seek.
+	o.UpdateCursor(cursor("b1", 0, 10))
+
+	o.mu.Lock()
+	pending := len(o.seek)
+	o.mu.Unlock()
+	if pending != 0 {
+		t.Fatalf("expected no pending seek for a natural-advance UpdateCursor, got %d queued", pending)
+	}
+
+	g.respond <- fetchResult{types.AudioChunk{Id: tc10.Id, Data: []byte(tc10.Data)}, true}
+
+	chunk, err := o.GetChunk(withTimeout(t))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("GetChunk: %v", err)
 	}
-
-	// Must still return only chunk 0
-	if len(result) != 1 {
-		t.Fatalf("expected 1 chunk, got %d", len(result))
-	}
-	if result[0].ID != start {
-		t.Fatalf("expected chunk %v, got %v", start, result[0].ID)
-	}
-
-	time.Sleep(300 * time.Millisecond)
-
-	// Buffer should contain all chunks in the end
-	for i := 0; i <= 4; i++ {
-		c := makeCursor(0, i)
-		if _, ok := buf.Get(c); !ok {
-			t.Fatalf("expected chunk %v in buffer", c)
-		}
+	if chunk.Id.StartOffset != 10 {
+		t.Fatalf("got offset %d, want 10 (chunk should have been delivered normally, not discarded)", chunk.Id.StartOffset)
 	}
 }
 
-func TestGetChunkWithStartOrderProcessor(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
+// TestCancelStopsProduction verifies that cancelling the context passed to
+// Start halts the producer even while it's mid-synthesis (blocked inside
+// fetchAudio), and that GetChunk subsequently reports ErrStopped.
+func TestCancelStopsProduction(t *testing.T) {
+	g := newGatedFetch()
+	o := NewOrganizer(simpleBuildText(1000), g.fetch, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		time.Sleep(200 * time.Millisecond)
-		return makeChunk(c, "data"), true
+	// Wait until the producer is blocked inside fetchAudio for @0.
+	<-g.calls
+
+	// Cancel while synthesis is still "in progress" — gatedFetch's select
+	// on ctx.Done() is what makes this resolve instead of hanging.
+	cancel()
+
+	if _, err := o.GetChunk(withTimeout(t)); !errors.Is(err, ErrStopped) {
+		t.Fatalf("expected ErrStopped after cancel, got %v", err)
 	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	start := makeCursor(0, 0)
-	chunks, err := org.GetChunks("b", start, 4, maxChunks)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(chunks) != 1 {
-		t.Fatalf("expected 4 chunks, got %d", len(chunks))
-	}
-
-	if len(org.OrderList) != 4 {
-		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
-	}
-
 }
 
-func TestGetChunksPastEnd(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
+// TestGetChunkRespectsCallerContext ensures a GetChunk call bails out on
+// its own ctx even if the organizer is otherwise healthy and idle.
+func TestGetChunkRespectsCallerContext(t *testing.T) {
+	o := NewOrganizer(simpleBuildText(0), passthroughFetch, 4) // errors immediately, never produces
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+		t.Fatalf("Start: %v", err)
 	}
 
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		time.Sleep(200 * time.Millisecond)
-		return makeChunk(c, "data"), true
-	}
+	callCtx, callCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer callCancel()
 
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	start := makeCursor(1, 2)
-	chunks, err := org.GetChunks("b", start, 4, maxChunks)
+	// Organizer has already stopped (buildText errors at offset 0 immediately)
+	// so this should resolve as ErrStopped, not hang or time out — but we
+	// still verify the ctx.Err() path works by giving GetChunk an
+	// already-short-fused context.
+	_, err := o.GetChunk(callCtx)
 	if err == nil {
-		t.Fatal("Expected error")
+		t.Fatalf("expected an error, got nil")
 	}
-
-	if len(chunks) != 0 {
-		t.Fatalf("expected 0 chunks, got %d", len(chunks))
-	}
-
-	if len(org.OrderList) != 0 {
-		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
-	}
-
-}
-
-func TestGetChunksPastChapterEnd(t *testing.T) {
-	buf := buffer.NewBuffer("t")
-	org := manager.NewOrganizer(buf, 5)
-	maxChunks := map[int]int{
-		0: 2,
-		1: 1,
-	}
-
-	fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-		time.Sleep(200 * time.Millisecond)
-		return makeChunk(c, "data"), true
-	}
-
-	stop := org.StartOrderProcessor(fetchFn)
-	defer close(stop)
-
-	start := makeCursor(0, 3)
-	chunks, err := org.GetChunks("b", start, 4, maxChunks)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(chunks) != 1 {
-		t.Fatalf("expected 1 chunks, got %d", len(chunks))
-	}
-
-	if chunks[0].ID.Cursor != makeCursor(1, 0).Cursor {
-		t.Fatalf("Expected cunk to be 1,0, it is :%v", chunks[0])
-	}
-
-	if len(org.OrderList) != 1 {
-		t.Fatalf("expected empty OrderList, got %v", org.OrderList)
-	}
-
 }

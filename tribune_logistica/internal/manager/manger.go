@@ -1,292 +1,223 @@
 package manager
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"sync"
-	"time"
 
-	"github.com/book_legion-tribune_logistica/internal/buffer"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
-// Organizer handles ordered requests and keeps track of future chunks
+// TextChunkBuilder resolves a ChunkIdentifier (StartOffset trusted, EndOffset
+// ignored) into a TextChunk, using nearestAllowedSplit-style logic to find
+// the next valid boundary and slicing chapter HTML between them.
+type TextChunkBuilder func(id types.ChunkIdentifier) (types.TextChunk, error)
+
+// AudioFetcher synthesizes audio for a TextChunk. Must respect ctx
+// cancellation for in-progress synthesis.
+type AudioFetcher func(ctx context.Context, chunk types.TextChunk) (types.AudioChunk, bool)
+
+var ErrStopped = errors.New("organizer stopped")
+var ErrAlreadyStarted = errors.New("organizer already started")
+
 type Organizer struct {
-	Buf        *buffer.Buffer
-	BufferSize int
-	OrderList  []types.UserCursor
-	orderSet   map[types.UserCursor]bool
-	mu         sync.Mutex
-	cond       *sync.Cond
+	mu sync.Mutex
+
+	buildText  TextChunkBuilder
+	fetchAudio AudioFetcher
+	bufferSize int
+
+	cursor  types.UserCursor      // last position reported by the client
+	next    types.ChunkIdentifier // identifier the producer is currently targeting
+	current types.ChunkIdentifier // identifier of the chunk most recently returned by GetChunk
+
+	seek chan types.UserCursor // latest pending seek; capacity 1, newest wins
+	out  chan types.AudioChunk // produced audio, ready for GetChunk
+
+	cancel  context.CancelFunc
+	started bool
 }
 
-// buffer size determines the minimum amount to keep in buffer. Max amount generated is 2*buffer size
-func NewOrganizer(buf *buffer.Buffer, bufferSize int) *Organizer {
-	o := &Organizer{
-		Buf:        buf,
-		BufferSize: bufferSize,
-		OrderList:  make([]types.UserCursor, 0),
-		orderSet:   make(map[types.UserCursor]bool, bufferSize*2),
+func NewOrganizer(buildText TextChunkBuilder, fetchAudio AudioFetcher, bufferSize int) *Organizer {
+	return &Organizer{
+		buildText:  buildText,
+		fetchAudio: fetchAudio,
+		bufferSize: bufferSize,
+		seek:       make(chan types.UserCursor, 1),
+		out:        make(chan types.AudioChunk, bufferSize),
 	}
-	o.cond = sync.NewCond(&o.mu)
-	return o
 }
 
-func (o *Organizer) Clear() {
-	o.Buf.Clear()
+func cursorToIdentifier(uc types.UserCursor) types.ChunkIdentifier {
+	return types.ChunkIdentifier{
+		ID:          uc.BookID,
+		Chapter:     uc.Cursor.Chapter,
+		StartOffset: uc.Cursor.Index,
+	}
+}
+
+// --- the three public functions ---
+
+// Start begins production from uc, discarding any position previously set
+// via UpdateCursor. This makes a single Organizer safe to Start, cancel (via
+// the ctx passed in), and Start again later without stale state from a prior
+// run — or from UpdateCursor calls made before this Start — leaking in: the
+// cursor, the seek signal, and the output buffer are all reset here.
+func (o *Organizer) Start(ctx context.Context, uc types.UserCursor) error {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.OrderList = o.OrderList[:0]
-	o.orderSet = make(map[types.UserCursor]bool)
+	if o.started {
+		o.mu.Unlock()
+		return ErrAlreadyStarted
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	o.cancel = cancel
+	o.started = true
+	o.cursor = uc
+	initial := cursorToIdentifier(uc)
+	o.next = initial
+
+	seekCh := make(chan types.UserCursor, 1)
+	outCh := make(chan types.AudioChunk, o.bufferSize)
+	o.seek = seekCh
+	o.out = outCh
+	o.mu.Unlock()
+
+	go o.run(runCtx, initial, seekCh, outCh)
+	return nil
 }
 
-func (o *Organizer) GetUserChunks(start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
-	return o.GetChunks(start.BookID+start.UserID, start, count, maxChunks)
-}
-
-func (o *Organizer) GetChunks(id string, start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, error) {
+// UpdateCursor reports the client's current position. If this position is
+// different from where the producer is already headed, it's treated as a
+// seek: production jumps there, discarding any buffered-but-undelivered
+// chunk from the old position. If it matches what the producer is already
+// targeting, this is just the client confirming normal forward progress —
+// not a jump — so nothing is signalled and no in-flight work is discarded.
+func (o *Organizer) UpdateCursor(uc types.UserCursor) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	fmt.Printf("Asked: %v\n", start)
-	o.idCheck(id)
-	fmt.Printf("ID ok\n")
-	start, err := ValidateCursor(start, maxChunks)
-	if err != nil {
-		return nil, err
-	}
+	o.cursor = uc
+	target := cursorToIdentifier(uc)
+	natural := target.StartOffset == o.next.StartOffset
+	seekCh := o.seek
+	o.mu.Unlock()
 
-	if !o.ensureStartExists(start, maxChunks) {
-		for {
-			o.mu.Unlock()
-			time.Sleep(10 * time.Millisecond)
-			o.mu.Lock()
-			if o.Buf.Has(start) {
-				break
-			}
-		}
-	}
-	fmt.Printf("start ok ok")
-	result, lastReturned := o.collectContiguousChunks(start, count, maxChunks)
-	fmt.Printf("Result gotten")
-	missing := o.computeMissingCursors(lastReturned, maxChunks)
-	o.updateOrderList(missing, maxChunks)
-	o.TrimBuffer(lastReturned, maxChunks)
-
-	return result, nil
-}
-
-func ValidateCursor(uc types.UserCursor, maxChunks map[int]int) (types.UserCursor, error) {
-	currentChapter := uc.Cursor.Chapter
-	currentChunk := uc.Cursor.Chunk
-
-	// Check if current chapter exists in maxChunks
-	maxChunk, ok := maxChunks[currentChapter]
-	if !ok {
-		return uc, errors.New("chapter does not exist")
-	}
-
-	// If chunk is within the valid range, return as is
-	if currentChunk <= maxChunk {
-		return uc, nil
-	}
-
-	// Move to next chapter
-	nextChapter := currentChapter + 1
-	if _, ok := maxChunks[nextChapter]; !ok {
-		return uc, errors.New("cursor is past the last chapter")
-	}
-
-	// Return cursor at next chapter, chunk 0
-	uc.Cursor.Chapter = nextChapter
-	uc.Cursor.Chunk = 0
-	return uc, nil
-}
-
-func (o *Organizer) idCheck(id string) {
-	if id != o.Buf.Id {
-		// instead of Clear(), initialize a new buffer instance
-		o.Buf = buffer.NewBuffer(id)
-		o.OrderList = nil
-		o.orderSet = make(map[types.UserCursor]bool, o.BufferSize*2)
-	}
-}
-
-func (o *Organizer) ensureStartExists(start types.UserCursor, maxChunks map[int]int) bool {
-
-	if !o.Buf.Has(start) {
-
-		o.addToOrderLocked(start)
-		extra := nextCursors(start, o.BufferSize*2, maxChunks)
-		for _, c := range extra {
-			o.addToOrderLocked(c)
-		}
-		return false
-	} else {
-		return true
-	}
-}
-
-func (o *Organizer) collectContiguousChunks(start types.UserCursor, count int, maxChunks map[int]int) ([]types.Chunk, types.UserCursor) {
-	var result []types.Chunk
-	cur := start
-
-	for range count {
-		data, ok := o.Buf.Get(cur)
-		if !ok {
-			break
-		}
-		result = append(result, types.Chunk{ID: cur, Data: data})
-
-		maxChunk := maxChunks[cur.Cursor.Chapter]
-		cur.Cursor.Next(maxChunk, len(maxChunks)-1)
-	}
-
-	var last types.UserCursor
-	if len(result) > 0 {
-		last = result[len(result)-1].ID
-	} else {
-		last = start
-	}
-
-	return result, last
-}
-
-// computeMissingCursors returns up to BufferSize cursors that are missing after `start`
-func (o *Organizer) computeMissingCursors(start types.UserCursor, maxChunks map[int]int) []types.UserCursor {
-	var missing []types.UserCursor
-	cur := start
-	for i := 0; i < o.BufferSize; i++ {
-		if !o.Buf.Has(cur) {
-			missing = append(missing, cur)
-		}
-		maxChunk, ok := maxChunks[cur.Cursor.Chapter]
-		if !ok {
-			maxChunk = 0
-		}
-		cur.Cursor.Next(maxChunk, len(maxChunks)-1)
-	}
-	return missing
-}
-
-func (o *Organizer) updateOrderList(missing []types.UserCursor, maxChunks map[int]int) {
-
-	if len(missing) > 0 {
-		lastMissing := missing[len(missing)-1]
-		missing = append(missing, nextCursors(lastMissing, o.BufferSize*2, maxChunks)...)
-	}
-
-	for _, c := range missing {
-		o.addToOrderLocked(c)
-	}
-}
-
-func (o *Organizer) TrimBuffer(c types.UserCursor, maxChunks map[int]int) {
-	backwards := o.BufferSize / 2
-	min := minChapter(maxChunks)
-	o.Buf.Trim(c, backwards, min, maxChunks)
-
-}
-
-func minChapter(maxChunks map[int]int) int {
-	first := true
-	min := 0
-	for ch := range maxChunks {
-		if first || ch < min {
-			min = ch
-			first = false
-		}
-	}
-	return min
-}
-
-func nextCursors(start types.UserCursor, n int, maxChunks map[int]int) []types.UserCursor {
-	cursors := make([]types.UserCursor, 0, n)
-	cur := start
-	for range n {
-		cursors = append(cursors, cur)
-		maxChunk := maxChunks[cur.Cursor.Chapter]
-		cur.Cursor.Next(maxChunk, len(maxChunks)-1) // assume last chapter is len(maxChunks)-1
-	}
-	return cursors
-}
-
-func (o *Organizer) addToOrderLocked(c types.UserCursor) {
-	if o.orderSet[c] || o.Buf.Has(c) {
+	if natural {
 		return
 	}
-
-	// Insert in order to keep OrderList sorted
-	idx := len(o.OrderList)
-	for i, existing := range o.OrderList {
-		if c.CompareCursor(existing) < 0 {
-			idx = i
-			break
-		}
-	}
-
-	if idx == len(o.OrderList) {
-		o.OrderList = append(o.OrderList, c)
-	} else {
-		o.OrderList = append(o.OrderList, types.UserCursor{}) // expand slice
-		copy(o.OrderList[idx+1:], o.OrderList[idx:])
-		o.OrderList[idx] = c
-	}
-
-	o.orderSet[c] = true
-	o.cond.Broadcast()
+	setLatest(seekCh, uc)
 }
 
-// expected return from fetchFn is chunk, ok
-func (o *Organizer) StartOrderProcessor(fetchFn func(types.UserCursor) (types.Chunk, bool)) chan struct{} {
-	stop := make(chan struct{})
+// GetChunk blocks until the next produced AudioChunk is ready, the organizer
+// is stopped (ErrStopped), or ctx is cancelled.
+func (o *Organizer) GetChunk(ctx context.Context) (types.AudioChunk, error) {
+	o.mu.Lock()
+	out := o.out
+	o.mu.Unlock()
 
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-				o.mu.Lock()
-				for len(o.OrderList) == 0 {
-					o.cond.Wait()
-				}
-				c := o.OrderList[0]
-				o.mu.Unlock()
-
-				chunk, ok := fetchFn(c)
-
-				o.Buf.Add(chunk) // only adds if ok, depending on Buffer.Add impl — check this
-				o.mu.Lock()
-				if len(o.OrderList) > 0 && o.OrderList[0] == c {
-					o.OrderList = o.OrderList[1:]
-					delete(o.orderSet, c)
-				}
-				if ok {
-					o.cond.Broadcast()
-				}
-				o.mu.Unlock()
-			}
+	select {
+	case chunk, ok := <-out:
+		if !ok {
+			return types.AudioChunk{}, ErrStopped
 		}
+		o.mu.Lock()
+		o.current.StartOffset = chunk.Id.EndOffset
+		o.mu.Unlock()
+		return chunk, nil
+	case <-ctx.Done():
+		return types.AudioChunk{}, ctx.Err()
+	}
+}
+
+// --- internal producer ---
+
+func (o *Organizer) run(ctx context.Context, initial types.ChunkIdentifier, seek chan types.UserCursor, out chan types.AudioChunk) {
+	defer func() {
+		close(out)
+		o.mu.Lock()
+		o.started = false
+		o.mu.Unlock()
 	}()
 
-	return stop
-}
+	next := initial
 
-//test heplers:
+	for {
+		// Priority check #1: don't even start building/synthesizing for
+		// `next` if a seek is already waiting — that work would just be
+		// thrown away.
+		select {
+		case <-ctx.Done():
+			return
+		case seekTo := <-seek:
+			next = o.applySeek(seekTo)
+			continue
+		default:
+		}
 
-func (o *Organizer) AddToOrderForTest(c types.UserCursor) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if !o.orderSet[c] && !o.Buf.Has(c) {
-		o.OrderList = append(o.OrderList, c)
-		o.orderSet[c] = true
-		o.cond.Broadcast() // wake the processor
+		textChunk, err := o.buildText(next)
+		if err != nil {
+			// End of chapter/book, or an unresolvable offset.
+			// TODO: chapter-transition handling per design doc section 7.
+			return
+		}
+
+		audioChunk, ok := o.fetchAudio(ctx, textChunk)
+		if ctx.Err() != nil {
+			return
+		}
+		if !ok {
+			continue // TODO: retry/backoff policy on synthesis failure
+		}
+
+		// Priority check #2: synthesis just finished, but a seek may have
+		// arrived while it was running. Re-check before attempting to
+		// deliver — a chunk synthesized for a position we've since jumped
+		// away from must not be handed to the client.
+		select {
+		case seekTo := <-seek:
+			next = o.applySeek(seekTo)
+			continue
+		default:
+		}
+
+		select {
+		case out <- audioChunk:
+		case <-ctx.Done():
+			return
+		case seekTo := <-seek:
+			next = o.applySeek(seekTo)
+			continue
+		}
+
+		next = types.ChunkIdentifier{
+			ID:          next.ID,
+			Chapter:     textChunk.Id.Chapter,
+			StartOffset: textChunk.Id.EndOffset,
+		}
+		o.setNext(next)
 	}
 }
-func (o *Organizer) MuLockTest() {
-	o.mu.Lock()
+
+func (o *Organizer) applySeek(uc types.UserCursor) types.ChunkIdentifier {
+	id := cursorToIdentifier(uc)
+	o.setNext(id)
+	return id
 }
 
-func (o *Organizer) MuUnlockTest() {
+func (o *Organizer) setNext(id types.ChunkIdentifier) {
+	o.mu.Lock()
+	o.next = id
 	o.mu.Unlock()
+}
+
+func setLatest(ch chan types.UserCursor, uc types.UserCursor) {
+	for {
+		select {
+		case ch <- uc:
+			return
+		default:
+			select {
+			case <-ch:
+			default:
+			}
+		}
+	}
 }
