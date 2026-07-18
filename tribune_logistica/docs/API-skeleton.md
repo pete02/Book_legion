@@ -194,46 +194,9 @@ Load cursor for a specific book.
 Creates and returns a new cursor for the book, if one does not exists
 
 
-#### 3.x Reqeust cursor text:
-Get /api/v1/cursors/{book_id}/text
-
-**Response**
-```
-{
-  "cursor":{
-    "UserID": "u1",
-    "BookID": "b1",
-    "Cursor":{
-      "Chapter": 1
-      "Chunk": 1
-    }
-  }
-  "text": "..."
-}
-```
-
-### 3.x Get Cursor based on text
-POST /api/v1/books/{book_id}/chapters/{chapter_index}/cursor
-**Request**
-```
-{
-  "snippet_html": "<p>Frost licked over Tala’s already sensitive skin...</p>"
-}
-```
-**Response**
-```
-{
-  "BookID": "b1",
-  "UserID": u1,
-  "Cursor":{
-    "Chapter": 1,
-    "Chunk": 2
-  }
-}
-```
 
 ### 3.1 Get Chapter
-GET /api/v1/books/{book_id}/chapters/{chapter_index} // works
+GET /api/v1/books/{book_id}/chapters/{chapter_index}
 
 **Response**
 ```
@@ -301,9 +264,10 @@ GET /api/v1/book/{book_id}/chapterprogress
   "progress": 0.5
 }
 
+
 ```
-### 3.4 Get BookProgress:
-GET /api/v1/book/{book_id}/progress
+### 3.4 Get Book Files:
+GET /api/v1/book/{book_id}/{path}
 **Response**
 ```
 {
@@ -311,7 +275,6 @@ GET /api/v1/book/{book_id}/progress
 }
 
 ```
-
 
 
 ## 5. Miscellaneous Endpoints

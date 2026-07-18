@@ -21,7 +21,7 @@ type UserCursor struct {
 func (a UserCursor) CompareCursor(b UserCursor) int {
 	return a.Cursor.CompareCursor(b.Cursor)
 }
-func NewUserCursor(user string, book string, chapter int, chunk int) UserCursor {
+func (a UserCursor) NewUserCursor(user string, book string, chapter int, chunk int) UserCursor {
 	return UserCursor{
 		UserID: user,
 		BookID: book,
@@ -33,7 +33,7 @@ func NewUserCursor(user string, book string, chapter int, chunk int) UserCursor 
 }
 
 // SaveUserCursor saves a user's UserCursor position for a specific book
-func SaveUserCursor(store storage.Storage, c UserCursor) error {
+func (c UserCursor) SaveUserCursor(store storage.Storage) error {
 	row := map[string]interface{}{
 		"id":      c.UserID + ":" + c.BookID,
 		"user_id": c.UserID,
@@ -57,7 +57,7 @@ func LoadUserCursor(store storage.Storage, userID, bookID string) (UserCursor, e
 			BookID: bookID,
 			Cursor: Cursor{Chapter: 0, Index: 0},
 		}
-		SaveUserCursor(store, user)
+		user.SaveUserCursor(store)
 		return user, nil
 	}
 

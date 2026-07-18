@@ -28,9 +28,9 @@ func withAdminToken(t *testing.T) {
 	t.Cleanup(func() { os.Unsetenv("TRIBUNE_LOGISTICA_ADMIN_TOKEN") })
 }
 
-// newTestAPI spins up an API backed by a real, throwaway JSONStorage file
+// NewTestAPI spins up an API backed by a real, throwaway JSONStorage file
 // so handlers exercise their actual DB read/write paths instead of a mock.
-func newTestAPI(t *testing.T) *API {
+func NewTestAPI(t *testing.T) *API {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "db.json")
 	store, err := storage.NewJSONStorage(path)
@@ -196,7 +196,7 @@ func TestRegisterUser_MissingCredentials(t *testing.T) {
 
 func TestRegisterUser_Success(t *testing.T) {
 	withAdminToken(t)
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	username := uniqueUsername(t)
 	password := "correct horse battery staple"
 
@@ -259,7 +259,7 @@ func TestLoginUser_InvalidJSON(t *testing.T) {
 }
 
 func TestLoginUser_UnknownUser(t *testing.T) {
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	req := httptest.NewRequest(http.MethodPost, "/login", jsonBody(t, LoginRequest{
 		Username: uniqueUsername(t), // never seeded
 		Password: "whatever",
@@ -274,7 +274,7 @@ func TestLoginUser_UnknownUser(t *testing.T) {
 }
 
 func TestLoginUser_WrongPassword(t *testing.T) {
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	username := uniqueUsername(t)
 	seedUser(t, a, username, "correct-password")
 
@@ -292,7 +292,7 @@ func TestLoginUser_WrongPassword(t *testing.T) {
 }
 
 func TestLoginUser_Success(t *testing.T) {
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	username := uniqueUsername(t)
 	password := "hunter2-but-longer-and-not-real"
 	seedUser(t, a, username, password)
@@ -389,7 +389,7 @@ func TestRefreshTokenHandler_UnknownRefreshToken(t *testing.T) {
 }
 
 func TestRefreshTokenHandler_Success(t *testing.T) {
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	username := uniqueUsername(t)
 	password := "another-not-real-password"
 	seedUser(t, a, username, password)
@@ -445,7 +445,7 @@ func TestRefreshTokenHandler_UsernameMismatchRejected(t *testing.T) {
 	// (login.verifyUserrefreshToken returns "Hijacked refresh token" on
 	// mismatch) — this makes sure that protection is actually wired up
 	// through the HTTP handler and not just tested in isolation.
-	a := newTestAPI(t)
+	a := NewTestAPI(t)
 	username := uniqueUsername(t)
 	password := "yet-another-not-real-password"
 	seedUser(t, a, username, password)
