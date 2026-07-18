@@ -10,12 +10,12 @@ pub fn Text(book_id: String) -> Element {
     let css_ready: Signal<bool> = use_signal(|| false);
     let show_extra = use_signal(|| false);
 
-    let mut chapter_html: Signal<Option<String>> = use_signal(|| None);
+    let chapter_html: Signal<Option<String>> = use_signal(|| None);
     let mut current_page: Signal<i32> = use_signal(|| 0);
     let mut column_width_px: Signal<Option<f64>> = use_signal(|| None);
     let mut total_pages: Signal<Option<i32>> = use_signal(|| None);
     let mut offset: Signal<Option<i64>> = use_signal(|| Some(0));
-    let mut chapter_idx: Signal<usize> = use_signal(|| 0);
+    let mut chapter_idx: Signal<usize> = use_signal(|| usize::MAX);
     let mut is_restoring: Signal<bool> = use_signal(|| false);
 
 
@@ -34,9 +34,13 @@ pub fn Text(book_id: String) -> Element {
         if !css_ready() {
             return;
         }
+        if chapter_idx() == usize::MAX{
+            return;
+        }
+
         let book_id = b_signal();
         spawn(async move {
-            text::get_new_chapter(0, &book_id, chapter_html).await;
+            text::get_new_chapter(chapter_idx(), &book_id, chapter_html).await;
             is_restoring.set(true);
         });
     });

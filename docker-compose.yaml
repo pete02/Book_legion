@@ -9,8 +9,10 @@ services:
       - ./tribune_logistica/config:/config
       - ./tribune_logistica/data:/data
     environment:
-      - TTS_BACKEND=http
-      - TTS_API_URL=http://192.168.88.244:8888/tts
+      - TTS_BACKEND=mock
+      - TTS_API_URL=http://92.168.88.241:8888/tts
+      - LIBRARY_ROOT=/data
+      - TRIBUNE_LOGISTICA_ADMIN_TOKEN=token
     restart: unless-stopped
     labels:
       - "traefik.enable=true"

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -17,8 +18,9 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("book_id"))
+	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
 	if err != nil {
+		fmt.Printf("failed to load cursor: %v", err)
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -47,6 +49,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := cursor.SaveUserCursor(a.DB); err != nil {
+		fmt.Printf("failed to save cursor: %v", err)
 		http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
 		return
 	}
@@ -60,13 +63,14 @@ func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
+		fmt.Printf("failed to load epub: %v", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
-	chapterIndex, err := strconv.Atoi(req.PathValue("chapter_index"))
+	chapterIndex, err := strconv.Atoi(req.PathValue("chapterIndex"))
 	if err != nil {
 		http.Error(rr, "Invalid chapter index", http.StatusBadRequest)
 		return
@@ -74,6 +78,7 @@ func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
 
 	chapter, err := epub.GetChapter(chapterIndex)
 	if err != nil {
+		fmt.Printf("failed to load chapter: %v }\n", err)
 		http.Error(rr, "Failed to load chapter", http.StatusInternalServerError)
 		return
 	}
@@ -87,15 +92,18 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
+	navId := req.PathValue("bookID")
 
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, navId)
 	if err != nil {
+		fmt.Printf("failed to load epub: %v\n", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
 	nav, err := epub.GetToc()
 	if err != nil {
+		fmt.Printf("failed to load Toc from the book: %v", err)
 		http.Error(rr, "Failed to load Toc from the book", http.StatusInternalServerError)
 		return
 	}
@@ -110,18 +118,20 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
-	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("book_id"))
+	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
 	if err != nil {
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
 		return
 	}
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
+		fmt.Printf("failed to load epub: %v\n", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 	chapter, err := epub.GetChapter(cursor.Cursor.Chapter)
 	if err != nil {
+		fmt.Printf("Failed to load %v chapter %d: %v", cursor.BookID, cursor.Cursor.Chapter, err)
 		http.Error(rr, "Failed to load chapter", http.StatusInternalServerError)
 		return
 	}
@@ -138,14 +148,16 @@ func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
+		fmt.Printf("failed to load epub: %v\n", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
 	cover, img_ype, err := epub.GetCover()
 	if err != nil {
+		fmt.Printf("failed to load cover: %v\n", err)
 		http.Error(rr, "Failed to load cover", http.StatusInternalServerError)
 		return
 	}
@@ -160,14 +172,16 @@ func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
+		fmt.Printf("failed to load epub: %v", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
 	css, err := epub.GetCSS()
 	if err != nil {
+		fmt.Printf("failed to load CSS: %v", err)
 		http.Error(rr, "Failed to load CSS", http.StatusInternalServerError)
 		return
 	}
@@ -182,7 +196,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	epub, err := epub.Load(a.DB, req.PathValue("book_id"))
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
@@ -190,6 +204,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 
 	file, err := epub.GetFile(req.PathValue("file_path"))
 	if err != nil {
+		fmt.Printf("failed to load file: %v", err)
 		http.Error(rr, "Failed to load file", http.StatusInternalServerError)
 		return
 	}
