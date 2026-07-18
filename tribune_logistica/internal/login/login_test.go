@@ -117,9 +117,13 @@ func TestGenerateAuthTokenWithValidRefreshToken(t *testing.T) {
 		t.Fatal("Expected auth token, got empty string")
 	}
 
-	ok := VerifyUserSession(sessionUser.Username, sessionUser.authToken)
-	if ok != nil {
-		t.Fatal("Expected auth token to be valid, {}", ok)
+	checkUser, err := VerifyUserSession(sessionUser.authToken)
+	if err != nil {
+		t.Fatal("Expected auth token to be valid, {}", err)
+	}
+
+	if checkUser.Username != sessionUser.Username {
+		t.Fatal("expected same username")
 	}
 }
 
@@ -152,7 +156,7 @@ func TestNewLoginInvalidatesOldAuths(t *testing.T) {
 	}
 
 	// Verify that the old auth token is no longer valid
-	err = VerifyUserSession(newSessionUser.Username, sessionUser.authToken)
+	_, err = VerifyUserSession(sessionUser.authToken)
 	if err == nil {
 		t.Fatal("Expected old auth token to be invalid")
 	}
@@ -163,9 +167,12 @@ func TestNewLoginInvalidatesOldAuths(t *testing.T) {
 	}
 
 	// Verify that the new auth token is valid
-	err = VerifyUserSession(newSessionUser.Username, newSessionUser.authToken)
+	user, err = VerifyUserSession(newSessionUser.authToken)
 	if err != nil {
 		t.Fatal("Expected new auth token to be valid")
+	}
+	if user.Username != newSessionUser.Username {
+		t.Fatal("recieved wrong user")
 	}
 
 	_, err = RefreshAuthToken(newSessionUser.Username, newSessionUser.refreshToken)
@@ -195,7 +202,7 @@ func TestVerifyAuthToken_Expiry(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond) // wait for token to expire
 
-	err = VerifyUserSession(user.Username, user.authToken)
+	_, err = VerifyUserSession(user.authToken)
 	if err == nil {
 		t.Fatal("Expected expired token to fail verification")
 	}
@@ -214,7 +221,7 @@ func TestVerifyAuthToken_InvalidToken(t *testing.T) {
 		t.Fatalf("NewUserSession failed: %v", err)
 	}
 
-	err = VerifyUserSession("notarealtoken", "notarealtoken")
+	_, err = VerifyUserSession("notarealtoken")
 	if err == nil {
 		t.Fatal("Expected invalid token to fail verification")
 	}
@@ -275,7 +282,7 @@ func TestRefreshTokenPersistence(t *testing.T) {
 		t.Fatal("Expected auth token, got empty string")
 	}
 
-	err = VerifyUserSession(user.Username, user.authToken)
+	_, err = VerifyUserSession(user.authToken)
 	if err != nil {
 		t.Fatal("Auth token verification failed")
 	}
@@ -363,8 +370,8 @@ func TestMultiUserLogin(t *testing.T) {
 
 	// Check that auth tokens map correctly
 	for u, at := range authTokens {
-		ok := VerifyUserSession(u, at)
-		if ok != nil {
+		_, err := VerifyUserSession(at)
+		if err != nil {
 			t.Fatalf("Auth token for %s is invalid", u)
 		}
 	}
@@ -392,8 +399,8 @@ func TestConcurrentLogins(t *testing.T) {
 			authTokens.Store(user.authToken, user.Username)
 
 			// Verify immediately
-			ok := VerifyUserSession(user.Username, user.authToken)
-			if ok != nil {
+			_, err = VerifyUserSession(user.authToken)
+			if err != nil {
 				t.Errorf("Auth token verification failed for %s", user.Username)
 			}
 		}(u)
@@ -406,7 +413,7 @@ func TestConcurrentLogins(t *testing.T) {
 		at := key.(string)
 		u := value.(string)
 
-		err := VerifyUserSession(u, at)
+		_, err := VerifyUserSession(at)
 		if err != nil {
 			t.Errorf("Final auth token verification failed for %s", u)
 		}
@@ -435,7 +442,7 @@ func TestMultiUserTokenExpiry(t *testing.T) {
 
 		time.Sleep(10 * time.Millisecond) // wait for expiry
 
-		err = VerifyUserSession(u, user.authToken)
+		_, err = VerifyUserSession(user.authToken)
 		if err == nil {
 			t.Fatalf("Expired auth token for %s should not be valid", u)
 		}

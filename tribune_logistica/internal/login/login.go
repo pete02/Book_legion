@@ -202,23 +202,19 @@ func NewUserSession(username string, password string, storage storage.Storage) (
 	return newSession(user, sessionStore), nil
 }
 
-func VerifyUserSession(username string, verifyAuthToken string) error {
+func VerifyUserSession(verifyAuthToken string) (User, error) {
 	sessionStore.mu.Lock()
 	defer sessionStore.mu.Unlock()
-	session, err := getSessionByUser(username)
-	if err != nil {
-		return err
+	session, err := sessionStore.byAuthToken[verifyAuthToken]
+	if err == false {
+		return User{}, fmt.Errorf("invalid session")
 	}
 
 	if time.Now().After(session.authExpiresAt) {
-		return fmt.Errorf("auth token expired")
+		return User{}, fmt.Errorf("auth token expired")
 	}
 
-	if session.user.authToken != verifyAuthToken {
-		return fmt.Errorf("invalid session")
-	}
-
-	return nil
+	return session.user, nil
 }
 
 func verifyUserrefreshToken(username string, verifyrefreshToken string) (User, error) {

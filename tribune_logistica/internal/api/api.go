@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/book_legion-tribune_logistica/internal/login"
 	"github.com/book_legion-tribune_logistica/internal/manager"
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
@@ -27,12 +28,20 @@ func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (string, bool)
 		return "", false
 	}
 
-	//authToken := strings.TrimPrefix(authHeader, "Bearer ")
-	userID, ok := "user1", true
-	if !ok {
+	authToken := strings.TrimPrefix(authHeader, "Bearer ")
+	userID, err := login.VerifyUserSession(authToken)
+	if err != nil {
 		http.Error(w, "Unauthorized access", http.StatusUnauthorized)
 		return "", false
 	}
 
-	return userID, true
+	return userID.Username, true
+}
+
+func (a *API) RequestCheck(w http.ResponseWriter, r *http.Request, method string) (string, bool) {
+	if r.Method != method {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return "", false
+	}
+	return a.AuthCheck(w, r)
 }
