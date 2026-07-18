@@ -15,7 +15,7 @@ import (
 // ---------------------------------------------------------------------
 // Test helpers
 //
-// `newTestAPI`, `jsonBody`, `decodeJSON`, and `uniqueUsername` are defined
+// `NewTestAPI`, `jsonBody`, `decodeJSON`, and `uniqueUsername` are defined
 // in api_test.go (same package) and reused here. `uniqueUsername` is a
 // generic unique-string generator despite the name — reused here for book
 // IDs and series IDs too, to keep tests independent of each other.
@@ -40,7 +40,7 @@ func seedBook(t *testing.T, a *API, b library.Book) library.Book {
 }
 
 func setup(t *testing.T) (*API, string) {
-	api := newTestAPI(t)
+	api := NewTestAPI(t)
 	seedUser(t, api, "alice", "password")
 	user, err := login.NewUserSession("alice", "password", api.DB)
 	if err != nil {

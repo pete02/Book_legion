@@ -10,7 +10,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	_ "modernc.org/sqlite"
 
+	"github.com/book_legion-tribune_logistica/internal/api"
+	"github.com/book_legion-tribune_logistica/internal/epub"
+	"github.com/book_legion-tribune_logistica/internal/manager"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	"github.com/book_legion-tribune_logistica/internal/tts"
+	"github.com/book_legion-tribune_logistica/internal/types"
 	// replace with actual module path
 )
 
@@ -40,19 +45,36 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	/* 	if config.TTSBackend == TTSMock {
-	   		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-	   			return tts.TTS_fetch_mock(c, api)
-	   		}
-	   		go manager.StartOrderProcessor(fetchFn)
-	   	} else {
-	   		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {
-	   			return tts.TTS_fetch(c, api, config.TTSAPIURL)
-	   		}
-	   		go manager.StartOrderProcessor(fetchFn)
-	   	} */
+	storage, err := createStorage(*config)
+	if err != nil {
+		log.Fatalf("Failed to create storage: %v", err)
+	}
+
+	textBuilder := func(id types.ChunkIdentifier) (types.TextChunk, error) {
+		epub, err := epub.Load(storage, id.ID)
+		if err != nil {
+			return types.TextChunk{}, err
+		}
+		html, err := epub.GetChapter(id.Chapter)
+		if err != nil {
+			return types.TextChunk{}, err
+		}
+		return types.BuildTextChunk(string(html), id, types.DefaultChunkConfig())
+	}
+
+	var audioBuilder manager.AudioFetcher
+	if config.TTSBackend == TTSMock {
+		audioBuilder = tts.MockAudioFetcher()
+	} else {
+		audioBuilder = tts.RealAudioFetcher(config.TTSAPIURL)
+	}
+	manager := manager.NewOrganizer(textBuilder, audioBuilder, 10)
+
+	api := api.New(manager, storage)
 
 	r := chi.NewRouter()
+	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
+
 	/*
 		r.Post("/api/v1/register", api.RegisterUser)
 		r.Post("/api/v1/login", api.LoginUser)

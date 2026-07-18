@@ -101,7 +101,7 @@ func TestUserUserCursorSaveAndLoad(t *testing.T) {
 
 	// Save all UserCursors
 	for _, c := range UserCursors {
-		if err := SaveUserCursor(store, c); err != nil {
+		if err := c.SaveUserCursor(store); err != nil {
 			t.Fatalf("SaveUserUserCursor failed: %v", err)
 		}
 	}
@@ -128,7 +128,7 @@ func TestLoadNonExistingCursor(t *testing.T) {
 
 	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
 
-	if err := SaveUserCursor(store, UserCursor1); err != nil {
+	if err := UserCursor1.SaveUserCursor(store); err != nil {
 		t.Fatalf("SaveUserUserCursor failed: %v", err)
 	}
 
@@ -197,7 +197,7 @@ func TestUserUserCursorPersistence(t *testing.T) {
 	UserCursors := []UserCursor{UserCursor1, UserCursor2, UserCursor3}
 	// Save all UserCursors
 	for _, c := range UserCursors {
-		if err := SaveUserCursor(store, c); err != nil {
+		if err := c.SaveUserCursor(store); err != nil {
 			t.Fatalf("SaveUserUserCursor failed: %v", err)
 		}
 	}
