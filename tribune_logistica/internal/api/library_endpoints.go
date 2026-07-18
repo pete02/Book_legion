@@ -10,11 +10,7 @@ import (
 )
 
 func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	_, ok := api.AuthCheck(w, r)
+	_, ok := api.RequestCheck(w, r, http.MethodGet)
 	if !ok {
 		return
 	}
@@ -39,11 +35,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetSeries(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	_, ok := api.AuthCheck(w, r)
+	_, ok := api.RequestCheck(w, r, http.MethodGet)
 	if !ok {
 		return
 	}
@@ -93,11 +85,7 @@ func (api *API) DeleteBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	_, ok := api.AuthCheck(w, r)
+	_, ok := api.RequestCheck(w, r, http.MethodDelete)
 	if !ok {
 		return
 	}
@@ -119,12 +107,7 @@ func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	_, ok := api.AuthCheck(w, r)
+	_, ok := api.RequestCheck(w, r, http.MethodGet)
 	if !ok {
 		return
 	}
@@ -141,16 +124,10 @@ func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) UpdateSeriesName(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	_, ok := api.AuthCheck(w, r)
+	_, ok := api.RequestCheck(w, r, http.MethodPost)
 	if !ok {
 		return
 	}
-
 	seriesID := r.PathValue("id")
 	if seriesID == "" {
 		http.Error(w, "Missing series ID", http.StatusBadRequest)
