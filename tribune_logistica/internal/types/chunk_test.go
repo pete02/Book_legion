@@ -2,6 +2,7 @@ package types
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -216,4 +217,88 @@ func TestNearestAllowedSplit_StartPastEnd(t *testing.T) {
 	if !seg.EndOfContent || seg.Words != 0 {
 		t.Fatalf("got %+v, want EndOfContent with 0 words", seg)
 	}
+}
+func TestNearestPrecedingSplit_MidSentenceBacktracksToStart(t *testing.T) {
+	html := "<p>Hi. Hello world.</p>"
+	// "Hello" starts right after "Hi. " — landing mid-word inside "Hello"
+	// should backtrack to where "Hello" begins.
+	start := indexOf(t, html, "Hello")
+	mid := start + 2 // inside "Hello"
+
+	got := NearestPrecedingSplit(html, mid)
+	if got != start {
+		t.Fatalf("got offset %d, want %d (start of \"Hello\")", got, start)
+	}
+}
+
+func TestNearestPrecedingSplit_AlreadyAtSentenceStartIsUnchanged(t *testing.T) {
+	html := "<p>Hi. Hello world.</p>"
+	start := indexOf(t, html, "Hello")
+
+	got := NearestPrecedingSplit(html, start)
+	if got != start {
+		t.Fatalf("got offset %d, want %d (already at sentence start)", got, start)
+	}
+}
+
+func TestNearestPrecedingSplit_WithinFirstSentenceReturnsChapterStart(t *testing.T) {
+	html := "<p>Hello world today.</p>"
+	mid := indexOf(t, html, "world")
+
+	got := NearestPrecedingSplit(html, mid)
+	want := indexOf(t, html, "Hello")
+	if got != want {
+		t.Fatalf("got offset %d, want %d (chapter's first content char)", got, want)
+	}
+}
+
+func TestNearestPrecedingSplit_BlockTagBoundary(t *testing.T) {
+	html := "<ul><li>Apple</li><li>Banana pie today</li></ul>"
+	mid := indexOf(t, html, "pie")
+
+	got := NearestPrecedingSplit(html, mid)
+	want := indexOf(t, html, "Banana")
+	if got != want {
+		t.Fatalf("got offset %d, want %d (start of the Banana <li>)", got, want)
+	}
+}
+
+func TestNearestPrecedingSplit_ConsistentWithForwardSplit(t *testing.T) {
+	// Round-trip check: find a forward split, then confirm backtracking
+	// from any point within the following sentence lands back on exactly
+	// that split's start-of-content offset — i.e. the two functions agree
+	// on where sentences begin, since they share the same boundary rules.
+	html := "<p>First sentence here. Second sentence right here. Third one.</p>"
+	firstSplit := NearestAllowedSplit(html, 0, 1)
+	secondSentenceStart := skipNonContent([]rune(html), firstSplit.Offset)
+
+	midSecond := secondSentenceStart + 3 // a few runes into the 2nd sentence
+	got := NearestPrecedingSplit(html, midSecond)
+	if got != secondSentenceStart {
+		t.Fatalf("got offset %d, want %d (forward/backward disagree on sentence start)", got, secondSentenceStart)
+	}
+}
+
+func TestNearestPrecedingSplit_OffsetPastEndClamps(t *testing.T) {
+	html := "<p>Hi. Hello world.</p>"
+	// Offset way past the string clamps to len(runes). "world." is
+	// immediately followed by the closing tag with no trailing space, so
+	// that closing tag boundary — which sits exactly at the end of the
+	// string — is itself the nearest valid preceding split; there's no
+	// unclosed content left to backtrack into.
+	got := NearestPrecedingSplit(html, 10000)
+	want := len([]rune(html))
+	if got != want {
+		t.Fatalf("got offset %d, want %d (end of content)", got, want)
+	}
+}
+
+// indexOf returns the rune offset of the first occurrence of substr in s.
+func indexOf(t *testing.T, s, substr string) int {
+	t.Helper()
+	byteIdx := strings.Index(s, substr)
+	if byteIdx < 0 {
+		t.Fatalf("substring %q not found in %q", substr, s)
+	}
+	return len([]rune(s[:byteIdx]))
 }

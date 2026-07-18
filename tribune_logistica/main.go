@@ -35,6 +35,10 @@ type Config struct {
 }
 
 func main() {
+	config, err := FromEnv()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
 	/* 	if config.TTSBackend == TTSMock {
 	   		fetchFn := func(c types.UserCursor) (types.Chunk, bool) {

@@ -106,6 +106,76 @@ func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 	return SplitResult{Offset: len(runes), Words: words, Text: buf.String(), EndOfContent: true}
 }
 
+func NearestPrecedingSplit(html string, offset int) int {
+	runes := []rune(html)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(runes) {
+		offset = len(runes)
+	}
+
+	lastSplit := 0 // chapter start is always a trivially valid boundary
+	var currentWord strings.Builder
+	i := 0
+
+	for i < offset {
+		r := runes[i]
+
+		if r == '<' {
+			tagStart := i
+			for i < len(runes) && runes[i] != '>' {
+				i++
+			}
+			if i >= len(runes) {
+				break // unterminated tag; nothing more we can parse
+			}
+			i++ // consume '>'
+			tag := string(runes[tagStart:i])
+
+			isBlock, isBreakPoint := blockTagKind(tag)
+			if isBlock {
+				currentWord.Reset() // tag breaks the word, same as forward scan
+				if isBreakPoint {
+					lastSplit = i
+				}
+			}
+		} else if unicode.IsSpace(r) {
+			if currentWord.Len() > 0 {
+				word := currentWord.String()
+				currentWord.Reset()
+				if endsSentence(word) {
+					lastSplit = i
+				}
+			}
+			i++
+		} else {
+			currentWord.WriteRune(r)
+			i++
+		}
+	}
+
+	return skipNonContent(runes, lastSplit)
+}
+
+func skipNonContent(runes []rune, i int) int {
+	for i < len(runes) {
+		if unicode.IsSpace(runes[i]) {
+			i++
+		} else if runes[i] == '<' {
+			for i < len(runes) && runes[i] != '>' {
+				i++
+			}
+			if i < len(runes) {
+				i++
+			}
+		} else {
+			break
+		}
+	}
+	return i
+}
+
 func endsSentence(word string) bool {
 	word = strings.TrimRight(word, "\"')]”’")
 	if word == "" {
