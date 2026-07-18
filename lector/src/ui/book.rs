@@ -10,6 +10,7 @@ pub fn Book(book_id: String) -> Element {
     let b=book_id.clone();
     let cover_path = domain::cover::create_cover_path(book_id.clone());
     let nav = use_navigator();
+    
 
 
     let top_entries = vec![

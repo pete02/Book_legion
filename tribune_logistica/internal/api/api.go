@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -22,15 +23,29 @@ func New(manager *manager.Organizer, db storage.Storage) API {
 }
 
 func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var authToken string
+
+	// Standard HTTP Bearer authentication.
 	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Missing or invalid Authorization header", http.StatusBadRequest)
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		authToken = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+
+	// Browser WebSockets cannot set Authorization headers, so also allow
+	// the JWT to be supplied as ?token=...
+	if authToken == "" {
+		authToken = r.URL.Query().Get("token")
+	}
+
+	if authToken == "" {
+		fmt.Println("Login failed")
+		http.Error(w, "Missing authentication token", http.StatusUnauthorized)
 		return "", false
 	}
 
-	authToken := strings.TrimPrefix(authHeader, "Bearer ")
 	userID, err := login.VerifyUserSession(authToken)
 	if err != nil {
+		fmt.Println("Unauthorized access")
 		http.Error(w, "Unauthorized access", http.StatusUnauthorized)
 		return "", false
 	}

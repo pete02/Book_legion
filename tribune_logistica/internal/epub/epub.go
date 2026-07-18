@@ -154,10 +154,14 @@ func (e *Epub) GetCSS() ([]byte, error) {
 }
 
 func (e *Epub) GetChapter(index int) ([]byte, error) {
-	if index < 0 || index >= len(e.Nav) {
+	nav, err := e.GetToc()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table of contents: %w", err)
+	}
+	if index < 0 || index >= len(nav) {
 		return nil, fmt.Errorf("chapter index out of bounds")
 	}
-	data, err := e.GetFile(e.Nav[index].Href)
+	data, err := e.GetFile(nav[index].Href)
 	if err != nil {
 		return nil, err
 	}

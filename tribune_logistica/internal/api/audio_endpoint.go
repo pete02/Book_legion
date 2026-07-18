@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -104,26 +104,29 @@ func isNaturalProgress(delivered types.UserCursor, msg wsCursorMessage) bool {
 // instance, not one per user. Flagging again in case that's not the
 // intent long-term.
 func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Loading audio socket")
 	userID, ok := api.RequestCheck(w, r, http.MethodGet)
 	if !ok {
 		return
 	}
 
-	bookID := r.PathValue("book_id")
+	bookID := r.PathValue("bookID")
 	if bookID == "" {
-		http.Error(w, "book_id is required", http.StatusBadRequest)
+		fmt.Println("Book Id not provided to audio socket")
+		http.Error(w, "bookID is required", http.StatusBadRequest)
 		return
 	}
 
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 	if err != nil {
-		http.Error(w, "could not load reading position", http.StatusInternalServerError)
+		fmt.Printf("Could not load listening position %v\n", err)
+		http.Error(w, "could not load listening position", http.StatusInternalServerError)
 		return
 	}
 
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[audio] upgrade failed for user %s: %v", userID, err)
+		fmt.Printf("[audio] upgrade failed for user %s: %v", userID, err)
 		return
 	}
 	defer conn.Close()
@@ -132,7 +135,7 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := api.Manager.Start(ctx, cursor); err != nil {
-		log.Printf("[audio] failed to start playback for user %s: %v", userID, err)
+		fmt.Printf("[audio] failed to start playback for user %s: %v", userID, err)
 		_ = conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "playback already in progress"),
 			time.Now().Add(writeWait))
@@ -159,7 +162,7 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 			var msg wsCursorMessage
 			if err := conn.ReadJSON(&msg); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					log.Printf("[audio] connection error for user %s: %v", userID, err)
+					fmt.Printf("[audio] connection error for user %s: %v", userID, err)
 				}
 				return
 			}
@@ -185,7 +188,7 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 			// this fires on every message including natural-progress
 			// pings.
 			if err := reported.SaveUserCursor(api.DB); err != nil {
-				log.Printf("[audio] failed to persist cursor for user %s: %v", userID, err)
+				fmt.Printf("[audio] failed to persist cursor for user %s: %v", userID, err)
 			}
 		}
 	}()
@@ -212,12 +215,12 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 
 		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		if err := conn.WriteJSON(header); err != nil {
-			log.Printf("[audio] failed to write header for user %s: %v", userID, err)
+			fmt.Printf("[audio] failed to write header for user %s: %v", userID, err)
 			break
 		}
 		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		if err := conn.WriteMessage(websocket.BinaryMessage, chunk.Data); err != nil {
-			log.Printf("[audio] failed to write audio for user %s: %v", userID, err)
+			fmt.Printf("[audio] failed to write audio for user %s: %v", userID, err)
 			break
 		}
 

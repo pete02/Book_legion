@@ -40,6 +40,7 @@ web-sys = {version="0.3.85", features=["Url", "Blob", "BlobPropertyBag", "HtmlAu
     "XmlSerializer"
 ]}
 futures-util = "0.3.32"
+gloo-net = { version = "0.6", features = ["websocket"] }
 [features]
 default = ["web"]
 web = ["dioxus/web"]
