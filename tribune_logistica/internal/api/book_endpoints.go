@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -20,7 +21,7 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 
 	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
 	if err != nil {
-		fmt.Printf("failed to load cursor: %v", err)
+		log.Printf("[Api] Failed to load cursor for user %v: %v", user, err)
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
 		return
 	}
@@ -48,6 +49,8 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	log.Printf("[Api] Saving cursor: %v ", cursor.Cursor)
+
 	if err := cursor.SaveUserCursor(a.DB); err != nil {
 		fmt.Printf("failed to save cursor: %v", err)
 		http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
@@ -65,13 +68,14 @@ func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
 
 	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
-		fmt.Printf("failed to load epub: %v", err)
+		log.Printf("[Api] Failed to load epub: %v", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
 	chapterIndex, err := strconv.Atoi(req.PathValue("chapterIndex"))
 	if err != nil {
+		log.Printf("[Api] Invalid chapter index: %v", err)
 		http.Error(rr, "Invalid chapter index", http.StatusBadRequest)
 		return
 	}
@@ -96,14 +100,14 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 
 	epub, err := epub.Load(a.DB, navId)
 	if err != nil {
-		fmt.Printf("failed to load epub: %v\n", err)
+		log.Printf("[Api] Failed to load epub: %v", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
 	nav, err := epub.GetToc()
 	if err != nil {
-		fmt.Printf("failed to load Toc from the book: %v", err)
+		log.Printf("[Api] Failed to load Toc from the book: %v", err)
 		http.Error(rr, "Failed to load Toc from the book", http.StatusInternalServerError)
 		return
 	}

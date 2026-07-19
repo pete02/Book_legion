@@ -1,15 +1,19 @@
-use serde::{Deserialize, Serialize};
-use gloo_net::websocket::futures::WebSocket;
+use std::collections::VecDeque;
 
+use dioxus::prelude::*;
+use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
+use gloo_net::websocket::futures::WebSocket;
+use gloo_net::websocket::Message;
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
-#[derive(Debug, Serialize)]
-struct CursorMessage {
-    chapter: i32,
-    index: i32,
-}
+use crate::{domain, ui::components::{TopBar, TopBarEntry, card::Cover}, Route, assets};
 
-#[derive(Debug, Deserialize, Clone)]
+
+#[derive(Debug, Deserialize,Serialize,  Clone, PartialEq)]
 struct AudioHeader {
     id: String,
     chapter: i32,
@@ -17,133 +21,330 @@ struct AudioHeader {
     end_offset: i32,
 }
 
-use dioxus::prelude::*;
 
-use crate::domain;
+#[derive(Debug)]
+struct AudioChunk {
+    header: AudioHeader,
+    bytes: Vec<u8>,
+}
+
+type Sender = SplitSink<WebSocket, Message>;
+const AUDIO_MIME_TYPE: &str = "audio/mpeg";
+
+const AUDIO_ELEMENT_ID: &str = "chunk-audio-player";
+
+// ---------------------------------------------------------------------
+// Master component
+// ---------------------------------------------------------------------
 
 #[component]
-pub fn Audio(book_id: String)->Element{
-let mut status = use_signal(|| "Disconnected".to_string());
-    let mut last_header = use_signal(|| None::<AudioHeader>);
-    let mut binary_count = use_signal(|| 0usize);
-    let mut connected = use_signal(|| false);
+pub fn Audio(book_id: String) -> Element {
 
-    let mut sender = use_signal(|| None::<futures_util::stream::SplitSink<
-        WebSocket,
-        gloo_net::websocket::Message,
-    >>);
+    let status = use_signal(|| "Disconnected".to_string());
+    let connected = use_signal(|| false);
+    let show_extra = use_signal(|| false);
+    let queue: Signal<VecDeque<AudioChunk>> = use_signal(VecDeque::new);
+    let mut sender: Signal<Option<Sender>> = use_signal(|| None);
+    let playing = use_signal(||true);
+    let current_header: Signal<Option<AudioHeader>> = use_signal(|| None);
+    let cover_path=domain::cover::create_cover_path(book_id.clone());
 
+    let top_entries = vec![
+        TopBarEntry { name: "Library".into(), path: Route::Library {} },
+        TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
+    ];
+
+
+    rsx! {
+        div {
+
+            h2 { "Audio websocket demo" }
+            TopBar { entries: top_entries, show_extra: show_extra }
+
+            WebSocketConnection {
+                book_id,
+                status,
+                connected,
+                queue,
+                sender,
+            }
+
+            AudioPlayer {
+                queue,
+                playing,
+                sender,
+                current_header,
+            }
+
+            PlayPauseButton { playing, current_header }
+            div {
+                style:  "display: flex; justify-content: center; align-items: center;",
+                Cover {
+                    cover_path: cover_path.clone(),
+                }
+            }
+
+            p { "Status: {status}" }
+            p {
+                "Connected: "
+                if connected() { "yes" } else { "no" }
+            }
+
+            if let Some(header) = current_header() {
+                div {
+                    p { "Now playing:" }
+                    p { "ID: {header.id}" }
+                    p { "Chapter: {header.chapter}" }
+                    p { "{header.start_offset} -> {header.end_offset}" }
+                }
+            } else {
+                p { "Nothing playing yet." }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Play / pause button
+// ---------------------------------------------------------------------
+
+#[component]
+fn PlayPauseButton(mut playing: Signal<bool>, mut current_header: Signal<Option<AudioHeader>>) -> Element {
+    rsx! {
+        div {
+            class: "relative w-14 h-14 overflow-visible",
+            button {
+                class: "w-full h-full flex items-center justify-center transition active:scale-90",
+                onclick: move |_| playing.set(!playing()),
+            }
+            img {
+                class: "w-full h-full object-contain",
+                src: if playing() { 
+                    assets::PAUSE 
+                } else if current_header().is_none() { 
+                    assets::LOADING
+                }else{
+                    assets::PLAY
+                }
+            }
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------
+// WebSocket connection (headless - manages the connect/receive loop)
+// ---------------------------------------------------------------------
+
+#[component]
+fn WebSocketConnection(
+    book_id: String,
+    mut status: Signal<String>,
+    mut connected: Signal<bool>,
+    mut queue: Signal<VecDeque<AudioChunk>>,
+    mut sender: Signal<Option<Sender>>,
+) -> Element {
     use_effect(move || {
-        dioxus::logger::tracing::info!("Effect started");
         let token = domain::login::current_auth().unwrap_or_default();
+        let book_id = book_id.clone();
 
-        let bookd_copied=book_id.clone();
         spawn(async move {
-            dioxus::logger::tracing::info!("Spawn started");
+            dioxus::logger::tracing::info!("Connecting websocket for {book_id}");
             status.set("Connecting...".into());
-            dioxus::logger::tracing::info!("Status set");
 
-            let ws = match WebSocket::open(
-                &format!("/api/v1/audio/{}?token={}", bookd_copied, token),
-            ) {
+            let ws = match WebSocket::open(&format!(
+                "/api/v1/audio/{}?token={}",
+                book_id, token
+            )) {
                 Ok(ws) => ws,
                 Err(e) => {
                     status.set(format!("Connection failed: {e:?}"));
                     return;
                 }
             };
-            
+
             connected.set(true);
             status.set("Connected".into());
 
             let (tx, mut rx) = ws.split();
-
             sender.set(Some(tx));
 
-            let mut expecting_binary = false;
+            // A header always precedes the bytes it describes; hold onto
+            // it until the matching binary payload arrives.
+            let mut pending_header: Option<AudioHeader> = None;
 
             while let Some(msg) = rx.next().await {
-
                 match msg {
-
-                    Ok(gloo_net::websocket::Message::Text(text)) => {
-
-                        dioxus::logger::tracing::info!("Header: {}", text);
-
-                        let header: AudioHeader =
-                            serde_json::from_str(&text).unwrap();
-
-                        last_header.set(Some(header));
-
-                        expecting_binary = true;
-                    }
-
-                    Ok(gloo_net::websocket::Message::Bytes(bytes)) => {
-
-                        dioxus::logger::tracing::info!("Received {} bytes", bytes.len());
-
-                        if expecting_binary {
-
-                            binary_count += 1;
-
-                            expecting_binary = false;
+                    Ok(Message::Text(text)) => {
+                        match serde_json::from_str::<AudioHeader>(&text) {
+                            Ok(header) => pending_header = Some(header),
+                            Err(e) => {
+                                dioxus::logger::tracing::warn!(
+                                    "Bad audio header, dropping: {e:?} ({text})"
+                                );
+                                pending_header = None;
+                            }
                         }
                     }
-
+                    Ok(Message::Bytes(bytes)) => {
+                        dioxus::logger::tracing::info!("Received {} bytes", bytes.len());
+                        match pending_header.take() {
+                            Some(header) => {
+                                queue.write().push_back(AudioChunk { header, bytes });
+                            }
+                            None => {
+                                dioxus::logger::tracing::warn!(
+                                    "Got {} bytes with no preceding header, dropping",
+                                    bytes.len()
+                                );
+                            }
+                        }
+                    }
                     Err(e) => {
-
                         status.set(format!("Socket error: {e:?}"));
-
                         break;
                     }
                 }
             }
 
             connected.set(false);
-            status.set("Disconnected again".into());
+            status.set("Disconnected".into());
+            sender.set(None);
         });
+    });
 
+    rsx! {}
+}
+
+// ---------------------------------------------------------------------
+// Audio player (headless except for the underlying <audio> element)
+// ---------------------------------------------------------------------
+
+fn audio_element() -> Option<HtmlAudioElement> {
+    web_sys::window()?
+        .document()?
+        .get_element_by_id(AUDIO_ELEMENT_ID)?
+        .dyn_into::<HtmlAudioElement>()
+        .ok()
+}
+
+/// Resolves once the given event fires on `target`. Used to await the
+/// <audio> element's "ended" event without blocking the JS event loop.
+async fn wait_for_event_once(target: &HtmlAudioElement, event: &str) {
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let closure = Closure::once(move || {
+            let _ = resolve.call0(&JsValue::NULL);
+        });
+        // `add_event_listener_with_callback` is inherited from EventTarget
+        // via HtmlAudioElement's Deref chain.
+        let _ = target.add_event_listener_with_callback(event, closure.as_ref().unchecked_ref());
+        // Closure::once frees itself after firing, so leaking the wrapper
+        // here is safe and intentional.
+        closure.forget();
+    });
+    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+}
+
+fn bytes_to_object_url(bytes: &[u8]) -> Result<String, JsValue> {
+    let array = js_sys::Uint8Array::from(bytes);
+    let parts = js_sys::Array::new();
+    parts.push(&array);
+
+    let opts = BlobPropertyBag::new();
+    opts.set_type(AUDIO_MIME_TYPE);
+
+    let blob = Blob::new_with_u8_array_sequence_and_options(&parts, &opts)?;
+    Url::create_object_url_with_blob(&blob)
+}
+
+#[component]
+fn AudioPlayer(
+    mut queue: Signal<VecDeque<AudioChunk>>,
+    playing: Signal<bool>,
+    mut sender: Signal<Option<Sender>>,
+    mut current_header: Signal<Option<AudioHeader>>,
+) -> Element {
+    // Bridge the play/pause signal onto the real <audio> element. This
+    // effect is reactive on `playing()`, so it re-runs every time the
+    // button toggles it.
+    use_effect(move || {
+        let want_playing = playing();
+        if let Some(audio) = audio_element() {
+            if want_playing {
+                let _ = audio.play();
+            } else {
+                let _ = audio.pause();
+            }
+        }
+    });
+
+    // The queue-consumption loop. Nothing in this effect's own (sync)
+    // body reads a signal, so it only runs once, on mount - it does its
+    // own polling of `queue` from inside the spawned task instead of
+    // relying on effect re-runs.
+    use_effect(move || {
+        spawn(async move {
+            let mut active_object_url: Option<String> = None;
+
+            loop {
+                // Wait until there's something to play.
+                while queue.read().is_empty() {
+                    gloo_timers::future::TimeoutFuture::new(100).await;
+                }
+
+                let Some(chunk) = queue.write().pop_front() else {
+                    continue;
+                };
+
+                let Some(audio) = audio_element() else {
+                    // <audio> not mounted yet somehow - put the chunk
+                    // back and retry shortly rather than dropping it.
+                    queue.write().push_front(chunk);
+                    gloo_timers::future::TimeoutFuture::new(50).await;
+                    continue;
+                };
+
+                let url = match bytes_to_object_url(&chunk.bytes) {
+                    Ok(url) => url,
+                    Err(e) => {
+                        dioxus::logger::tracing::error!("Failed to build audio blob: {e:?}");
+                        continue;
+                    }
+                };
+
+                // The previous chunk has already fired "ended" by the
+                // time we get here, so its URL is safe to free now.
+                if let Some(old) = active_object_url.take() {
+                    Url::revoke_object_url(&old).ok();
+                }
+
+                audio.set_src(&url);
+                active_object_url = Some(url);
+
+                // Only now - when a chunk actually becomes the active one
+                // - do we update what's shown as "currently playing".
+                current_header.set(Some(chunk.header.clone()));
+
+                // Tell the server where playback is now.
+                if let Some(tx) = sender.write().as_mut() {
+                    if let Ok(payload) = serde_json::to_string(&chunk.header) {
+                        let _ = tx.send(Message::Text(payload)).await;
+                    }
+                }
+
+                if playing() {
+                    let _ = audio.play();
+                }
+                // If not currently "playing", the chunk just sits loaded
+                // and paused; the play/pause bridge effect above will
+                // start it once the user hits play.
+
+                wait_for_event_once(&audio, "ended").await;
+            }
+        });
     });
 
     rsx! {
-
-        div {
-
-            h2 { "Audio websocket demo" }
-
-            p { "Status: {status}" }
-
-            p {
-                "Connected: "
-                if connected() { "yes" } else { "no" }
-            }
-
-            p {
-                "Binary chunks received: {binary_count}"
-            }
-
-            if let Some(header) = last_header() {
-
-                div {
-
-                    p { "Last chunk:" }
-
-                    p { "ID: {header.id}" }
-
-                    p { "Chapter: {header.chapter}" }
-
-                    p {
-                        "{header.start_offset} -> {header.end_offset}"
-                    }
-
-                }
-            }
-
-        }
-
+        audio { id: AUDIO_ELEMENT_ID }
     }
 }
-
-
-
-

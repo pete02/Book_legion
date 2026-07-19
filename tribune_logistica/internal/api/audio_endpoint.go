@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -20,15 +21,6 @@ var wsUpgrader = websocket.Upgrader{
 	// TODO: restrict to your actual frontend origin(s) before shipping —
 	// wide open for now so this is easy to test locally.
 	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-// wsCursorMessage is what the client sends to report/seek its position.
-// Wire-format only — deliberately not types.UserCursor itself, since the
-// client only ever needs to tell us where it is within the current book,
-// not the book ID (that's fixed for the life of the connection).
-type wsCursorMessage struct {
-	Chapter int `json:"chapter"`
-	Index   int `json:"index"`
 }
 
 // wsAudioHeader precedes each binary audio frame so the client knows what
@@ -53,21 +45,21 @@ type wsAudioHeader struct {
 // reader goroutine (on each incoming cursor message) — hence the mutex.
 type deliveryTracker struct {
 	mu   sync.Mutex
-	last types.UserCursor
+	last wsAudioHeader
 }
 
-func newDeliveryTracker(initial types.UserCursor) *deliveryTracker {
+func newDeliveryTracker(initial wsAudioHeader) *deliveryTracker {
 	return &deliveryTracker{last: initial}
 }
 
 func (t *deliveryTracker) markDelivered(chapter, endOffset int) {
 	t.mu.Lock()
-	t.last.Cursor.Chapter = chapter
-	t.last.Cursor.Index = endOffset
+	t.last.Chapter = chapter
+	t.last.EndOffset = endOffset
 	t.mu.Unlock()
 }
 
-func (t *deliveryTracker) get() types.UserCursor {
+func (t *deliveryTracker) get() wsAudioHeader {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.last
@@ -79,14 +71,14 @@ func (t *deliveryTracker) get() types.UserCursor {
 // out as its own function so this decision (the whole point of
 // deliveryTracker existing) can be unit tested without a real websocket
 // connection.
-func isNaturalProgress(delivered types.UserCursor, msg wsCursorMessage) bool {
-	return msg.Chapter == delivered.Cursor.Chapter && msg.Index == delivered.Cursor.Index
+func isNaturalProgress(tracker wsAudioHeader, msg wsAudioHeader) bool {
+	return msg.Chapter == tracker.Chapter && msg.StartOffset == tracker.EndOffset || msg.Chapter == tracker.Chapter+1 && msg.StartOffset == 0
 }
 
 // AudioSocket streams synthesized audio for a book over a WebSocket.
 //
 // Wire protocol:
-//   - Client -> server: a JSON text message shaped like wsCursorMessage,
+//   - Client -> server: a JSON text message shaped like wsAudioHeader,
 //     sent any time the client's playback position changes (seek or
 //     periodic progress report).
 //   - Server -> client: for each chunk, one JSON text message shaped like
@@ -145,7 +137,7 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	// Nothing has been delivered yet, so the client's own starting
 	// position (what we just loaded and started the Organizer from) is
 	// the correct initial "last delivered" reference.
-	tracker := newDeliveryTracker(cursor)
+	tracker := wsAudioHeader{}
 
 	// Reader: the connection's only reader. For each reported position,
 	// decides natural-progress vs seek by comparing against what's
@@ -159,35 +151,30 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		for {
-			var msg wsCursorMessage
+			var msg wsAudioHeader
 			if err := conn.ReadJSON(&msg); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 					fmt.Printf("[audio] connection error for user %s: %v", userID, err)
 				}
 				return
 			}
+			fmt.Printf("msg: %v, tracker: %v", msg, tracker)
 
-			reported := cursor // copy, to carry over BookID
-			reported.Cursor.Chapter = msg.Chapter
-			reported.Cursor.Index = msg.Index
-
-			delivered := tracker.get()
-			natural := isNaturalProgress(delivered, msg)
+			natural := isNaturalProgress(tracker, msg) || tracker.ID == ""
 
 			if !natural {
-				api.Manager.UpdateCursor(reported)
+				log.Printf("[audio] Updating manager cursor %v, tracker was %v", msg, tracker)
+				cursor.Cursor.Chapter = msg.Chapter
+				cursor.Cursor.Index = msg.StartOffset
+
+				api.Manager.UpdateCursor(cursor)
 			}
 
-			// Persist either way, so a reload picks up wherever they
-			// actually left off.
-			//
-			// TODO: confirm the real name/signature — assuming a
-			// SaveUserCursor counterpart to LoadUserCursor. Also worth
-			// considering throttling this (e.g. only every N seconds or
-			// M chunks) if clients report position frequently, since
-			// this fires on every message including natural-progress
-			// pings.
-			if err := reported.SaveUserCursor(api.DB); err != nil {
+			tracker = msg
+			cursor.Cursor.Chapter = tracker.Chapter
+			cursor.Cursor.Index = tracker.StartOffset
+			log.Printf("save cursor %v", cursor)
+			if err := cursor.SaveUserCursor(api.DB); err != nil {
 				fmt.Printf("[audio] failed to persist cursor for user %s: %v", userID, err)
 			}
 		}
@@ -224,7 +211,6 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		tracker.markDelivered(chunk.Id.Chapter, chunk.Id.EndOffset)
 	}
 
 	// If we broke out of the writer loop for our own reasons (a write

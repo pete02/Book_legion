@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/login"
-	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
 // ---------------------------------------------------------------------
@@ -15,27 +14,25 @@ import (
 // ---------------------------------------------------------------------
 
 func TestIsNaturalProgress(t *testing.T) {
-	delivered := types.UserCursor{BookID: "book-1"}
-	delivered.Cursor.Chapter = 3
-	delivered.Cursor.Index = 450
+	tracker := wsAudioHeader{Chapter: 3, EndOffset: 450}
 
 	cases := []struct {
 		name string
-		msg  wsCursorMessage
+		msg  wsAudioHeader
 		want bool
 	}{
-		{"exact match is natural", wsCursorMessage{Chapter: 3, Index: 450}, true},
-		{"same chapter, different index is a seek", wsCursorMessage{Chapter: 3, Index: 451}, false},
-		{"same chapter, earlier index is a seek (rewind)", wsCursorMessage{Chapter: 3, Index: 100}, false},
-		{"different chapter, same index is a seek", wsCursorMessage{Chapter: 4, Index: 450}, false},
-		{"different chapter and index is a seek", wsCursorMessage{Chapter: 7, Index: 0}, false},
+		{"exact match is natural", wsAudioHeader{Chapter: 3, StartOffset: 450, EndOffset: 450}, true},
+		{"same chapter, different index is a seek", wsAudioHeader{Chapter: 3, StartOffset: 450, EndOffset: 451}, true},
+		{"same chapter, earlier index is a seek (rewind)", wsAudioHeader{Chapter: 3, StartOffset: 100, EndOffset: 100}, false},
+		{"different chapter, same index is a seek", wsAudioHeader{Chapter: 4, StartOffset: 450, EndOffset: 450}, false},
+		{"different chapter and index is a seek", wsAudioHeader{Chapter: 7, StartOffset: 0, EndOffset: 0}, false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := isNaturalProgress(delivered, c.msg)
+			got := isNaturalProgress(tracker, c.msg)
 			if got != c.want {
-				t.Errorf("isNaturalProgress(%+v, %+v) = %v, want %v", delivered, c.msg, got, c.want)
+				t.Errorf("isNaturalProgress(%+v, %+v) = %v, want %v", tracker, c.msg, got, c.want)
 			}
 		})
 	}
@@ -46,36 +43,36 @@ func TestIsNaturalProgress(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestDeliveryTracker_InitialValueIsWhatWasPassedIn(t *testing.T) {
-	initial := types.UserCursor{BookID: "book-1"}
-	initial.Cursor.Chapter = 2
-	initial.Cursor.Index = 10
+	initial := wsAudioHeader{ID: "book-1"}
+	initial.Chapter = 2
+	initial.StartOffset = 10
 
 	tr := newDeliveryTracker(initial)
 	got := tr.get()
 
-	if got.BookID != "book-1" || got.Cursor.Chapter != 2 || got.Cursor.Index != 10 {
+	if got.ID != "book-1" || got.Chapter != 2 || got.StartOffset != 10 {
 		t.Errorf("expected initial value to round-trip unchanged, got %+v", got)
 	}
 }
 
 func TestDeliveryTracker_MarkDeliveredUpdatesChapterAndIndexOnly(t *testing.T) {
-	initial := types.UserCursor{BookID: "book-1"}
-	initial.Cursor.Chapter = 1
-	initial.Cursor.Index = 0
+	initial := wsAudioHeader{ID: "book-1"}
+	initial.Chapter = 1
+	initial.StartOffset = 0
 
 	tr := newDeliveryTracker(initial)
 	tr.markDelivered(2, 500)
 
 	got := tr.get()
 
-	if got.Cursor.Chapter != 2 {
-		t.Errorf("expected Chapter=2, got %d", got.Cursor.Chapter)
+	if got.Chapter != 2 {
+		t.Errorf("expected Chapter=2, got %d", got.Chapter)
 	}
-	if got.Cursor.Index != 500 {
-		t.Errorf("expected Index=500, got %d", got.Cursor.Index)
+	if got.EndOffset != 500 {
+		t.Errorf("expected EndOffset=500, got %d", got.EndOffset)
 	}
-	if got.BookID != "book-1" {
-		t.Errorf("expected BookID to be preserved, got %q", got.BookID)
+	if got.ID != "book-1" {
+		t.Errorf("expected ID to be preserved, got %q", got.ID)
 	}
 }
 
@@ -84,7 +81,7 @@ func TestDeliveryTracker_MarkDeliveredUpdatesChapterAndIndexOnly(t *testing.T) {
 // chunk), another repeatedly reading (the reader goroutine checking
 // against incoming cursor reports). Run with -race to be meaningful.
 func TestDeliveryTracker_ConcurrentAccess(t *testing.T) {
-	tr := newDeliveryTracker(types.UserCursor{BookID: "book-1"})
+	tr := newDeliveryTracker(wsAudioHeader{ID: "book-1"})
 
 	var wg sync.WaitGroup
 	wg.Add(2)
