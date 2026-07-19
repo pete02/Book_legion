@@ -2,6 +2,8 @@ package types
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -39,10 +41,19 @@ func NearestAllowedSplit(html string, start int, minWords int) SplitResult {
 	return nearestAllowedSplit([]rune(html), start, minWords)
 }
 
+// maxTagResyncLookahead bounds how far the mid-tag resync (below) will scan
+// forward looking for a stray '>'. It should comfortably cover a mangled
+// tag/attribute (which is what this exists to recover from) without risking
+// a pathological scan across an entire chapter of ordinary prose that
+// happens to contain no '<' at all.
+const maxTagResyncLookahead = 2000
+
 func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 	if start >= len(runes) {
 		return SplitResult{Offset: start, Words: 0, EndOfContent: true}
 	}
+
+	start = resyncIfMidTag(runes, start)
 
 	var (
 		buf         strings.Builder
@@ -185,6 +196,32 @@ func endsSentence(word string) bool {
 	return last == '.' || last == '!' || last == '?'
 }
 
+// resyncIfMidTag guards against a start offset that lands inside a tag
+// (e.g. because it was computed against a different/mangled encoding of the
+// same html, or against markup whose escaped '>' didn't line up with a real
+// '>' rune at the position a caller expected). In well-formed text, the
+// next special character scanning forward from a real boundary is always
+// '<' (the next tag) or end-of-content. If instead the next special
+// character is a bare '>', that means we're already inside a tag's tail -
+// so we discard everything through that '>' and resume scanning right
+// after it, rather than letting the tag's remainder leak into the output
+// as ordinary words.
+func resyncIfMidTag(runes []rune, start int) int {
+	limit := start + maxTagResyncLookahead
+	if limit > len(runes) {
+		limit = len(runes)
+	}
+	for j := start; j < limit; j++ {
+		switch runes[j] {
+		case '<':
+			return start // real boundary; nothing to resync
+		case '>':
+			return j + 1 // discard the stray tag tail, resume after it
+		}
+	}
+	return start
+}
+
 func blockTagKind(tag string) (isBlock, isBreakPoint bool) {
 	inner := strings.Trim(tag, "<>")
 	inner = strings.TrimSpace(inner)
@@ -226,12 +263,54 @@ func DefaultChunkConfig() ChunkConfig {
 
 var ErrEndOfChapter = errors.New("start offset is at or past end of chapter content")
 
+// jsonEscapeRe matches \uXXXX unicode escapes and single-char backslash
+// escapes (\" \\ \n \t \r \/ ...). This is intentionally not full JSON
+// parsing: the surrounding html still has plenty of real, unescaped quotes
+// (e.g. class="...") that would make json.Unmarshal reject the string.
+var jsonEscapeRe = regexp.MustCompile(`\\u([0-9a-fA-F]{4})|\\(.)`)
+
+// normalizeEscapedMarkup reverses stray JSON-style escaping that sometimes
+// leaks into stored html (e.g. a literal `\"` or `\u003e` in place of a
+// real `"` or `>`). Tag-boundary detection throughout this file works on
+// literal '<' and '>' runes, so any escaping left in place silently
+// desyncs computed offsets from the real tag structure - this call is what
+// makes BuildTextChunk correct "no matter how the html happens to be
+// encoded" going in. It's idempotent: running it on already-clean html is
+// a no-op, which is what keeps StartOffset/EndOffset self-consistent
+// across repeated calls against the same source string.
+func normalizeEscapedMarkup(s string) string {
+	return jsonEscapeRe.ReplaceAllStringFunc(s, func(m string) string {
+		if strings.HasPrefix(m, `\u`) {
+			var r rune
+			fmt.Sscanf(m[2:], "%04x", &r)
+			return string(r)
+		}
+		switch m[1] {
+		case 'n':
+			return "\n"
+		case 't':
+			return "\t"
+		case 'r':
+			return "\r"
+		case '"':
+			return `"`
+		case '\\':
+			return `\`
+		case '/':
+			return `/`
+		default:
+			return m[1:] // unknown escape: drop the backslash, keep the char
+		}
+	})
+}
+
 // BuildTextChunk implements types.TextChunkBuilder's contract: id.EndOffset
 // is ignored, id.StartOffset is trusted as the starting rune offset into
 // html. It works by repeatedly calling NearestAllowedSplit to accumulate
 // segments — each independently satisfying MinSplitWords — until
 // TargetWords is reached or the chapter's content runs out.
 func BuildTextChunk(html string, id ChunkIdentifier, cfg ChunkConfig) (TextChunk, error) {
+	html = normalizeEscapedMarkup(html)
 	runes := []rune(html)
 
 	if id.StartOffset < 0 || id.StartOffset >= len(runes) {
