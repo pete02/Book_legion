@@ -36,7 +36,7 @@ func MockAudioFetcher() manager.AudioFetcher {
 
 func RealAudioFetcher(baseURL string) manager.AudioFetcher {
 	client := &http.Client{}
-	url := strings.TrimRight(baseURL, "/") + "/tts"
+	url := strings.TrimRight(baseURL, "/")
 
 	return func(ctx context.Context, chunk types.TextChunk) (types.AudioChunk, bool) {
 		payload, err := json.Marshal(ttsRequest{
@@ -47,7 +47,7 @@ func RealAudioFetcher(baseURL string) manager.AudioFetcher {
 			log.Printf("[tts] failed to marshal request for chunk %s: %v", chunk.Id, err)
 			return types.AudioChunk{}, false
 		}
-
+		log.Printf("[tts] Sending payload: %v to: %s\n", string(payload), url)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			log.Printf("[tts] failed to build request for chunk %s: %v", chunk.Id, err)

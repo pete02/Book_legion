@@ -302,3 +302,88 @@ func indexOf(t *testing.T, s, substr string) int {
 	}
 	return len([]rune(s[:byteIdx]))
 }
+
+const wantSentence = "She laughed, bumping him again before leaning in and resting her head on his shoulder as she ate. It was a bit uncomfortable, and it made the whole process longer and harder, but she reveled in the contact."
+
+const wellFormedHTML = `<p class="cnNiOTRjODMxNTNiZDQyMDZhNTUxZDVlNzcxM2M5NWIx">
+                <span style="font-weight: 400">` + wantSentence + `</span>
+            </p>`
+
+// jsonEscapedHTML is the same markup, but with the class attribute's
+// closing quote and the tag's closing '>' leaked through as literal JSON
+// escape sequences (\" and \u003e) instead of real characters - exactly
+// what was reported.
+const jsonEscapedHTML = `<p class=\"cnNiOTRjODMxNTNiZDQyMDZhNTUxZDVlNzcxM2M5NWIx\"\u003e` +
+	`<span style="font-weight: 400">` + wantSentence + `</span></p>`
+
+// The two source encodings differ only in how the <p> tag's tail is
+// written; BuildTextChunk must produce identical output for both.
+func TestBuildTextChunk_EncodingsProduceIdenticalOutput(t *testing.T) {
+	cfg := ChunkConfig{TargetWords: 1000, MinSplitWords: 1}
+
+	for name, html := range map[string]string{
+		"well-formed":  wellFormedHTML,
+		"json-escaped": jsonEscapedHTML,
+	} {
+		t.Run(name, func(t *testing.T) {
+			chunk, err := BuildTextChunk(html, ChunkIdentifier{StartOffset: 0}, cfg)
+			if err != nil {
+				t.Fatalf("BuildTextChunk: %v", err)
+			}
+			if chunk.Data != wantSentence {
+				t.Fatalf("got Data %q, want %q", chunk.Data, wantSentence)
+			}
+		})
+	}
+}
+
+// Regression test for the reported bug: if StartOffset happens to land in
+// the middle of the class attribute (e.g. because it was computed against
+// a differently-encoded copy of this html), the leftover attribute text
+// must NOT leak into Data - regardless of how the tag's tail is encoded.
+func TestBuildTextChunk_MidTagStartOffset_NoLeakage(t *testing.T) {
+	cfg := ChunkConfig{TargetWords: 1000, MinSplitWords: 1}
+
+	tests := []struct {
+		name string
+		html string
+	}{
+		{"well-formed", wellFormedHTML},
+		{"json-escaped", jsonEscapedHTML},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Start partway through the class attribute value - a position
+			// that has no business ever being treated as the start of real
+			// content, but which is exactly where a mismatched offset from
+			// another encoding of this string could land.
+			start := indexOf(t, tc.html, "DZhNTUxZDVlNzcxM2M5NWIx")
+
+			chunk, err := BuildTextChunk(tc.html, ChunkIdentifier{StartOffset: start}, cfg)
+			if err != nil {
+				t.Fatalf("BuildTextChunk: %v", err)
+			}
+			if chunk.Data != wantSentence {
+				t.Fatalf("attribute leaked into output:\ngot:  %q\nwant: %q", chunk.Data, wantSentence)
+			}
+		})
+	}
+}
+
+// Same idea, but starting from inside the *style* attribute of the <span>
+// tag instead of the <p>'s class attribute, to make sure the fix isn't
+// accidentally specific to one tag or attribute.
+func TestBuildTextChunk_MidTagStartOffset_SpanAttribute(t *testing.T) {
+	html := wellFormedHTML
+	start := indexOf(t, html, "font-weight")
+	cfg := ChunkConfig{TargetWords: 1000, MinSplitWords: 1}
+
+	chunk, err := BuildTextChunk(html, ChunkIdentifier{StartOffset: start}, cfg)
+	if err != nil {
+		t.Fatalf("BuildTextChunk: %v", err)
+	}
+	if chunk.Data != wantSentence {
+		t.Fatalf("attribute leaked into output:\ngot:  %q\nwant: %q", chunk.Data, wantSentence)
+	}
+}

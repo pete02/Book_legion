@@ -142,6 +142,46 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rr).Encode(map[string]interface{}{"progress": progress})
 }
 
+func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
+	user, ok := a.RequestCheck(rr, req, http.MethodGet)
+	if !ok {
+		return
+	}
+	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
+	if err != nil {
+		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
+		return
+	}
+	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
+	if err != nil {
+		fmt.Printf("failed to load epub: %v\n", err)
+		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
+		return
+	}
+	chapter, err := epub.GetChapter(cursor.Cursor.Chapter)
+	if err != nil {
+		fmt.Printf("Failed to load %v chapter %d: %v", cursor.BookID, cursor.Cursor.Chapter, err)
+		http.Error(rr, "Failed to load chapter", http.StatusInternalServerError)
+		return
+	}
+
+	chapters, err := epub.GetToc()
+	if err != nil {
+		fmt.Printf("Failed to load Toc for book %v: %v", cursor.BookID, err)
+		http.Error(rr, "Failed to load Toc", http.StatusInternalServerError)
+		return
+	}
+
+	chapterWeight := 1.0 / float64(len(chapters))
+	chapterProgress := cursor.Cursor.Index / len(chapter)
+
+	bookProgress := float64(cursor.Cursor.Chapter)/chapterWeight + float64(chapterProgress)*chapterWeight
+
+	rr.Header().Set("Content-Type", "application/json")
+	rr.WriteHeader(http.StatusOK)
+	json.NewEncoder(rr).Encode(map[string]interface{}{"progress": bookProgress})
+}
+
 func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 	_, ok := a.RequestCheck(rr, req, http.MethodGet)
 	if !ok {
