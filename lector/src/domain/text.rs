@@ -67,45 +67,55 @@ use dioxus::document;
 /// hit-testing so they don't shadow the text underneath.
 const PAGE_OFFSET_SCRIPT: &str = r#"
     const viewport = document.getElementById('book-renderer');
-    const content = document.getElementById('book-content');
-    const overlay = document.getElementById('page-nav-overlay');
-    if (!viewport || !content) { return -1; }
+    const hostEl = document.getElementById('book-content');
+    if (!viewport || !hostEl) { return -1; }
 
-    const rect = viewport.getBoundingClientRect();
-    const x = rect.left + 2;
-    const y = rect.top + 2;
+    const shadow = hostEl.shadowRoot;
+    if (!shadow) { return -1; }
 
-    let prevPointerEvents = null;
-    if (overlay) {
-        prevPointerEvents = overlay.style.pointerEvents;
-        overlay.style.pointerEvents = 'none';
+    const vRect = viewport.getBoundingClientRect();
+
+    function intersectsViewport(r) {
+        return r.width > 0 && r.height > 0
+            && r.bottom > vRect.top && r.top < vRect.bottom
+            && r.right > vRect.left && r.left < vRect.right;
     }
 
-    let node, offset;
-    try {
-        if (document.caretRangeFromPoint) {
-            const range = document.caretRangeFromPoint(x, y);
-            if (!range) { return -1; }
-            node = range.startContainer;
-            offset = range.startOffset;
-        } else if (document.caretPositionFromPoint) {
-            const pos = document.caretPositionFromPoint(x, y);
-            if (!pos) { return -1; }
-            node = pos.offsetNode;
-            offset = pos.offset;
-        } else {
-            return -1;
+    const walker = document.createTreeWalker(shadow, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let found = null;
+
+    let node;
+    while ((node = walker.nextNode())) {
+        const text = node.textContent;
+        if (!text || !text.trim().length) continue;
+
+        range.selectNodeContents(node);
+        const rects = range.getClientRects();
+        let coarseHit = false;
+        for (const r of rects) {
+            if (intersectsViewport(r)) { coarseHit = true; break; }
         }
-    } finally {
-        if (overlay) {
-            overlay.style.pointerEvents = prevPointerEvents;
+        if (!coarseHit) continue;
+
+        for (let i = 0; i < text.length; i++) {
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const r = range.getBoundingClientRect();
+            if (intersectsViewport(r)) {
+                found = { node, offset: i };
+                break;
+            }
         }
+        if (!found) found = { node, offset: text.length };
+        break;
     }
+
+    if (!found) { return -1; }
 
     const full = document.createRange();
-    full.setStart(content, 0);
-    full.setEnd(node, offset);
-
+    full.setStart(shadow, 0);
+    full.setEnd(found.node, found.offset);
     const frag = full.cloneContents();
     const wrapper = document.createElement('div');
     wrapper.appendChild(frag);
@@ -182,15 +192,18 @@ pub async fn find_page_for_offset(
     while lo <= hi {
         let mid = lo + (hi - lo) / 2;
         set_page(mid);
+        tracing::debug!("testing page {mid}");
         gloo_timers::future::TimeoutFuture::new(0).await;
 
         match measure_current_page_html_offset().await {
             Some(offset) if offset <= target_offset => {
+                tracing::debug!("Got offset {offset} <= {target_offset}");
                 best = mid;
                 lo = mid + 1;
             }
             _ => {
                 hi = mid - 1;
+                tracing::debug!("no offset found for page {mid}");
             }
         }
     }

@@ -75,7 +75,7 @@ pub async fn fetch_cursor(book_id: &str) -> Result<BookCursor, String> {
         book_id: book_id.to_string(),
         cursor: Cursor {
             chapter: 0,
-            index: 0,
+            index: 5000,
         },
     });
 
@@ -137,45 +137,6 @@ pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, Stri
     Ok(cursor_text)
 }
 
-#[cfg(feature = "mock")]
-pub async fn fetch_cursor_text(book_id: &str) -> Result<CursorTextResponse, String> {
-    use serde_json::json;
-    use serde_json::Value;
-
-    // Define the JSON data per book_id
-    let json_data: Value = match book_id {
-        "b1" => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": "b1",
-                "cursor": { "chapter": 0, "chunk": 0 }
-            },
-            "text": ""
-        }),
-        "b2" => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": "b2",
-                "cursor": { "chapter": 0, "chunk": 0 }
-            },
-            "text": "The passengers on the ship called her “Girl,” which was fine by her. After traveling with them for a month, she didn’t know their real names either. Her dark hair and golden skin stood out in this crowd like a crooked screw on a brand-new sheet of metal. The twenty-seven Tawny refugees on the ship all had milky complexions and hair as blue as the deepest ocean. That was what happened in the All Black."
-        }),
-        _ => json!({
-            "cursor": {
-                "user_id": "pete",
-                "book_id": book_id,
-                "cursor": { "chapter": 1, "chunk": 0 }
-            },
-            "text": "<p>Default cursor text.</p>"
-        }),
-    };
-
-    // Deserialize JSON into your CursorTextResponse
-    let cursor_text: CursorTextResponse = serde_json::from_value(json_data)
-        .map_err(|e| format!("Failed to deserialize mock JSON: {}", e))?;
-
-    Ok(cursor_text)
-}
 
 
 #[cfg(feature = "mock")]
