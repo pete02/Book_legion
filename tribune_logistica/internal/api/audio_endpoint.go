@@ -97,7 +97,7 @@ func isNaturalProgress(tracker wsAudioHeader, msg wsAudioHeader) bool {
 // intent long-term.
 func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Loading audio socket")
-	userID, ok := api.RequestCheck(w, r, http.MethodGet)
+	userID, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}

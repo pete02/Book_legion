@@ -227,6 +227,32 @@ func TestVerifyAuthToken_InvalidToken(t *testing.T) {
 	}
 }
 
+func TestVerifyGetToken_InvalidToken(t *testing.T) {
+	store, user, password := setupTestUser(t)
+	_, err := NewUserSession(user.Username, password, store)
+	if err != nil {
+		t.Fatalf("NewUserSession failed: %v", err)
+	}
+
+	ok, err := VerifyGetSession("notarealtoken")
+	if err == nil || ok {
+		t.Fatal("Expected invalid token to fail verification")
+	}
+}
+
+func TestVerifyGetToken_ValidToken(t *testing.T) {
+	store, user, password := setupTestUser(t)
+	user, err := NewUserSession(user.Username, password, store)
+	if err != nil {
+		t.Fatalf("NewUserSession failed: %v", err)
+	}
+
+	ok, err := VerifyGetSession(user.getToken)
+	if err != nil || !ok {
+		t.Fatal("Expected valid token to pass verification")
+	}
+}
+
 func TestRefreshTokenPersistence(t *testing.T) {
 	// 1️⃣ Create temporary JSON file
 	tmpFile := "test_persistence.json"

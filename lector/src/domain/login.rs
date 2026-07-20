@@ -7,6 +7,7 @@ pub struct User {
     pub username: String,
     pub refresh_token: Option<String>,
     pub auth_token: Option<String>,
+    pub get_token: Option<String>,
 }
 
 pub fn current_name()->String{
@@ -19,9 +20,20 @@ pub fn current_auth()->Option<String>{
     user.read().auth_token.clone()
 }
 
+pub fn current_get_token()->String{
+    let user: Signal<User> = use_context::<Signal<User>>();
+    user.read().get_token.clone().unwrap_or_default()
+}
+
+
 pub fn set_auth(auth: Option<String>){
     let mut user: Signal<User> = use_context::<Signal<User>>();
     user.with_mut(|f|f.auth_token=auth);
+}
+
+pub fn set_get_token(get_token: Option<String>){
+    let mut user: Signal<User> = use_context::<Signal<User>>();
+    user.with_mut(|f|f.get_token=get_token);
 }
 
 
@@ -63,13 +75,23 @@ pub fn restore_user_from_storage() -> User {
         .get_item("username")
         .ok()
         .flatten();
+    let get_token=web_sys::window()
+        .unwrap()
+        .session_storage()
+        .unwrap()
+        .unwrap()
+        .get_item("get_token")
+        .ok()
+        .flatten();
     tracing::debug!("Got refresh: {:?}",refresh_token);
     tracing::debug!("Got auth: {:?}",auth_token);
+    tracing::debug!("Got get_token: {:?}",get_token);
 
     User {
         username: username.unwrap_or_default(),
         refresh_token,
         auth_token,
+        get_token,
     }
 }
 
@@ -80,6 +102,9 @@ pub fn persist_user(user: &User) {
     }
     if let Some(at) = &user.auth_token {
         storage.set_item("auth_token", at).unwrap();
+    }
+    if let Some(gt) = &user.get_token {
+        storage.set_item("get_token", gt).unwrap();
     }
 
     storage.set_item("username", &user.username).unwrap();
@@ -99,10 +124,11 @@ pub fn attempt_login(username: String, password: String, error:Signal<String>, l
                     let new_user=User{
                         username: username.clone(),
                         auth_token: Some(resp.auth_token),
-                        refresh_token: Some(resp.refresh_token)
+                        refresh_token: Some(resp.refresh_token),
+                        get_token: Some(resp.get_token),
                     };
-                    if new_user.username ==""{
-                        tracing::error!("Error in loggin in with the username");
+                    if new_user.username == "" {
+                        tracing::error!("Error in logging in with the username");
                     }
                     loading.set(false);
                     persist_user(&new_user);

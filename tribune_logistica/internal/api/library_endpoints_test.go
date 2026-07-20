@@ -73,8 +73,8 @@ func TestGetBook_MissingAuthHeader(t *testing.T) {
 
 	a.GetBook(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -170,8 +170,8 @@ func TestGetSeries_MissingAuthHeader(t *testing.T) {
 
 	a.GetSeries(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -266,8 +266,8 @@ func TestDeleteBook_MissingAuthHeader(t *testing.T) {
 
 	a.DeleteBook(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -356,8 +356,8 @@ func TestDeleteSeries_MissingAuthHeader(t *testing.T) {
 
 	a.DeleteSeries(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -461,8 +461,8 @@ func TestGetManifest_MissingAuthHeader(t *testing.T) {
 
 	a.GetManifest(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -560,8 +560,8 @@ func TestUpdateSeriesName_MissingAuthHeader(t *testing.T) {
 
 	a.UpdateSeriesName(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 

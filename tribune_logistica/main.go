@@ -84,7 +84,7 @@ func main() {
 	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)
 	r.Get("/api/v1/books/{bookID}/cover", api.GetCover)
 	r.Get("/api/v1/books/{bookID}/css", api.GetCSS)
-	r.Get("/api/v1/books/{bookID}/file/{file_path}", api.GetFile)
+	r.Get("/api/v1/books/{bookID}/file", api.GetFile)
 
 	r.Get("/api/v1/book/{bookID}/chapterprogress", api.GetChapterProgress)
 

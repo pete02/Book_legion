@@ -16,11 +16,17 @@ type User struct {
 	PasswordHash string
 	refreshToken string
 	authToken    string
+	getToken     string
 }
 
 func (u User) GetAuthToken() string {
 	return u.authToken
 }
+
+func (u User) GetGetToken() string {
+	return u.getToken
+}
+
 func (u User) GetRefreshToken() string {
 	return u.refreshToken
 }
@@ -36,6 +42,7 @@ func NewUser(username string, password string) (User, error) {
 		PasswordHash: passwordHash,
 		refreshToken: "",
 		authToken:    "",
+		getToken:     "",
 	}
 
 	return user, nil
@@ -46,6 +53,7 @@ func InsertUser(store storage.Storage, user User) error {
 		"username":      user.Username,
 		"password_hash": user.PasswordHash,
 		"refresh_token": user.refreshToken,
+		"get_token":     user.getToken,
 	}
 	return store.Insert("users", "username", row)
 }
@@ -67,6 +75,7 @@ func getUser(store storage.Storage, username string) (User, error) {
 		PasswordHash: rows[0]["password_hash"].(string),
 		refreshToken: rows[0]["refresh_token"].(string),
 		authToken:    "",
+		getToken:     "",
 	}, nil
 }
 
@@ -90,12 +99,9 @@ func VerifyUserLogin(username, password string, storage storage.Storage) (User, 
 		return User{}, fmt.Errorf("invalid password")
 	}
 
-	authToken := GenerateRandomToken(32)
-	refreshToken := GenerateRandomToken(32)
-
-	user.refreshToken = refreshToken
-	user.authToken = authToken
-
+	user.refreshToken = GenerateRandomToken(32)
+	user.authToken = GenerateRandomToken(32)
+	user.getToken = GenerateRandomToken(32)
 	err = InsertUser(storage, user)
 	if err != nil {
 		return User{}, err
@@ -115,6 +121,7 @@ type SessionStore struct {
 	refreshTtl     time.Duration
 	byAuthToken    map[string]*Session
 	byUser         map[string]string
+	byGetToken     map[string]string
 	byRefreshToken map[string]string
 }
 
@@ -124,8 +131,23 @@ func newSessionStore(authTtl time.Duration, refreshTtl time.Duration) *SessionSt
 		refreshTtl:     refreshTtl,
 		byAuthToken:    make(map[string]*Session),
 		byUser:         make(map[string]string),
+		byGetToken:     make(map[string]string),
 		byRefreshToken: make(map[string]string),
 	}
+}
+
+func getSessionByGetToken(token string) (*Session, error) {
+	authToken, exists := sessionStore.byGetToken[token]
+	if !exists {
+		return nil, fmt.Errorf("No session")
+	}
+
+	session, exists := sessionStore.byAuthToken[authToken]
+	if !exists {
+		return nil, fmt.Errorf("invalid session")
+	}
+
+	return session, nil
 }
 
 func getSessionByUser(username string) (*Session, error) {
@@ -184,6 +206,7 @@ func newSession(user User, sessionStore *SessionStore) User {
 	sessionStore.byUser[user.Username] = user.authToken
 	sessionStore.byAuthToken[user.authToken] = &session
 	sessionStore.byRefreshToken[user.refreshToken] = user.authToken
+	sessionStore.byGetToken[user.getToken] = user.authToken
 
 	return user
 }
@@ -200,6 +223,20 @@ func NewUserSession(username string, password string, storage storage.Storage) (
 		return User{}, err
 	}
 	return newSession(user, sessionStore), nil
+}
+
+func VerifyGetSession(verifyGetToken string) (bool, error) {
+	auth, exists := sessionStore.byGetToken[verifyGetToken]
+	if !exists {
+		return false, fmt.Errorf("invalid get token")
+	}
+
+	_, err := VerifyUserSession(auth)
+	if err != nil {
+		return false, fmt.Errorf("expired get token")
+	}
+
+	return true, nil
 }
 
 func VerifyUserSession(verifyAuthToken string) (User, error) {

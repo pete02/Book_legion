@@ -16,8 +16,8 @@ pub fn fetch_and_apply_book_css(book_id: String, mut css_redy: Signal<bool>) {
                 // Inject CSS into the document
                 if let Some(window) = web_sys::window() {
                     if let Some(document) = window.document() {
-                        let cleaned=strip_color_from_css(&css_text);
-                        inject_css(&document, &book_id, &cleaned);
+                        //let cleaned=strip_color_from_css(&css_text);
+                        //inject_css(&document, &book_id, &cleaned);
                         css_redy.set(true);
                         tracing::debug!("CSS loaded");
                     }
@@ -162,7 +162,7 @@ pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize, book_id: &st
 pub async fn get_new_chapter(chapter_idx: usize, book_id: &str, mut chapter_signal: Signal<Option<String>>) {
     match infra::chapters::fetch_chapter(book_id, chapter_idx).await{
         Ok(text)=>{
-            chapter_signal.set(Some(text))
+            chapter_signal.set(Some(text.replace("TOKEN_PLACEHOLDER", &domain::login::current_get_token())))
         },
         Err(err)=>{
             dioxus::logger::tracing::error!("failed to fetch chapter: {err:?}");

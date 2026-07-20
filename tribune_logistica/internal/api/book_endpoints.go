@@ -14,7 +14,7 @@ import (
 )
 
 func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet)
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.write())
 	if !ok {
 		return
 	}
@@ -33,7 +33,7 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodPost)
+	user, ok := a.RequestCheck(rr, req, http.MethodPost, a.write())
 	if !ok {
 		return
 	}
@@ -61,7 +61,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet)
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -92,7 +92,7 @@ func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet)
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -118,7 +118,7 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet)
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -147,7 +147,7 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet)
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -187,7 +187,7 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet)
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -211,7 +211,7 @@ func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet)
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
@@ -235,8 +235,15 @@ func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet)
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
+		return
+	}
+
+	fileName := req.URL.Query().Get("file")
+	log.Printf("Requesting file %s", fileName)
+	if fileName == "" {
+		http.Error(rr, "File not specified", http.StatusBadRequest)
 		return
 	}
 
@@ -246,7 +253,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	file, err := epub.GetFile(req.PathValue("file_path"))
+	file, err := epub.GetFile(fileName)
 	if err != nil {
 		fmt.Printf("failed to load file: %v", err)
 		http.Error(rr, "Failed to load file", http.StatusInternalServerError)

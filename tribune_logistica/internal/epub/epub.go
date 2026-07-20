@@ -7,22 +7,27 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"net/url"
 	"path"
 	"sort"
 	"strings"
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	"golang.org/x/net/html"
 )
 
 type Epub struct {
+	ID    string
 	Path  string
 	Spine []SpineItem
 	Nav   []PrettySpineItem
 }
 
-func New(path string) (Epub, error) {
+func New(path string, bookId string) (Epub, error) {
 	epub := Epub{
+		ID:    bookId,
 		Path:  path,
 		Spine: []SpineItem{},
 	}
@@ -35,7 +40,7 @@ func Load(db storage.Storage, bookID string) (Epub, error) {
 	if err != nil {
 		return Epub{}, err
 	}
-	return New(book.FilePath)
+	return New(book.FilePath, bookID)
 }
 
 func (e *Epub) GetFile(filepath string) ([]byte, error) {
@@ -79,6 +84,7 @@ func (e *Epub) GetCover() ([]byte, string, error) {
 	for _, it := range pkg.Manifest.Items {
 		for _, p := range strings.Fields(it.Properties) {
 			if p == "cover-image" {
+				log.Printf("Found cover image: %s", it.Href)
 				data, err := e.GetFile(path.Join(opfDir, it.Href))
 				if err != nil {
 					return nil, "", fmt.Errorf("reading cover image: %w", err)
@@ -95,6 +101,7 @@ func (e *Epub) GetCover() ([]byte, string, error) {
 		}
 		for _, it := range pkg.Manifest.Items {
 			if it.ID == meta.Content {
+				log.Printf("Found cover image: %s", it.Href)
 				data, err := e.GetFile(path.Join(opfDir, it.Href))
 				if err != nil {
 					return nil, "", fmt.Errorf("reading cover image: %w", err)
@@ -113,7 +120,8 @@ func (e *Epub) GetCover() ([]byte, string, error) {
 			if err != nil {
 				return nil, "", fmt.Errorf("reading cover image: %w", err)
 			}
-			return data, mediaTypeFromExt(fullPath), nil
+			log.Printf("Found cover image: %s", fullPath)
+			return data, fullPath, nil
 		}
 	}
 
@@ -154,18 +162,29 @@ func (e *Epub) GetCSS() ([]byte, error) {
 }
 
 func (e *Epub) GetChapter(index int) ([]byte, error) {
-	nav, err := e.GetToc()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get table of contents: %w", err)
+	if len(e.Nav) == 0 {
+		nav, err := e.GetToc()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get table of contents: %w", err)
+		}
+		e.Nav = nav
 	}
-	if index < 0 || index >= len(nav) {
+
+	if index < 0 || index >= len(e.Nav) {
 		return nil, fmt.Errorf("chapter index out of bounds")
 	}
-	data, err := e.GetFile(nav[index].Href)
+	chapterHref := e.Nav[index].Href
+	data, err := e.GetFile(chapterHref)
 	if err != nil {
 		return nil, err
 	}
-	return bytes.TrimSpace(data), nil
+
+	rewritten, err := rewriteResourceLinks(data, chapterHref, e.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to rewrite resource links: %w", err)
+	}
+
+	return rewritten, nil
 }
 
 func (e *Epub) LoadSpine() ([]SpineItem, error) {
@@ -299,7 +318,7 @@ func (e *Epub) findOPFPath() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("container.xml not found")
+	return "", fmt.Errorf("container.xml not found: %v", err)
 }
 
 func (e *Epub) findNavPath() (string, error) {
@@ -442,4 +461,108 @@ func mediaTypeFromExt(p string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func rewriteResourceLinks(data []byte, chapterHref, bookID string) ([]byte, error) {
+	doc, err := html.Parse(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse chapter HTML: %w", err)
+	}
+
+	baseDir := path.Dir(chapterHref) // "OEBPS/chapter.xhtml" -> "OEBPS"
+
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch n.Data {
+			case "img", "source":
+				rewriteAttr(n, "src", baseDir, bookID)
+			case "link":
+				if isStylesheet(n) {
+					rewriteAttr(n, "href", baseDir, bookID)
+				}
+			case "image": // inline SVG <image xlink:href="...">
+				rewriteAttr(n, "xlink:href", baseDir, bookID)
+			}
+			// Note: plain <a href="chapter2.xhtml"> nav links are
+			// deliberately left untouched here — those need to route to
+			// your chapter-navigation logic, not the file-serving endpoint.
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return nil, fmt.Errorf("failed to render rewritten chapter HTML: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func isStylesheet(n *html.Node) bool {
+	for _, a := range n.Attr {
+		if a.Key == "rel" && strings.EqualFold(strings.TrimSpace(a.Val), "stylesheet") {
+			return true
+		}
+	}
+	return false
+}
+
+const chapterTokenPlaceholder = "TOKEN_PLACEHOLDER"
+
+func rewriteAttr(n *html.Node, key, baseDir, bookID string) {
+	for i, a := range n.Attr {
+		if a.Key != key {
+			continue
+		}
+		if !isRewritableResource(a.Val) {
+			return
+		}
+		resolved, ok := resolveEpubPath(baseDir, a.Val)
+		if !ok {
+			// Resolved outside the epub root — drop rather than risk
+			// serving/linking something unexpected.
+			n.Attr[i].Val = ""
+			return
+		}
+		n.Attr[i].Val = fmt.Sprintf("/api/v1/books/%s/file/?token=%s&file=%s",
+			url.PathEscape(bookID),
+			chapterTokenPlaceholder,
+			url.QueryEscape(resolved),
+		)
+		return
+	}
+}
+
+// isRewritableResource filters out values we should never touch: empty,
+// fragment-only, data URIs, mailto links, or absolute/external URLs.
+func isRewritableResource(val string) bool {
+	if val == "" || strings.HasPrefix(val, "#") {
+		return false
+	}
+	if strings.HasPrefix(val, "data:") || strings.HasPrefix(val, "mailto:") {
+		return false
+	}
+	if u, err := url.Parse(val); err == nil && u.IsAbs() {
+		return false
+	}
+	return true
+}
+
+// resolveEpubPath resolves ref against the directory of the file that
+// referenced it, and guards against the result escaping the epub root.
+func resolveEpubPath(baseDir, ref string) (string, bool) {
+	if i := strings.IndexByte(ref, '#'); i >= 0 {
+		ref = ref[:i] // drop any fragment, e.g. "style.css#foo"
+	}
+
+	cleaned := path.Clean(path.Join(baseDir, ref))
+
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", false // tried to climb above the epub root
+	}
+
+	return cleaned, true
 }

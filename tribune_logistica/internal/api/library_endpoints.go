@@ -10,7 +10,7 @@ import (
 )
 
 func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet)
+	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}
@@ -35,7 +35,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetSeries(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet)
+	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}
@@ -85,7 +85,7 @@ func (api *API) DeleteBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodDelete)
+	_, ok := api.RequestCheck(w, r, http.MethodDelete, api.write())
 	if !ok {
 		return
 	}
@@ -107,7 +107,7 @@ func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet)
+	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}
@@ -124,7 +124,7 @@ func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) UpdateSeriesName(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodPost)
+	_, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
 	if !ok {
 		return
 	}

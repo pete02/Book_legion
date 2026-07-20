@@ -18,6 +18,7 @@ type LoginRequest struct {
 type LoginResponse struct {
 	AuthToken    string `json:"auth_token"`
 	RefreshToken string `json:"refresh_token"`
+	GetToken     string `json:"get_token"`
 	ExpiresIn    int    `json:"expires_in"`
 }
 
@@ -113,6 +114,7 @@ func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 	resp := LoginResponse{
 		AuthToken:    user.GetAuthToken(),
 		RefreshToken: user.GetRefreshToken(),
+		GetToken:     user.GetGetToken(),
 		ExpiresIn:    int(login.GetAuthTokenTTL().Seconds()),
 	}
 

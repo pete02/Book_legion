@@ -4,9 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 func createTestEpub(t *testing.T, files map[string]string) string {
@@ -69,13 +73,13 @@ func TestExtractChapter_HappyPath(t *testing.T) {
 		},
 	}
 
-	data, err := e.GetChapter(0)
+	data, err := e.GetFile("OEBPS/chapter1.xhtml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	got := string(data)
-	want := "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\t\t<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\t\t\t<head>\n\t\t\t\t<title>Chapter 1</title>\n\t\t\t</head>\n\t\t\t<body>\n\t\t\t\t<p>Chapter 1</p>\n\t\t\t</body>\n\t\t</html>"
+	want := "\n\t\t<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\t\t<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\t\t\t<head>\n\t\t\t\t<title>Chapter 1</title>\n\t\t\t</head>\n\t\t\t<body>\n\t\t\t\t<p>Chapter 1</p>\n\t\t\t</body>\n\t\t</html>\n\t"
 
 	if got != want {
 		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
@@ -309,7 +313,7 @@ func TestEpub_GetCSS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetCSS() error = %v", err)
 		}
-		want := "body { color: red; }\n" + "p { margin: 0; }\n"
+		want := "body { color: red; }\np { margin: 0; }\n"
 		if string(got) != want {
 			t.Errorf("GetCSS() = %q, want %q", string(got), want)
 		}
@@ -366,7 +370,7 @@ func TestExtractChapter_SelfClosingScript(t *testing.T) {
 		t.Fatal("extracted chapter body is empty: self-closing <script/> likely caused HTML parser to consume <body> as script text")
 	}
 
-	want := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\t<head>\n\t\t<title>Chapter 1</title>\n\t\t<script type=\"text/javascript\" src=\"js/kobo.js\"/>\n\t\t<style type=\"text/css\" id=\"kobostylehacks\">div#book-inner p { font-size: 1.0em; }</style>\n\t</head>\n\t<body>\n\t\t<p>Chapter 1 content</p>\n\t</body>\n</html>"
+	want := "<!--?xml version=\"1.0\" encoding=\"UTF-8\"?--><html xmlns=\"http://www.w3.org/1999/xhtml\"><head>\n\t\t<title>Chapter 1</title>\n\t\t<script type=\"text/javascript\" src=\"js/kobo.js\">\n\t\t<style type=\"text/css\" id=\"kobostylehacks\">div#book-inner p { font-size: 1.0em; }</style>\n\t</head>\n\t<body>\n\t\t<p>Chapter 1 content</p>\n\t</body>\n</html></script></head><body></body></html>"
 	if got != want {
 		t.Fatalf("content mismatch:\nwant: %q\ngot:  %q", want, got)
 	}
@@ -398,7 +402,7 @@ func TestLoadSpine_SimpleTwoChapters(t *testing.T) {
 	}
 
 	epubPath := createTestEpub(t, files)
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatalf("failed to load epub: %v", err)
 	}
@@ -429,7 +433,7 @@ func TestLoadSpine_SimpleTwoChapters(t *testing.T) {
 
 func TestLoadSpine_MissingContainer(t *testing.T) {
 	epubPath := createTestEpub(t, map[string]string{})
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatal("failed to load epub")
 	}
@@ -461,7 +465,7 @@ func TestLoadSpine_SpineIDNotInManifest(t *testing.T) {
 	}
 
 	epubPath := createTestEpub(t, files)
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatal("failed to load epub")
 	}
@@ -491,7 +495,7 @@ func TestLoadSpine_EmptySpine(t *testing.T) {
 	}
 
 	epubPath := createTestEpub(t, files)
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatal("failed to load epub")
 	}
@@ -525,7 +529,7 @@ func TestLoadSpine_NonLinearItemSkipped(t *testing.T) {
 	}
 
 	epubPath := createTestEpub(t, files)
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatal("failed to load epub")
 	}
@@ -563,7 +567,7 @@ func TestLoadSpine_OPFInSubdirectory(t *testing.T) {
 	}
 
 	epubPath := createTestEpub(t, files)
-	epub, err := New(epubPath)
+	epub, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatal("failed to load epub")
 	}
@@ -629,7 +633,7 @@ func TestLoadPrettySpine_SimpleChapters(t *testing.T) {
 	epubPath := createTestEpub(t, files)
 
 	// load mechanical spine
-	e, err := New(epubPath)
+	e, err := New(epubPath, "test-book-id")
 	if err != nil {
 		t.Fatalf("failed to create Epub: %v", err)
 	}
@@ -653,5 +657,316 @@ func TestLoadPrettySpine_SimpleChapters(t *testing.T) {
 		if item.Number != expectedNumbers[i] {
 			t.Errorf("item %d: expected number %d, got %d, Nav: %v", i, expectedNumbers[i], item.Number, e.Nav)
 		}
+	}
+}
+
+// findAttr walks parsed HTML and returns the value of attrKey for every
+// element matching tag, in document order.
+func findAttr(t *testing.T, data []byte, tag, attrKey string) []string {
+	t.Helper()
+
+	doc, err := html.Parse(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatalf("failed to parse rewritten HTML: %v", err)
+	}
+
+	var out []string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == tag {
+			for _, a := range n.Attr {
+				if a.Key == attrKey {
+					out = append(out, a.Val)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return out
+}
+
+// parseResourceURL parses a rewritten resource URL and returns the decoded
+// "file" and "token" query params, failing the test if the URL or its
+// query string is malformed.
+func parseResourceURL(t *testing.T, raw string) (filePath, token string) {
+	t.Helper()
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("rewritten URL is not parseable: %v (%q)", err, raw)
+	}
+	q := u.Query()
+	return q.Get("file"), q.Get("token")
+}
+
+func TestResolveEpubPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseDir  string
+		ref      string
+		wantPath string
+		wantOK   bool
+	}{
+		{
+			name:     "parent-relative resolves up one level",
+			baseDir:  "OEBPS/text",
+			ref:      "../images/cover.jpg",
+			wantPath: "OEBPS/images/cover.jpg",
+			wantOK:   true,
+		},
+		{
+			name:     "sibling file in same dir",
+			baseDir:  "OEBPS",
+			ref:      "page_styles.css",
+			wantPath: "OEBPS/page_styles.css",
+			wantOK:   true,
+		},
+		{
+			name:     "parent-relative resolves to root",
+			baseDir:  "OEBPS",
+			ref:      "../page_styles.css",
+			wantPath: "page_styles.css",
+			wantOK:   true,
+		},
+		{
+			name:     "fragment is stripped before resolving",
+			baseDir:  "OEBPS",
+			ref:      "style.css#footnote",
+			wantPath: "OEBPS/style.css",
+			wantOK:   true,
+		},
+		{
+			name:    "traversal above root is rejected",
+			baseDir: "OEBPS",
+			ref:     "../../secret.txt",
+			wantOK:  false,
+		},
+		{
+			name:    "traversal above root from root dir is rejected",
+			baseDir: ".",
+			ref:     "../secret.txt",
+			wantOK:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := resolveEpubPath(tt.baseDir, tt.ref)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v (resolved: %q)", ok, tt.wantOK, got)
+			}
+			if ok && got != tt.wantPath {
+				t.Fatalf("resolved = %q, want %q", got, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestIsRewritableResource(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+		want bool
+	}{
+		{"empty string", "", false},
+		{"fragment only", "#anchor", false},
+		{"data URI", "data:image/png;base64,AAAA", false},
+		{"mailto link", "mailto:test@example.com", false},
+		{"absolute external URL", "https://example.com/image.png", false},
+		{"relative parent path", "../images/cover.jpg", true},
+		{"relative sibling path", "chapter2.xhtml", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isRewritableResource(tt.val); got != tt.want {
+				t.Fatalf("isRewritableResource(%q) = %v, want %v", tt.val, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRewriteResourceLinks(t *testing.T) {
+	const bookID = "book-123"
+
+	html := `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<title>Chapter 1</title>
+	<link rel="stylesheet" type="text/css" href="../page_styles.css"/>
+	<link rel="icon" href="favicon.ico"/>
+</head>
+<body>
+	<p>Some text</p>
+	<img src="../images/cover.jpg" alt="cover"/>
+	<img src="data:image/png;base64,AAAA" alt="inline"/>
+	<img src="https://example.com/remote.png" alt="remote"/>
+	<a href="chapter2.xhtml">Next chapter</a>
+	<a href="#footnote1">footnote</a>
+</body>
+</html>`
+
+	out, err := rewriteResourceLinks([]byte(html), "OEBPS/chapter.xhtml", bookID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("stylesheet link is rewritten", func(t *testing.T) {
+		hrefs := findAttr(t, out, "link", "href")
+		if len(hrefs) != 2 {
+			t.Fatalf("expected 2 <link> hrefs, got %d: %v", len(hrefs), hrefs)
+		}
+
+		// First link (rel=stylesheet) should be rewritten.
+		file, token := parseResourceURL(t, hrefs[0])
+		if file != "page_styles.css" {
+			t.Errorf("file = %q, want %q", file, "page_styles.css")
+		}
+		if token != chapterTokenPlaceholder {
+			t.Errorf("token = %q, want placeholder %q", token, chapterTokenPlaceholder)
+		}
+		if !strings.HasPrefix(hrefs[0], "/api/v1/books/"+bookID+"/file/") {
+			t.Errorf("rewritten href doesn't point at expected endpoint: %q", hrefs[0])
+		}
+
+		// Second link (rel=icon) should be untouched.
+		if hrefs[1] != "favicon.ico" {
+			t.Errorf("non-stylesheet link was modified: %q", hrefs[1])
+		}
+	})
+
+	t.Run("relative image src is rewritten", func(t *testing.T) {
+		srcs := findAttr(t, out, "img", "src")
+		if len(srcs) != 3 {
+			t.Fatalf("expected 3 <img> srcs, got %d: %v", len(srcs), srcs)
+		}
+
+		file, token := parseResourceURL(t, srcs[0])
+		if file != "images/cover.jpg" {
+			t.Errorf("file = %q, want %q", file, "images/cover.jpg")
+		}
+		if token != chapterTokenPlaceholder {
+			t.Errorf("token = %q, want placeholder %q", token, chapterTokenPlaceholder)
+		}
+	})
+
+	t.Run("data URI image is left untouched", func(t *testing.T) {
+		srcs := findAttr(t, out, "img", "src")
+		if !strings.HasPrefix(srcs[1], "data:image/png") {
+			t.Errorf("data URI was modified: %q", srcs[1])
+		}
+	})
+
+	t.Run("absolute external image is left untouched", func(t *testing.T) {
+		srcs := findAttr(t, out, "img", "src")
+		if srcs[2] != "https://example.com/remote.png" {
+			t.Errorf("external URL was modified: %q", srcs[2])
+		}
+	})
+
+	t.Run("chapter navigation links are left untouched", func(t *testing.T) {
+		hrefs := findAttr(t, out, "a", "href")
+		if len(hrefs) != 2 {
+			t.Fatalf("expected 2 <a> hrefs, got %d: %v", len(hrefs), hrefs)
+		}
+		if hrefs[0] != "chapter2.xhtml" {
+			t.Errorf("chapter nav link was modified: %q", hrefs[0])
+		}
+		if hrefs[1] != "#footnote1" {
+			t.Errorf("fragment-only link was modified: %q", hrefs[1])
+		}
+	})
+}
+
+func TestRewriteResourceLinks_PathTraversalIsBlocked(t *testing.T) {
+	html := `<html><body>
+		<img src="../../../etc/passwd" alt="evil"/>
+	</body></html>`
+
+	out, err := rewriteResourceLinks([]byte(html), "OEBPS/text", "book-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	srcs := findAttr(t, out, "img", "src")
+	if len(srcs) != 1 {
+		t.Fatalf("expected 1 <img> src, got %d", len(srcs))
+	}
+	if srcs[0] != "" {
+		t.Errorf("path traversal attempt was not blocked, src = %q", srcs[0])
+	}
+}
+
+func TestGetChapter_RewritesResourceLinks(t *testing.T) {
+	epubPath := createTestEpub(t, map[string]string{
+		"OEBPS/chapter1.xhtml": `<?xml version="1.0" encoding="utf-8"?>
+			<html xmlns="http://www.w3.org/1999/xhtml">
+				<head>
+					<title>Chapter 1</title>
+					<link rel="stylesheet" type="text/css" href="../page_styles.css"/>
+				</head>
+				<body>
+					<p>Chapter 1</p>
+					<img src="../images/cover.jpg" alt="cover"/>
+				</body>
+			</html>`,
+	})
+
+	e := &Epub{
+		Path:  epubPath,
+		ID:    "book-123",
+		Spine: nil,
+		Nav: []PrettySpineItem{
+			{
+				Index:  0,
+				Number: 1,
+				Title:  "test",
+				Href:   "OEBPS/chapter1.xhtml",
+			},
+		},
+	}
+
+	data, err := e.GetChapter(0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	imgSrcs := findAttr(t, data, "img", "src")
+	if len(imgSrcs) != 1 {
+		t.Fatalf("expected 1 <img> src, got %d: %v", len(imgSrcs), imgSrcs)
+	}
+	file, token := parseResourceURL(t, imgSrcs[0])
+	if file != "images/cover.jpg" {
+		t.Errorf("file = %q, want %q", file, "images/cover.jpg")
+	}
+	if token != chapterTokenPlaceholder {
+		t.Errorf("token = %q, want placeholder", token)
+	}
+
+	linkHrefs := findAttr(t, data, "link", "href")
+	if len(linkHrefs) != 1 {
+		t.Fatalf("expected 1 <link> href, got %d: %v", len(linkHrefs), linkHrefs)
+	}
+	file, _ = parseResourceURL(t, linkHrefs[0])
+	if file != "page_styles.css" {
+		t.Errorf("file = %q, want %q", file, "page_styles.css")
+	}
+}
+
+func TestGetChapter_IndexOutOfBounds(t *testing.T) {
+	e := &Epub{
+		Nav: []PrettySpineItem{
+			{Index: 0, Number: 1, Title: "test", Href: "OEBPS/chapter1.xhtml"},
+		},
+	}
+
+	if _, err := e.GetChapter(-1); err == nil {
+		t.Fatal("expected error for negative index, got nil")
+	}
+	if _, err := e.GetChapter(5); err == nil {
+		t.Fatal("expected error for out-of-range index, got nil")
 	}
 }
