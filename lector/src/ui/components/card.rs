@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::{domain::cover::{CardData}, styles};
+use crate::{domain::{cover::{CardData}, login}, styles};
 
 #[component]
 pub fn Cover(
@@ -11,7 +11,7 @@ pub fn Cover(
         img {
             class: "rounded-xl shadow-md object-contain",
             style: "width: {width}; max-width: {max_width}; height: auto; margin: 16px; display: block",
-            src: "{cover_path}"
+            src: "{cover_path}?token={login::current_get_token()}"
         }
     }
 }

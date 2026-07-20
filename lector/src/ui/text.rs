@@ -1,6 +1,6 @@
 use std::thread::current;
 
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::{logger::{self, tracing}, prelude::*};
 
 use crate::{Route, domain::{self, text}, infra, ui::components::{TopBar, TopBarEntry}};
 
@@ -16,7 +16,7 @@ pub fn Text(book_id: String) -> Element {
     let mut total_pages: Signal<Option<i32>> = use_signal(|| None);
     let mut offset: Signal<Option<i64>> = use_signal(|| Some(0));
     let mut chapter_idx: Signal<usize> = use_signal(|| usize::MAX);
-    let mut is_restoring: Signal<bool> = use_signal(|| false);
+    let mut is_restoring: Signal<bool> = use_signal(|| true);
 
 
     use_effect(move || {
@@ -41,7 +41,7 @@ pub fn Text(book_id: String) -> Element {
         let book_id = b_signal();
         spawn(async move {
             text::get_new_chapter(chapter_idx(), &book_id, chapter_html).await;
-            is_restoring.set(true);
+            
         });
     });
 
@@ -55,6 +55,23 @@ pub fn Text(book_id: String) -> Element {
                 column_width_px.set(Some(width));
             }
         });
+    });
+
+    use_effect(move || {
+        if let Some(html) = chapter_html() {
+            spawn(async move {
+                let mut eval = document::eval(r#"
+                    const html = await dioxus.recv();
+                    const host = document.getElementById("book-content");
+                    if (host) {
+                        const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+                        root.innerHTML = html;
+                    }
+                "#);
+                let _ = eval.send(html);
+                dioxus::logger::tracing::info!("test")
+            });
+        }
     });
 
     use_effect(move || {
@@ -121,7 +138,6 @@ pub fn Text(book_id: String) -> Element {
                     div {
                         id: "book-content",
                         style: "height: 100%; {column_style} {transform_style}",
-                        dangerous_inner_html: "{chapter_html().unwrap()}",
                     }
                 }
                 div {
@@ -174,10 +190,11 @@ pub fn Text(book_id: String) -> Element {
                                     }
                                 });
                             }else{
+                                logger::tracing::debug!("change new  chapter");
                                 chapter_idx.set(chapter_idx() + 1);
                                 spawn(async move{
-                                    text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
                                     *current_page.write() =0;
+                                    text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
                                     gloo_timers::future::TimeoutFuture::new(0).await;
                                     if let Some(index) = text::measure_current_page_html_offset().await {
                                         text::save_cursor(page, index, chapter_idx(), &b_signal()).await;

@@ -122,7 +122,7 @@ func loginAndGetToken(t *testing.T, a *API, username, password string) string {
 	if err != nil {
 		t.Fatalf("failed to log in seeded user %q: %v", username, err)
 	}
-	return user.GetAuthToken()
+	return user.GetGetToken()
 }
 
 func TestAudioSocket_MethodNotAllowed(t *testing.T) {
@@ -144,8 +144,8 @@ func TestAudioSocket_MissingAuthHeader(t *testing.T) {
 
 	a.AudioSocket(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -157,8 +157,8 @@ func TestAudioSocket_WrongAuthScheme(t *testing.T) {
 
 	a.AudioSocket(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected %d, got %d", http.StatusBadRequest, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
 }
 
@@ -180,8 +180,8 @@ func TestAudioSocket_MissingBookID(t *testing.T) {
 	username := uniqueUsername(t)
 	token := loginAndGetToken(t, a, username, "a-real-password-123")
 
-	req := httptest.NewRequest(http.MethodGet, "/ws/audio/", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req := httptest.NewRequest(http.MethodGet, "/ws/audio/?token="+token, nil)
+
 	req.SetPathValue("book_id", "")
 	rr := httptest.NewRecorder()
 
@@ -201,8 +201,7 @@ func TestAudioSocket_UnknownCursor(t *testing.T) {
 	username := uniqueUsername(t)
 	token := loginAndGetToken(t, a, username, "another-real-password-456")
 
-	req := httptest.NewRequest(http.MethodGet, "/ws/audio/does-not-exist", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req := httptest.NewRequest(http.MethodGet, "/ws/audio/does-not-exist?token="+token, nil)
 	req.SetPathValue("book_id", "does-not-exist")
 	rr := httptest.NewRecorder()
 
