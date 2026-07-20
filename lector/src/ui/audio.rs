@@ -145,7 +145,7 @@ fn WebSocketConnection(
     mut sender: Signal<Option<Sender>>,
 ) -> Element {
     use_effect(move || {
-        let token = domain::login::current_auth().unwrap_or_default();
+        let token = domain::login::current_get_token();
         let book_id = book_id.clone();
 
         spawn(async move {

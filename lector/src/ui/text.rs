@@ -85,7 +85,7 @@ pub fn Text(book_id: String) -> Element {
                     total,
                     |p| current_page.set(p),
                 ).await;
-                tracing::debug!("set page: {}",page);
+                tracing::debug!("set page: {}, saved offset: {}", page, saved_offset);
                 current_page.set(page);
             });
             is_restoring.set(false);

@@ -67,19 +67,7 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
 }
 use crate::infra::cursor::CursorTextResponse;
 
-pub async fn fetch_cursor_text(book_id: &str) -> CursorTextResponse {
-    
-    match infra::fetch_cursor_text(book_id).await{
-        Ok(resp) => resp,
-        Err(e) => {
-            console(&format!("Error fetching cursor text: {}", e));
-            CursorTextResponse {
-                cursor: BookCursor::new(book_id, 0, 0),
-                text: "".to_string(),
-            }
-        },
-    }
-}
+
 
 
 pub async fn save_cursor_text(book_id: &str, text: &str, chapter_idx:usize) -> Result<(), Box<dyn std::error::Error>> {

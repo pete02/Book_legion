@@ -96,7 +96,7 @@ func isNaturalProgress(tracker wsAudioHeader, msg wsAudioHeader) bool {
 // instance, not one per user. Flagging again in case that's not the
 // intent long-term.
 func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Loading audio socket")
+	log.Printf("[audio] Loading audio socket")
 	userID, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
@@ -104,21 +104,23 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 
 	bookID := r.PathValue("bookID")
 	if bookID == "" {
-		fmt.Println("Book Id not provided to audio socket")
+		log.Printf("[audio] Book ID not provided to audio socket")
 		http.Error(w, "bookID is required", http.StatusBadRequest)
 		return
 	}
 
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 	if err != nil {
-		fmt.Printf("Could not load listening position %v\n", err)
+		log.Printf("[audio] Could not load listening position %v", err)
 		http.Error(w, "could not load listening position", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("[audio] Start cursor from: %v for user %s", cursor.Cursor.Index, userID)
+
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Printf("[audio] upgrade failed for user %s: %v", userID, err)
+		log.Printf("[audio] upgrade failed for user %s: %v", userID, err)
 		return
 	}
 	defer conn.Close()
@@ -137,7 +139,11 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	// Nothing has been delivered yet, so the client's own starting
 	// position (what we just loaded and started the Organizer from) is
 	// the correct initial "last delivered" reference.
-	tracker := wsAudioHeader{}
+	tracker := wsAudioHeader{
+		ID:          cursor.BookID,
+		Chapter:     cursor.Cursor.Chapter,
+		StartOffset: cursor.Cursor.Index,
+	}
 
 	// Reader: the connection's only reader. For each reported position,
 	// decides natural-progress vs seek by comparing against what's
