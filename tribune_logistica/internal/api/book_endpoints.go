@@ -170,7 +170,7 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.write())
 	if !ok {
 		return
 	}
@@ -200,10 +200,12 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 	}
 
 	chapterWeight := 1.0 / float64(len(chapters))
-	chapterProgress := cursor.Cursor.Index / len(chapter)
+	log.Println("chapter weight: %s", chapterWeight)
+	chapterProgress := float64(cursor.Cursor.Index) / float64(len(chapter))
 
-	bookProgress := float64(cursor.Cursor.Chapter)/chapterWeight + float64(chapterProgress)*chapterWeight
-
+	bookProgress := (float64(cursor.Cursor.Chapter) + chapterProgress) * chapterWeight
+	log.Println("book progress: (%s+%s)*%s=%s", float64(cursor.Cursor.Chapter), chapterProgress, chapterWeight, bookProgress)
+	log.Println("chapter: %s", cursor.Cursor.Chapter)
 	rr.Header().Set("Content-Type", "application/json")
 	rr.WriteHeader(http.StatusOK)
 	json.NewEncoder(rr).Encode(map[string]interface{}{"progress": bookProgress})

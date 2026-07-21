@@ -45,10 +45,11 @@ pub fn Audio(book_id: String) -> Element {
     let connected = use_signal(|| false);
     let show_extra = use_signal(|| false);
     let queue: Signal<VecDeque<AudioChunk>> = use_signal(VecDeque::new);
-    let mut sender: Signal<Option<Sender>> = use_signal(|| None);
+    let sender: Signal<Option<Sender>> = use_signal(|| None);
     let playing = use_signal(||true);
     let current_header: Signal<Option<AudioHeader>> = use_signal(|| None);
     let cover_path=domain::cover::create_cover_path(book_id.clone());
+
 
     let top_entries = vec![
         TopBarEntry { name: "Library".into(), path: Route::Library {} },
@@ -56,12 +57,13 @@ pub fn Audio(book_id: String) -> Element {
     ];
 
 
+
     rsx! {
         div {
             TopBar { entries: top_entries, show_extra: show_extra }
 
             WebSocketConnection {
-                book_id,
+                book_id: book_id.clone(),
                 status,
                 connected,
                 queue,
@@ -75,47 +77,60 @@ pub fn Audio(book_id: String) -> Element {
                 current_header,
             }
 
-            PlayPauseButton { playing, current_header }
             div {
-                style:  "display: flex; justify-content: center; align-items: center;",
+                class: "flex flex-col items-center gap-4",
                 Cover {
                     cover_path: cover_path.clone(),
                 }
+                PlayPauseButton { playing, current_header }
             }
 
-            p { "Status: {status}" }
-            p {
-                "Connected: "
-                if connected() { "yes" } else { "no" }
+            div {
+                class: "mt-4",
+
+                TimeBar {
+                    book_id: book_id.clone(),
+                    headers: current_header,
+                }
             }
+
         }
     }
 }
 
 #[component]
-fn PlayPauseButton(mut playing: Signal<bool>, mut current_header: Signal<Option<AudioHeader>>) -> Element {
+fn PlayPauseButton(
+    mut playing: Signal<bool>,
+    mut current_header: Signal<Option<AudioHeader>>,
+) -> Element {
+    let loading = current_header().is_none();
+
     rsx! {
         div {
-            class: "relative w-14 h-14 overflow-visible",
-            button {
-                class: "w-full h-full flex items-center justify-center transition active:scale-90",
-                onclick: move |_| playing.set(!playing()),
-            }
+            class: "relative w-14 h-14 flex items-center justify-center",
+
             img {
-                class: "w-full h-full object-contain",
-                src: if playing() { 
-                    assets::PAUSE 
-                } else if current_header().is_none() { 
+                class: if loading {
+                    "absolute inset-0 w-full h-full object-contain pointer-events-none select-none animate-spin"
+                } else {
+                    "absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                },
+                src: if loading {
                     assets::LOADING
-                }else{
+                } else if !playing() {
                     assets::PLAY
+                } else {
+                    assets::PAUSE
                 }
+            }
+
+            button {
+                class: "absolute inset-0 w-full h-full active:scale-90",
+                onclick: move |_| playing.set(!playing()),
             }
         }
     }
 }
-
-
 // ---------------------------------------------------------------------
 // WebSocket connection (headless - manages the connect/receive loop)
 // ---------------------------------------------------------------------
@@ -307,5 +322,46 @@ fn AudioPlayer(
 
     rsx! {
         audio { id: AUDIO_ELEMENT_ID }
+    }
+}
+
+use crate::infra::book::fetch_book_progress;
+#[component]
+pub fn TimeBar(book_id: String, headers: Signal<Option<AudioHeader>>) -> Element {
+
+    let mut progress: Signal<f64> = use_signal(||0.0);
+
+    use_effect(move || {
+        let b=book_id.clone();
+        if headers().is_none(){
+            return
+        }
+
+        spawn(async move{
+            match fetch_book_progress(&b).await{
+                Err(_)=>{},
+                Ok(value)=>{ progress.set(value.progress); }
+            }
+        });
+    });
+
+    rsx! {
+        div {
+            class: "w-full flex flex-col items-center",
+            div {
+                class: "w-[90%] relative",
+                div {
+                    class: "bg-gray-300 h-3 rounded-full overflow-hidden w-full",
+                    div {
+                        class: "h-full bg-blue-500 transition-all duration-300 rounded-full",
+                        style: "width: {(progress() * 100.0).round()}%;",
+                    }
+                }
+                p {
+                    class: "absolute left-0 -bottom-6 text-sm",
+                    "{(progress() * 100.0).round()}%"
+                }
+            }
+        }
     }
 }
