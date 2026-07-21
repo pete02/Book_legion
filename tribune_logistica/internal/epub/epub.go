@@ -15,6 +15,7 @@ import (
 
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	"github.com/book_legion-tribune_logistica/internal/types"
 	"golang.org/x/net/html"
 )
 
@@ -43,6 +44,40 @@ func Load(db storage.Storage, bookID string) (Epub, error) {
 	return New(book.FilePath, bookID)
 }
 
+func (e *Epub) ExtractChunk(cursor types.UserCursor, end int) (string, error) {
+
+	chunkI := types.ChunkIdentifier{
+		ID:          e.ID,
+		Chapter:     cursor.Cursor.Chapter,
+		StartOffset: cursor.Cursor.Index,
+		EndOffset:   cursor.Cursor.Index + end,
+	}
+
+	chapterHtml, err := e.GetChapter(cursor.Cursor.Chapter)
+	if err != nil {
+		return "", err
+	}
+
+	chunk, err := types.BuildTextChunk(string(chapterHtml), chunkI, types.DefaultChunkConfig())
+	if err != nil {
+		return "", err
+	}
+
+	return chunk.Data, nil
+}
+
+func (e *Epub) FindNearestAllowedSplit(cursor types.UserCursor) (types.UserCursor, error) {
+
+	chapterHTML, err := e.GetChapter(cursor.Cursor.Chapter)
+	if err != nil {
+		return cursor, err
+	}
+
+	nearestSplit := types.NearestFollowingSplit(string(chapterHTML), cursor.Cursor.Index, 10)
+
+	cursor.Cursor.Index = nearestSplit.Offset
+	return cursor, nil
+}
 func (e *Epub) GetFile(filepath string) ([]byte, error) {
 	r, err := zip.OpenReader(e.Path)
 	if err != nil {

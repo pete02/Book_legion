@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/book_legion-tribune_logistica/internal/login"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
@@ -30,6 +31,11 @@ type wsAudioHeader struct {
 	Chapter     int    `json:"chapter"`
 	StartOffset int    `json:"start_offset"`
 	EndOffset   int    `json:"end_offset"`
+}
+
+type wsLoginHeader struct {
+	Type string `json:"type"`
+	Auth string `json:"token"`
 }
 
 // deliveryTracker records the position corresponding to the end of the
@@ -97,17 +103,38 @@ func isNaturalProgress(tracker wsAudioHeader, msg wsAudioHeader) bool {
 // intent long-term.
 func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[audio] Loading audio socket")
-	userID, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
-	if !ok {
-		return
-	}
-
 	bookID := r.PathValue("bookID")
 	if bookID == "" {
 		log.Printf("[audio] Book ID not provided to audio socket")
 		http.Error(w, "bookID is required", http.StatusBadRequest)
 		return
 	}
+
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("[audio] upgrade failed: %v", err)
+		return
+	}
+
+	log.Println("[audio] Connection established")
+	defer conn.Close()
+	var msg wsLoginHeader
+	if err := conn.ReadJSON(&msg); err != nil {
+		if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			log.Printf("[audio] connection error: %v", err)
+		}
+		return
+	}
+	log.Println("[audio] Login received")
+
+	user, err := login.VerifyUserSession(msg.Auth)
+	if err != nil {
+		log.Println("Unauthorized access")
+		http.Error(w, "Unauthorized access", http.StatusUnauthorized)
+		return
+	}
+
+	userID := user.Username
 
 	cursor, err := types.LoadUserCursor(api.DB, userID, bookID)
 	if err != nil {
@@ -117,13 +144,6 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[audio] Start cursor from: %v for user %s", cursor.Cursor.Index, userID)
-
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("[audio] upgrade failed for user %s: %v", userID, err)
-		return
-	}
-	defer conn.Close()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -135,12 +155,50 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 			time.Now().Add(writeWait))
 		return
 	}
+	/*
+		epub, err := epub.Load(api.DB, bookID)
+		if err != nil {
+			log.Printf("[audio] failed to load epub for user %s: %v", userID, err)
+			http.Error(w, "failed to load epub", http.StatusInternalServerError)
+			return
+		}
 
-	// Nothing has been delivered yet, so the client's own starting
-	// position (what we just loaded and started the Organizer from) is
-	// the correct initial "last delivered" reference.
+		ChapterHTML, err := epub.GetChapter(cursor.Cursor.Chapter)
+		if err != nil {
+			log.Printf("[audio] failed to load chapter html for user %s: %v", userID, err)
+			http.Error(w, "failed to load chapter html", http.StatusInternalServerError)
+			return
+		}
+
+		NearestSplit := types.NearestPrecedingSplit(string(ChapterHTML), cursor.Cursor.Index)
+		log.Printf("[audio] Nearest split: %v", NearestSplit)
+
+		//debug
+		nearestChunkIdentifier := types.ChunkIdentifier{
+			ID:          bookID,
+			Chapter:     cursor.Cursor.Chapter,
+			StartOffset: NearestSplit,
+			EndOffset:   NearestSplit + 500,
+		}
+
+		nearestChunk, err := types.BuildTextChunk(string(ChapterHTML), nearestChunkIdentifier, types.DefaultChunkConfig())
+		log.Printf("[Audio] Debug: Nearest chunk: %s", nearestChunk)
+
+		cursorChunkIdentifier := types.ChunkIdentifier{
+			ID:          bookID,
+			Chapter:     cursor.Cursor.Chapter,
+			StartOffset: cursor.Cursor.Index,
+			EndOffset:   cursor.Cursor.Index + 500,
+		}
+
+		cursorChunk, err := types.BuildTextChunk(string(ChapterHTML), cursorChunkIdentifier, types.DefaultChunkConfig())
+		log.Printf("[Audio] Debug: Cursor chunk: %s", cursorChunk)
+		//<-debug
+
+		cursor.Cursor.Index = NearestSplit
+	*/
 	tracker := wsAudioHeader{
-		ID:          cursor.BookID,
+		ID:          "",
 		Chapter:     cursor.Cursor.Chapter,
 		StartOffset: cursor.Cursor.Index,
 	}
@@ -193,9 +251,6 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		chunk, err := api.Manager.GetChunk(ctx)
 		if err != nil {
-			// Either manager.ErrStopped (Organizer reached the end of the
-			// book, or was stopped) or ctx cancellation (client
-			// disconnected). Either way, we're done.
 			break
 		}
 
@@ -218,10 +273,6 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-
-	// If we broke out of the writer loop for our own reasons (a write
-	// failure, not a disconnect the reader already caught), make sure the
-	// Organizer stops and the reader goroutine winds down too.
 	cancel()
 	<-readerDone
 }
