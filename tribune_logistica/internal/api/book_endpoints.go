@@ -49,6 +49,30 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	epub, err := epub.Load(a.DB, cursor.BookID)
+	if err != nil || cursor.Cursor.Index == 0 {
+		if err := cursor.SaveUserCursor(a.DB); err != nil {
+			log.Printf("[Api] SaveCursor: failed to save cursor: %v", err)
+			http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
+			return
+		}
+		log.Println("[API] SaveCursor: Could not load the book, trusting the cursor")
+		rr.WriteHeader(http.StatusCreated)
+		return
+	}
+
+	cursor, err = epub.FindNearestAllowedSplit(cursor)
+	if err != nil {
+		if err := cursor.SaveUserCursor(a.DB); err != nil {
+			log.Printf("[Api] SaveCursor: failed to save cursor: %v", err)
+			http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
+			return
+		}
+		log.Println("[API] SaveCursor: Could not load the book, trusting the cursor")
+		rr.WriteHeader(http.StatusCreated)
+		return
+	}
+
 	log.Printf("[Api] Saving cursor: %v ", cursor.Cursor)
 
 	if err := cursor.SaveUserCursor(a.DB); err != nil {
@@ -56,7 +80,6 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
 		return
 	}
-
 	rr.WriteHeader(http.StatusCreated)
 }
 

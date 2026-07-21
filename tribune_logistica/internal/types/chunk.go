@@ -48,6 +48,76 @@ func NearestAllowedSplit(html string, start int, minWords int) SplitResult {
 // happens to contain no '<' at all.
 const maxTagResyncLookahead = 2000
 
+func NearestFollowingSplit(html string, start int, minWords int) SplitResult {
+	runes := []rune(html)
+	if start < 0 {
+		start = 0
+	}
+	if start > len(runes) {
+		return SplitResult{Offset: len(runes), Words: 0, EndOfContent: true}
+	}
+
+	start = resyncIfMidTag(runes, start)
+
+	var currentWord strings.Builder
+	words := 0
+	i := start
+
+	for i < len(runes) {
+		r := runes[i]
+
+		if r == '<' {
+			tagStart := i
+			for i < len(runes) && runes[i] != '>' {
+				i++
+			}
+			if i >= len(runes) {
+				break // unterminated tag; nothing more we can parse
+			}
+			i++ // consume '>'
+			tag := string(runes[tagStart:i])
+
+			isBlock, isBreakPoint := blockTagKind(tag)
+			if isBlock {
+				if currentWord.Len() > 0 {
+					word := currentWord.String()
+					currentWord.Reset()
+					words++
+					if endsSentence(word) && words >= minWords {
+						return SplitResult{Offset: tagStart, Words: words}
+					}
+				}
+				// A true block boundary (closing </p>, <br>, etc.) is always a safe
+				// place to end a chunk, regardless of minWords — paragraph/line breaks
+				// are natural stopping points on their own. We only require words > 0
+				// so we don't return a zero-length, no-progress split.
+				if isBreakPoint && words > 0 {
+					return SplitResult{Offset: i, Words: words}
+				}
+			}
+		} else if unicode.IsSpace(r) {
+			if currentWord.Len() > 0 {
+				word := currentWord.String()
+				currentWord.Reset()
+				words++
+				offset := i // capture before advancing past the space
+				if endsSentence(word) && words >= minWords {
+					return SplitResult{Offset: offset, Words: words}
+				}
+			}
+			i++
+		} else {
+			currentWord.WriteRune(r)
+			i++
+		}
+	}
+
+	if currentWord.Len() > 0 {
+		words++
+	}
+	return SplitResult{Offset: len(runes), Words: words, EndOfContent: true}
+}
+
 func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 	if start >= len(runes) {
 		return SplitResult{Offset: start, Words: 0, EndOfContent: true}
@@ -85,7 +155,7 @@ func nearestAllowedSplit(runes []rune, start int, minWords int) SplitResult {
 			tagStart := i
 			for i < len(runes) && runes[i] != '>' {
 				i++
-			}
+			} // Implementation for extracting a chunk of the epub
 			if i < len(runes) {
 				i++ // consume '>'
 			}

@@ -2,10 +2,11 @@ use std::collections::VecDeque;
 
 use dioxus::prelude::*;
 use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use gloo_net::websocket::futures::WebSocket;
 use gloo_net::websocket::Message;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
@@ -57,8 +58,6 @@ pub fn Audio(book_id: String) -> Element {
 
     rsx! {
         div {
-
-            h2 { "Audio websocket demo" }
             TopBar { entries: top_entries, show_extra: show_extra }
 
             WebSocketConnection {
@@ -89,24 +88,9 @@ pub fn Audio(book_id: String) -> Element {
                 "Connected: "
                 if connected() { "yes" } else { "no" }
             }
-
-            if let Some(header) = current_header() {
-                div {
-                    p { "Now playing:" }
-                    p { "ID: {header.id}" }
-                    p { "Chapter: {header.chapter}" }
-                    p { "{header.start_offset} -> {header.end_offset}" }
-                }
-            } else {
-                p { "Nothing playing yet." }
-            }
         }
     }
 }
-
-// ---------------------------------------------------------------------
-// Play / pause button
-// ---------------------------------------------------------------------
 
 #[component]
 fn PlayPauseButton(mut playing: Signal<bool>, mut current_header: Signal<Option<AudioHeader>>) -> Element {
@@ -145,16 +129,15 @@ fn WebSocketConnection(
     mut sender: Signal<Option<Sender>>,
 ) -> Element {
     use_effect(move || {
-        let token = domain::login::current_get_token();
         let book_id = book_id.clone();
 
         spawn(async move {
             dioxus::logger::tracing::info!("Connecting websocket for {book_id}");
             status.set("Connecting...".into());
 
-            let ws = match WebSocket::open(&format!(
-                "/api/v1/audio/{}?token={}",
-                book_id, token
+            let mut ws = match WebSocket::open(&format!(
+                "/api/v1/audio/{}",
+                book_id
             )) {
                 Ok(ws) => ws,
                 Err(e) => {
@@ -165,12 +148,10 @@ fn WebSocketConnection(
 
             connected.set(true);
             status.set("Connected".into());
-
+            let _= ws.send(Message::Text(json!({"type": "auth", "token": &domain::login::current_auth()}).to_string())).await;
             let (tx, mut rx) = ws.split();
             sender.set(Some(tx));
 
-            // A header always precedes the bytes it describes; hold onto
-            // it until the matching binary payload arrives.
             let mut pending_header: Option<AudioHeader> = None;
 
             while let Some(msg) = rx.next().await {
@@ -216,9 +197,6 @@ fn WebSocketConnection(
     rsx! {}
 }
 
-// ---------------------------------------------------------------------
-// Audio player (headless except for the underlying <audio> element)
-// ---------------------------------------------------------------------
 
 fn audio_element() -> Option<HtmlAudioElement> {
     web_sys::window()?
@@ -264,9 +242,6 @@ fn AudioPlayer(
     mut sender: Signal<Option<Sender>>,
     mut current_header: Signal<Option<AudioHeader>>,
 ) -> Element {
-    // Bridge the play/pause signal onto the real <audio> element. This
-    // effect is reactive on `playing()`, so it re-runs every time the
-    // button toggles it.
     use_effect(move || {
         let want_playing = playing();
         if let Some(audio) = audio_element() {
@@ -278,10 +253,6 @@ fn AudioPlayer(
         }
     });
 
-    // The queue-consumption loop. Nothing in this effect's own (sync)
-    // body reads a signal, so it only runs once, on mount - it does its
-    // own polling of `queue` from inside the spawned task instead of
-    // relying on effect re-runs.
     use_effect(move || {
         spawn(async move {
             let mut active_object_url: Option<String> = None;
@@ -312,20 +283,14 @@ fn AudioPlayer(
                     }
                 };
 
-                // The previous chunk has already fired "ended" by the
-                // time we get here, so its URL is safe to free now.
                 if let Some(old) = active_object_url.take() {
                     Url::revoke_object_url(&old).ok();
                 }
 
                 audio.set_src(&url);
                 active_object_url = Some(url);
-
-                // Only now - when a chunk actually becomes the active one
-                // - do we update what's shown as "currently playing".
                 current_header.set(Some(chunk.header.clone()));
 
-                // Tell the server where playback is now.
                 if let Some(tx) = sender.write().as_mut() {
                     if let Ok(payload) = serde_json::to_string(&chunk.header) {
                         let _ = tx.send(Message::Text(payload)).await;
@@ -335,10 +300,6 @@ fn AudioPlayer(
                 if playing() {
                     let _ = audio.play();
                 }
-                // If not currently "playing", the chunk just sits loaded
-                // and paused; the play/pause bridge effect above will
-                // start it once the user hits play.
-
                 wait_for_event_once(&audio, "ended").await;
             }
         });
