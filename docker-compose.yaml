@@ -61,6 +61,8 @@ services:
     container_name: lector-gen
     environment:
       - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
