@@ -11,7 +11,9 @@ services:
       - ./tribune_logistica/data:/data
     environment:
       - TTS_BACKEND=http
-      - TTS_API_URL=http://192.168.88.244:8888/tts
+      - TTS_API_URL=http://192.168.88.241:8888/tts
+      - LIBRARY_ROOT=/data
+      - TRIBUNE_LOGISTICA_ADMIN_TOKEN=token
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -22,14 +24,41 @@ services:
       # Service port inside container
       - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
 
+  onboarder:
+    image: lumilukko/tribune-archivum:${VERSION:-latest}
+    build:
+      context: ./tribune_archivum
+      dockerfile: Dockerfile
+    container_name: tribune-archivum
+    restart: unless-stopped
+    environment:
+      - HARDCOVER_API_ENDPOINT=https://api.hardcover.app/v1/graphql
+      - TRIBUNE_LOGISTICA_URL=http://tribune-logistica:8000
+      - RUST_LOG=info
+    volumes:
+      - ./tribune_logistica/data:/data
+      - ./tribune_archivum/onboard:/onboard
+      - ./tribune_archivum/onboard-errors:/errs
+
+  tribune_dictio:
+    image: lumilukko/tribune-dictio:${VERSION:-latest}
+    build:
+      context: ./tribune_archivum
+      dockerfile: Dockerfile
+    container_name: booklegion-tribune-dictio
+    environment:
+      - DEBUG=true
+    ports:
+      - 8888:8000
+    restart: unless-stopped
+
+
   frontend:
     image: lumilukko/lector:${VERSION:-latest}
     build:
       context: ./lector
       dockerfile: Dockerfile
     container_name: lector-gen
-    depends_on:
-      - backend
     environment:
       - BACKEND_URL=http://backend:8000
     restart: unless-stopped
