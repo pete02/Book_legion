@@ -24,6 +24,25 @@ services:
       # Service port inside container
       - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
 
+  onboarder:
+    image: lumilukko/tribune-archivum-staging:latest
+    container_name: tribune-archivum-staging
+    depends_on:
+      - staging-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - HARDCOVER_API_ENDPOINT=https://api.hardcover.app/v1/graphql
+      - TRIBUNE_LOGISTICA_URL=http://tribune-logistica-staging:8000
+      - RUST_LOG=info
+    volumes:
+      - ./tribune_logistica/data:/data
+      - ./tribune_archivum/onboard:/onboard
+      - ./tribune_archivum/onboard-errors:/errs
+    networks:
+      - web
+
   frontend:
     image: lumilukko/lector-staging:latest
     build:
