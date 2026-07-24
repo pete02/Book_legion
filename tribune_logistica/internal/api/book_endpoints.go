@@ -296,7 +296,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, req, http.MethodGet, api.write())
+	_, ok := api.RequestCheck(w, r, http.MethodGet, api.write())
 	if !ok {
 		return
 	}
