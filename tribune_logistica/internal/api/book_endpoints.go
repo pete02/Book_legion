@@ -11,6 +11,7 @@ import (
 
 	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/types"
+	"github.com/book_legion-tribune_logistica/internal/library"
 )
 
 func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
@@ -295,7 +296,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, api.write())
+	_, ok := api.RequestCheck(w, req, http.MethodGet, api.write())
 	if !ok {
 		return
 	}
