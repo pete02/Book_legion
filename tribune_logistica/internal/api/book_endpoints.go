@@ -292,3 +292,27 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 	rr.WriteHeader(http.StatusOK)
 	rr.Write(file)
 }
+
+
+func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
+	_, ok := a.RequestCheck(rr, req, http.MethodGet, api.write())
+	if !ok {
+		return
+	}
+
+	var req library.Book
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	err := library.SaveBook(api.DB, req)
+
+	if err != nil {
+		log.Printf("Failed to save book: %v", err)
+		http.Error(w, "Failed to save book", http.StatusInternalServerError)
+		return
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+}

@@ -92,6 +92,7 @@ func main() {
 	r.Get("/api/v1/manifest", api.GetManifest)
 	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
 	r.Get("/api/v1/books/{bookID}", api.GetBook)
+	r.Post("/api/v1/savebook", api.SaveBook)
 	r.Post("/api/v1/uupdateseries/{id}", api.UpdateSeriesName)
 	r.Delete("/api/v1/deleteseries/{SeriesID}", api.DeleteSeries)
 	r.Delete("/api/v1/deletebook/{SeriesID}", api.DeleteBook)

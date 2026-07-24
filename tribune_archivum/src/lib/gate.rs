@@ -10,7 +10,7 @@ pub async fn refresh_auth_token() -> Result<String, String> {
 
     let base_url=env::var("TRIBUNE_LOGISTICA_URL")
         .map_err(|_| "missing env: TRIBUNE_LOGISTICA_URL")?;
-    let body = serde_json::json!({ "refresh_token": bearer_token });
+    let body = serde_json::json!({ "username": "onboarder", "refresh_token": bearer_token });
 
     let url = Url::parse(&format!("{}/api/v1/refreshtoken",base_url))
         .map_err(|_| "Url const is wrong".to_string())?;
