@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/book_legion-tribune_logistica/internal/epub"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
@@ -20,13 +21,16 @@ type AudioFetcher func(ctx context.Context, chunk types.TextChunk) (types.AudioC
 
 var ErrStopped = errors.New("organizer stopped")
 var ErrAlreadyStarted = errors.New("organizer already started")
+var ErrEndOfBook = errors.New("organizer reached end of book")
 
 type Organizer struct {
 	mu sync.Mutex
 
+	book       epub.Epub
 	buildText  TextChunkBuilder
 	fetchAudio AudioFetcher
 	bufferSize int
+	doneErr    error
 
 	cursor  types.UserCursor      // last position reported by the client
 	next    types.ChunkIdentifier // identifier the producer is currently targeting
@@ -64,7 +68,7 @@ func cursorToIdentifier(uc types.UserCursor) types.ChunkIdentifier {
 // the ctx passed in), and Start again later without stale state from a prior
 // run — or from UpdateCursor calls made before this Start — leaking in: the
 // cursor, the seek signal, and the output buffer are all reset here.
-func (o *Organizer) Start(ctx context.Context, uc types.UserCursor) error {
+func (o *Organizer) Start(ctx context.Context, uc types.UserCursor, book epub.Epub) error {
 	o.mu.Lock()
 	if o.started {
 		o.mu.Unlock()
@@ -74,6 +78,7 @@ func (o *Organizer) Start(ctx context.Context, uc types.UserCursor) error {
 	o.cancel = cancel
 	o.started = true
 	o.cursor = uc
+	o.book = book
 	initial := cursorToIdentifier(uc)
 	o.next = initial
 
@@ -159,8 +164,26 @@ func (o *Organizer) run(ctx context.Context, initial types.ChunkIdentifier, seek
 		if err != nil {
 			// End of chapter/book, or an unresolvable offset.
 			// TODO: chapter-transition handling per design doc section 7.
-			log.Printf("Organizer: Got error while building text chunk: %s", err)
-			return
+
+			if err == types.ErrEndOfChapter {
+				if next.Chapter+1 < len(o.book.Spine) {
+					next = types.ChunkIdentifier{
+						ID:          next.ID,
+						Chapter:     next.Chapter + 1,
+						StartOffset: 0,
+					}
+					o.setNext(next)
+					log.Println("move to next chapter")
+					continue // re-enter loop; will build text for the new chapter
+				} else {
+					log.Println("book done")
+					return
+				}
+			} else {
+				log.Printf("Organizer: Got error while building text chunk: %s", err)
+				return
+			}
+
 		}
 
 		audioChunk, ok := o.fetchAudio(ctx, textChunk)
