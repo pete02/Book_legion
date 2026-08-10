@@ -11,10 +11,11 @@ pub fn Text(book_id: String) -> Element {
     let show_extra = use_signal(|| false);
 
     let chapter_html: Signal<Option<String>> = use_signal(|| None);
-    let mut current_page: Signal<i32> = use_signal(|| 0);
+    let mut current_page: Signal<i32> = use_signal(|| -1);
     let mut column_width_px: Signal<Option<f64>> = use_signal(|| None);
     let mut total_pages: Signal<Option<i32>> = use_signal(|| None);
     let mut offset: Signal<Option<i64>> = use_signal(|| Some(0));
+    let mut go_to_last_page: Signal<bool> = use_signal(|| false);
     let mut chapter_idx: Signal<usize> = use_signal(|| usize::MAX);
     let mut is_restoring: Signal<bool> = use_signal(|| true);
 
@@ -46,6 +47,14 @@ pub fn Text(book_id: String) -> Element {
     });
 
     use_effect(move || {
+        if !go_to_last_page() { return; }
+        if let Some(total) = total_pages() {
+            current_page.set(total - 1);
+            go_to_last_page.set(false);
+        }
+    });
+
+    use_effect(move || {
         if chapter_html().is_none() {
             return;
         }
@@ -69,7 +78,9 @@ pub fn Text(book_id: String) -> Element {
                     }
                 "#);
                 let _ = eval.send(html);
-                dioxus::logger::tracing::info!("test")
+                if let Some(pages) = text::measure_total_pages("book-content") {
+                    total_pages.set(Some(pages));
+                }
             });
         }
     });
@@ -87,17 +98,22 @@ pub fn Text(book_id: String) -> Element {
                 ).await;
                 tracing::debug!("set page: {}, saved offset: {}", page, saved_offset);
                 current_page.set(page);
+                gloo_timers::future::TimeoutFuture::new(0).await;
+                is_restoring.set(false);
             });
-            is_restoring.set(false);
         }
     });
 
-    use_effect(move || {
-        let Some(_) = column_width_px() else { return; };
+
+    use_effect(move ||{
+        if current_page()==-1 || *is_restoring.peek(){ 
+            return
+        }
+
         spawn(async move {
             gloo_timers::future::TimeoutFuture::new(0).await;
-            if let Some(pages) = text::measure_total_pages("book-content") {
-                total_pages.set(Some(pages));
+            if let Some(index) = text::measure_current_page_html_offset().await {
+                text::save_cursor(current_page(), index, chapter_idx(), &b_signal()).await;
             }
         });
     });
@@ -119,11 +135,6 @@ pub fn Text(book_id: String) -> Element {
         None => String::new(),
     };
     let transform_style = format!("transform: translateX(-{}00%);", page);
-
-    let can_go_forward = match total_pages() {
-        Some(total) => page + 1 < total,
-        None => false,
-    };
 
     rsx! {
         div {
@@ -152,27 +163,14 @@ pub fn Text(book_id: String) -> Element {
 
                             if !should_load_prev_chapter {
                                 *current_page.write() -= 1;
-                                spawn(async move {
-                                    gloo_timers::future::TimeoutFuture::new(0).await;
-                                    if let Some(index) = text::measure_current_page_html_offset().await {
-                                        text::save_cursor(page, index, chapter_idx(), &b_signal()).await;
-                                    }
-                                });
                             } else {
                                 spawn(async move {
                                     chapter_idx.set(chapter_idx()-1);
-                                    text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
-                                    tracing::debug!("total pages: {:?}", total_pages());
-                                    match total_pages() {
-                                        Some(total) => *current_page.write() = total - 1,
-                                        None => *current_page.write() = 0,
-                                    }
-                                    tracing::debug!("set current page to: {}", *current_page.read());
-
+                                    total_pages.set(None);
+                                    go_to_last_page.set(true);
                                     gloo_timers::future::TimeoutFuture::new(0).await;
-                                    if let Some(index) = text::measure_current_page_html_offset().await {
-                                        text::save_cursor(page, index, chapter_idx(), &b_signal()).await;
-                                    }
+                                    text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
+
                                 });
                             }
                         },
@@ -181,25 +179,12 @@ pub fn Text(book_id: String) -> Element {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
                             let id=b_signal();
-                            if can_go_forward {
+                            if current_page() < total_pages().unwrap_or(0) {
                                 *current_page.write() += 1;
-                                spawn(async move {
-                                    gloo_timers::future::TimeoutFuture::new(0).await;
-                                    if let Some(index) = text::measure_current_page_html_offset().await {
-                                        text::save_cursor(page, index, chapter_idx(), &b_signal()).await;
-                                    }
-                                });
                             }else{
                                 logger::tracing::debug!("change new  chapter");
+                                current_page.set(0);
                                 chapter_idx.set(chapter_idx() + 1);
-                                spawn(async move{
-                                    *current_page.write() =0;
-                                    text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
-                                    gloo_timers::future::TimeoutFuture::new(0).await;
-                                    if let Some(index) = text::measure_current_page_html_offset().await {
-                                        text::save_cursor(page, index, chapter_idx(), &b_signal()).await;
-                                    }
-                                });
                             }
                         },
                     }

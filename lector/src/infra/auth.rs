@@ -110,7 +110,7 @@ pub async fn post_with_auth(
     Ok(retry_resp)
 }
 async fn refresh_auth_token(refresh_token: &str) -> Result<String, String> {
-    let body = serde_json::json!({ "refresh_token": refresh_token });
+    let body = serde_json::json!({ "Username": &domain::login::current_name(), "refresh_token": refresh_token });
     let resp = Request::post("/api/v1/refreshtoken")
         .body(serde_json::to_string(&body).unwrap())
         .header("Content-Type", "application/json")
