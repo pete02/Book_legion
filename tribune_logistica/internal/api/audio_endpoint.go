@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/login"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
@@ -143,12 +144,27 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	book, err := epub.Load(api.DB, bookID)
+	if err != nil {
+		log.Printf("[audio] failed to load epub for user %s: %v", userID, err)
+		http.Error(w, "failed to load epub", http.StatusInternalServerError)
+		return
+	}
+
+	spine, err := book.LoadSpine()
+	if err != nil {
+		log.Printf("[audio] failed to load epub spine for user %s: %v", userID, err)
+		http.Error(w, "failed to load epub", http.StatusInternalServerError)
+		return
+	}
+	book.Spine = spine
+
 	log.Printf("[audio] Start cursor from: %v for user %s", cursor.Cursor.Index, userID)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	if err := api.Manager.Start(ctx, cursor); err != nil {
+	if err := api.Manager.Start(ctx, cursor, book); err != nil {
 		fmt.Printf("[audio] failed to start playback for user %s: %v", userID, err)
 		_ = conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "playback already in progress"),
