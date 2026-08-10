@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/book_legion-tribune_logistica/internal/epub"
 	types "github.com/book_legion-tribune_logistica/internal/types"
 )
 
@@ -88,7 +89,7 @@ func TestSequentialProduction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -123,7 +124,7 @@ func TestStartOverridesPriorUpdateCursor(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := o.Start(ctx, cursor("b1", 2, 40)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 2, 40), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -152,7 +153,7 @@ func TestRestartAfterStop(t *testing.T) {
 	o := NewOrganizer(simpleBuildText(1000), passthroughFetch, 0)
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	if err := o.Start(ctx1, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx1, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("first Start: %v", err)
 	}
 	if _, err := o.GetChunk(withTimeout(t)); err != nil {
@@ -169,7 +170,7 @@ func TestRestartAfterStop(t *testing.T) {
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
-	if err := o.Start(ctx2, cursor("b1", 3, 30)); err != nil {
+	if err := o.Start(ctx2, cursor("b1", 3, 30), epub.Epub{}); err != nil {
 		t.Fatalf("second Start: %v", err)
 	}
 
@@ -188,10 +189,10 @@ func TestDoubleStartErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("first Start: %v", err)
 	}
-	if err := o.Start(ctx, cursor("b1", 0, 0)); !errors.Is(err, ErrAlreadyStarted) {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); !errors.Is(err, ErrAlreadyStarted) {
 		t.Fatalf("expected ErrAlreadyStarted, got %v", err)
 	}
 }
@@ -215,7 +216,7 @@ func TestFetchFailureRetries(t *testing.T) {
 	o := NewOrganizer(simpleBuildText(chunkSize), flaky, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -245,7 +246,7 @@ func TestSeekDiscardsInFlightChunk(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -308,7 +309,7 @@ func TestNaturalAdvanceIsNotTreatedAsSeek(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -359,7 +360,7 @@ func TestCancelStopsProduction(t *testing.T) {
 	o := NewOrganizer(simpleBuildText(1000), g.fetch, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -381,7 +382,7 @@ func TestGetChunkRespectsCallerContext(t *testing.T) {
 	o := NewOrganizer(simpleBuildText(0), passthroughFetch, 4) // errors immediately, never produces
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := o.Start(ctx, cursor("b1", 0, 0)); err != nil {
+	if err := o.Start(ctx, cursor("b1", 0, 0), epub.Epub{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
