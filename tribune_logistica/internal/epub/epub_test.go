@@ -828,7 +828,7 @@ func TestRewriteResourceLinks(t *testing.T) {
 		if token != chapterTokenPlaceholder {
 			t.Errorf("token = %q, want placeholder %q", token, chapterTokenPlaceholder)
 		}
-		if !strings.HasPrefix(hrefs[0], "/api/v1/books/"+bookID+"/file/") {
+		if !strings.HasPrefix(hrefs[0], "/api/v1/books/"+bookID+"/file?token=TOKEN_PLACEHOLDER&file=page_styles.css") {
 			t.Errorf("rewritten href doesn't point at expected endpoint: %q", hrefs[0])
 		}
 

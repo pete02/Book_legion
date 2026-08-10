@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 
 	types "github.com/book_legion-tribune_logistica/internal/types"
@@ -116,6 +117,7 @@ func (o *Organizer) GetChunk(ctx context.Context) (types.AudioChunk, error) {
 	select {
 	case chunk, ok := <-out:
 		if !ok {
+			log.Println("Organizer: output channel closed")
 			return types.AudioChunk{}, ErrStopped
 		}
 		o.mu.Lock()
@@ -123,6 +125,7 @@ func (o *Organizer) GetChunk(ctx context.Context) (types.AudioChunk, error) {
 		o.mu.Unlock()
 		return chunk, nil
 	case <-ctx.Done():
+		log.Println("Organizer: context cancelled")
 		return types.AudioChunk{}, ctx.Err()
 	}
 }
@@ -156,6 +159,7 @@ func (o *Organizer) run(ctx context.Context, initial types.ChunkIdentifier, seek
 		if err != nil {
 			// End of chapter/book, or an unresolvable offset.
 			// TODO: chapter-transition handling per design doc section 7.
+			log.Printf("Organizer: Got error while building text chunk: %s", err)
 			return
 		}
 
@@ -164,6 +168,7 @@ func (o *Organizer) run(ctx context.Context, initial types.ChunkIdentifier, seek
 			return
 		}
 		if !ok {
+			log.Printf("Organizer: Got error while fetching audio: %s", err)
 			continue // TODO: retry/backoff policy on synthesis failure
 		}
 

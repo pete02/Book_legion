@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -142,6 +143,7 @@ func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := login.RefreshAuthToken(req.Username, req.RefreshToken)
 	if err != nil {
+		log.Printf("[API] Error refreshing auth token: %v", err)
 		http.Error(w, "Could not generate auth token", http.StatusUnauthorized)
 		return
 
