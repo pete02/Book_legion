@@ -45,12 +45,24 @@ pub fn Text(book_id: String) -> Element {
             
         });
     });
+    
+
 
     use_effect(move || {
-        if !go_to_last_page() { return; }
-        if let Some(total) = total_pages() {
-            current_page.set(total - 1);
-            go_to_last_page.set(false);
+        let Some(total) = total_pages() else { return; };
+        if !is_restoring() {return;}
+        if let Some(saved_offset) = offset() {
+            spawn(async move {
+                
+                let page = text::find_page_for_offset(
+                    saved_offset,
+                    total
+                ).await;
+                tracing::debug!("set page: {}, saved offset: {}", page, saved_offset);
+                current_page.set(page);
+                gloo_timers::future::TimeoutFuture::new(0).await;
+                is_restoring.set(false);
+            });
         }
     });
 
@@ -78,32 +90,10 @@ pub fn Text(book_id: String) -> Element {
                     }
                 "#);
                 let _ = eval.send(html);
-                if let Some(pages) = text::measure_total_pages("book-content") {
-                    total_pages.set(Some(pages));
-                }
+                total_pages.set(text::measure_total_pages("book-content"))
             });
         }
     });
-
-    use_effect(move || {
-        let Some(total) = total_pages() else { return; };
-        if !is_restoring() {return;}
-        if let Some(saved_offset) = offset() {
-            spawn(async move {
-                
-                let page = text::find_page_for_offset(
-                    saved_offset,
-                    total,
-                    |p| current_page.set(p),
-                ).await;
-                tracing::debug!("set page: {}, saved offset: {}", page, saved_offset);
-                current_page.set(page);
-                gloo_timers::future::TimeoutFuture::new(0).await;
-                is_restoring.set(false);
-            });
-        }
-    });
-
 
     use_effect(move ||{
         if current_page()==-1 || *is_restoring.peek(){ 
@@ -170,7 +160,7 @@ pub fn Text(book_id: String) -> Element {
                                     go_to_last_page.set(true);
                                     gloo_timers::future::TimeoutFuture::new(0).await;
                                     text::get_new_chapter(chapter_idx(), &id, chapter_html).await;
-
+                                    current_page.set(text::measure_total_pages("book-content").unwrap_or(0))
                                 });
                             }
                         },
@@ -179,7 +169,7 @@ pub fn Text(book_id: String) -> Element {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
                             let id=b_signal();
-                            if current_page() < total_pages().unwrap_or(0) {
+                            if current_page() < text::measure_total_pages("book-content").unwrap_or(0) {
                                 *current_page.write() += 1;
                             }else{
                                 logger::tracing::debug!("change new  chapter");

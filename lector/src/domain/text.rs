@@ -184,14 +184,12 @@ pub async fn get_new_chapter(chapter_idx: usize, book_id: &str, mut chapter_sign
 pub async fn find_page_for_offset(
     target_offset: i64,
     total_pages: i32,
-    mut set_page: impl FnMut(i32),
 ) -> i32 {
     let (mut lo, mut hi) = (0, total_pages - 1);
     let mut best = 0;
 
     while lo <= hi {
         let mid = lo + (hi - lo) / 2;
-        set_page(mid);
         tracing::debug!("testing page {mid}");
         gloo_timers::future::TimeoutFuture::new(0).await;
 
