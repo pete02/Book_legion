@@ -5,14 +5,15 @@ use reqwest::{Client, Url};
 use serde_json::Value;
 
 pub async fn refresh_auth_token() -> Result<String, String> {
-    let bearer_token = env::var("TRIBUNE_LOGISTICA_API_TOKEN")
-        .map_err(|_| "missing env: TRIBUNE_LOGISTICA_API_TOKEN")?;
-
     let base_url=env::var("TRIBUNE_LOGISTICA_URL")
         .map_err(|_| "missing env: TRIBUNE_LOGISTICA_URL")?;
-    let body = serde_json::json!({ "username": "onboarder", "refresh_token": bearer_token });
+    let user=env::var("TRIBUNE_LOGISTICA_USER")
+        .map_err(|_| "missing env: TRIBUNE_LOGISTICA_USER")?;
+    let password=env::var("TRIBUNE_LOGISTICA_PASSWORD")
+        .map_err(|_| "missing env: TRIBUNE_LOGISTICA_PASSWORD")?;
+    let body = serde_json::json!({ "username": user, "password": password });
 
-    let url = Url::parse(&format!("{}/api/v1/refreshtoken",base_url))
+    let url = Url::parse(&format!("{}/api/v1/login",base_url))
         .map_err(|_| "Url const is wrong".to_string())?;
 
     let client = Client::new();
