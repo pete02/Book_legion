@@ -1,6 +1,6 @@
 use std::env;
 
-use log::{debug,error};
+use log::{debug, error, info};
 use reqwest::{Client, Url};
 use serde_json::Value;
 
@@ -29,9 +29,9 @@ pub async fn refresh_auth_token() -> Result<String, String> {
             error!("Error in refreshing: {:?}", e);
             e.to_string()
         })?;
-
-
+    info!("Response: {}", resp.status());
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        
     let new_token = json["auth_token"]
         .as_str()
         .ok_or("Invalid response")?;

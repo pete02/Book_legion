@@ -82,6 +82,65 @@ pub async fn save_book(book: &BookInfo) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "mock")]
+pub async fn fetch_book_file_as_blob_url(
+    _book_id: &str,
+    _file_path: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    Ok("data:,".to_string())
+}
+
+
+use wasm_bindgen::JsValue;
+
+#[cfg(not(feature = "mock"))]
+pub async fn fetch_book_file_as_blob_url(
+    book_id: &str,
+    file_path: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let url = format!(
+        "/api/v1/books/{}/file?file={}",
+        book_id,
+        file_path
+    );
+
+    let resp = get_with_auth(&url).await?;
+    if !resp.ok() {
+        return Err(format!(
+            "Failed to fetch file {} for book {}: {}",
+            file_path, book_id, resp.status()
+        )
+        .into());
+    }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+
+    let bytes = resp
+        .binary()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let blob_url = bytes_to_blob_url(&bytes, &content_type)
+        .map_err(|e| format!("failed to create blob url: {e:?}"))?;
+
+    Ok(blob_url)
+}
+
+#[cfg(not(feature = "mock"))]
+fn bytes_to_blob_url(bytes: &[u8], content_type: &str) -> Result<String, JsValue> {
+    let array = js_sys::Uint8Array::from(bytes);
+    let parts = js_sys::Array::new();
+    parts.push(&array.buffer());
+
+    let mut opts = web_sys::BlobPropertyBag::new();
+    opts.type_(content_type);
+
+    let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &opts)?;
+    web_sys::Url::create_object_url_with_blob(&blob)
+}
 
 
 #[cfg(not(feature = "mock"))]
@@ -154,6 +213,9 @@ pub async fn fetch_chapter_progress(
 
     Ok(chapter)
 }
+
+
+
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_book_progress(
