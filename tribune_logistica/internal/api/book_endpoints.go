@@ -1,17 +1,23 @@
 package api
 
 import (
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image/jpeg"
 	"log"
 	"mime"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 
 	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/library"
 	"github.com/book_legion-tribune_logistica/internal/types"
+	"github.com/disintegration/imaging"
 )
 
 func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
@@ -220,22 +226,87 @@ func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
+	bookID := req.PathValue("bookID")
+
+	epub, err := epub.Load(a.DB, bookID)
 	if err != nil {
 		fmt.Printf("failed to load epub: %v\n", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
 
-	cover, img_ype, err := epub.GetCover()
+	cover, imgType, err := epub.GetCover()
 	if err != nil {
 		log.Printf("[Api] GetCover: failed to load cover: %v", err)
 		http.Error(rr, "Failed to load cover", http.StatusInternalServerError)
 		return
 	}
-	rr.Header().Set("Content-Type", img_ype)
+
+	// Optional resize: /cover?width=300
+	widthParam := req.URL.Query().Get("width")
+	if widthParam == "" {
+		// No resize requested: serve original, but still let the browser cache it.
+		rr.Header().Set("Content-Type", imgType)
+		rr.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+		rr.WriteHeader(http.StatusOK)
+		rr.Write(cover)
+		return
+	}
+
+	width, err := strconv.Atoi(widthParam)
+	if err != nil || width <= 0 || width > 2000 {
+		http.Error(rr, "invalid width", http.StatusBadRequest)
+		return
+	}
+
+	thumb, thumbType, err := getOrCreateThumbnail(bookID, cover, width)
+	if err != nil {
+		log.Printf("[Api] GetCover: failed to create thumbnail: %v", err)
+		// Fall back to serving the original rather than failing the request.
+		rr.Header().Set("Content-Type", imgType)
+		rr.WriteHeader(http.StatusOK)
+		rr.Write(cover)
+		return
+	}
+
+	rr.Header().Set("Content-Type", thumbType)
+	rr.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 	rr.WriteHeader(http.StatusOK)
-	rr.Write(cover)
+	rr.Write(thumb)
+}
+
+// getOrCreateThumbnail returns a resized JPEG for the given cover bytes,
+// using an on-disk cache keyed by book ID + width + a hash of the source
+// bytes (so a replaced/updated cover naturally busts the cache).
+func getOrCreateThumbnail(bookID string, original []byte, width int) ([]byte, string, error) {
+	hash := sha1.Sum(original)
+	key := fmt.Sprintf("%s_%d_%s.jpg", bookID, width, hex.EncodeToString(hash[:8]))
+	cachePath := filepath.Join(thumbCacheDir, key)
+
+	if data, err := os.ReadFile(cachePath); err == nil {
+		return data, "image/jpeg", nil // cache hit
+	}
+
+	src, err := imaging.Decode(bytes.NewReader(original))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode cover: %w", err)
+	}
+
+	resized := imaging.Resize(src, width, 0, imaging.Lanczos) // 0 = preserve aspect ratio
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, resized, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, "", fmt.Errorf("encode thumbnail: %w", err)
+	}
+
+	if err := os.MkdirAll(thumbCacheDir, 0755); err != nil {
+		log.Printf("[Api] getOrCreateThumbnail: failed to create cache dir: %v", err)
+	} else if err := os.WriteFile(cachePath, buf.Bytes(), 0644); err != nil {
+		log.Printf("[Api] getOrCreateThumbnail: failed to write cache file: %v", err)
+		// non-fatal: still return the generated thumbnail even if caching failed
+	}
+
+	return buf.Bytes(), "image/jpeg", nil
 }
 
 func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {

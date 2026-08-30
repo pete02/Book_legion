@@ -7,11 +7,14 @@ pub fn Cover(
     #[props(default = "90%".to_string())] width: String,
     #[props(default = "400px".to_string())] max_width: String,
 ) -> Element {
+    let w=width.clone();
+
     let mut link: Signal<String> = use_signal(||"".to_owned());
     use_effect(move ||{
         let b=book_id.clone();
+        let w=w.clone();
         spawn(async move{
-            let blob=get_cached_cover(&b).await;
+            let blob=get_cached_cover(&b, &w).await;
             match blob{
                 Ok(url) => {
                     tracing::debug!("Cover URL for book{}", url);

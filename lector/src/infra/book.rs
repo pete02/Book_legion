@@ -279,12 +279,12 @@ pub async fn fetch_book_progress(
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_cover(
-    book_id: &str,) -> Result<String, Box<dyn std::error::Error>> {
+    book_id: &str, width: &str) -> Result<String, Box<dyn std::error::Error>> {
     use dioxus::logger::tracing;
 
     let url = format!(
-        "/api/v1/books/{}/cover",
-        book_id
+        "/api/v1/books/{}/cover?width={}",
+        book_id, width
     );
     tracing::info!("fetching cover for book: {}", book_id);
     let resp = get_with_auth(&url).await?;
