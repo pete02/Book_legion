@@ -98,12 +98,14 @@ pub async fn fetch_book_file_as_blob_url(
     book_id: &str,
     file_path: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    use dioxus::logger::tracing;
+
     let url = format!(
         "/api/v1/books/{}/file?file={}",
         book_id,
         file_path
     );
-
+    tracing::info!("fetching file: {}", file_path);
     let resp = get_with_auth(&url).await?;
     if !resp.ok() {
         return Err(format!(
@@ -129,7 +131,6 @@ pub async fn fetch_book_file_as_blob_url(
     Ok(blob_url)
 }
 
-#[cfg(not(feature = "mock"))]
 fn bytes_to_blob_url(bytes: &[u8], content_type: &str) -> Result<String, JsValue> {
     let array = js_sys::Uint8Array::from(bytes);
     let parts = js_sys::Array::new();
@@ -274,4 +275,52 @@ pub async fn fetch_book_progress(
         "b3" => Ok(ProgressResponse { progress: 1.0 }),
         _ => Err("no book progress found".into()),
     }
+}
+
+#[cfg(not(feature = "mock"))]
+pub async fn fetch_cover(
+    book_id: &str,) -> Result<String, Box<dyn std::error::Error>> {
+    use dioxus::logger::tracing;
+
+    let url = format!(
+        "/api/v1/books/{}/cover",
+        book_id
+    );
+    tracing::info!("fetching cover for book: {}", book_id);
+    let resp = get_with_auth(&url).await?;
+    if !resp.ok() {
+        return Err(format!(
+            "Failed to fetch cover for book {}: {}",
+            book_id, resp.status()
+        )
+        .into());
+    }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+
+    let bytes = resp
+        .binary()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let blob_url = bytes_to_blob_url(&bytes, &content_type)
+        .map_err(|e| format!("failed to create blob url: {e:?}"))?;
+
+    Ok(blob_url)
+}
+
+#[cfg(feature = "mock")]
+use crate::assets;
+#[cfg(feature = "mock")]
+pub async fn fetch_cover(
+    book_id: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use dioxus::logger::tracing;
+
+    tracing::info!("[mock] fetching cover for book: {}", book_id);
+
+    Ok(assets::MOCK_COVER.to_string())
 }

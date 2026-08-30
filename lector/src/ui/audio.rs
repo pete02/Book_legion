@@ -80,7 +80,7 @@ pub fn Audio(book_id: String) -> Element {
             div {
                 class: "flex flex-col items-center gap-4",
                 Cover {
-                    cover_path: cover_path.clone(),
+                    book_id: book_id.clone(),
                 }
                 PlayPauseButton { playing, current_header }
             }

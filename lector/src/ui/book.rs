@@ -48,7 +48,7 @@ pub fn Book(book_id: String) -> Element {
                 ",
                 // Cover stays at top/left
                 Cover {
-                    cover_path: cover_path,
+                    book_id: book_id.clone(),
                     width: "200px".to_string(),
                     max_width: "300px".to_string(),
                 }

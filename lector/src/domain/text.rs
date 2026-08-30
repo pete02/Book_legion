@@ -194,7 +194,7 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     // Matches the exact shape the Go backend emits, including the stray `&`
     // before the first query param (`?&file=`) as well as the plain `?file=` form.
     let pattern = format!(
-        r#"/api/v1/books/{}/file\?&?file=([^"'&\s]+)"#,
+    r#"/api/v1/books/{}/file\?file=([^"'&\s]+)"#,
         regex::escape(book_id)
     );
 
@@ -209,16 +209,17 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     // Dedupe by the *full matched URL* so we only fetch each asset once,
     // even if it's referenced multiple times in the chapter (e.g. shared CSS).
     let mut targets: HashMap<String, String> = HashMap::new(); // full_url -> encoded_file_path
-    for cap in re.captures_iter(html) {
+    let captures= re.captures_iter(html);
+    tracing::info!("found {} file urls", re.captures_iter(html).count());
+    for cap in  captures{
         let full_url = cap.get(0).unwrap().as_str().to_string();
         let encoded_file = cap.get(1).unwrap().as_str().to_string();
+        tracing::info!("found file url: {}", full_url);
         targets.entry(full_url).or_insert(encoded_file);
     }
 
     // Fetch all of them concurrently.
     let fetches = targets.into_iter().map(|(full_url, encoded_file)| async move {
-        // encoded_file is already percent-encoded exactly as the backend produced it,
-        // so pass it straight through rather than re-encoding.
         let result = infra::book::fetch_book_file_as_blob_url(book_id, &encoded_file).await;
         (full_url, result)
     });

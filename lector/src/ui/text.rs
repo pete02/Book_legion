@@ -21,7 +21,6 @@ pub fn Text(book_id: String) -> Element {
 
 
     use_effect(move || {
-        text::fetch_and_apply_book_css(b_signal(), css_ready);
         spawn(async move{
             tracing::debug!("load cursro");
             let bc=domain::cursor::load_bookcursor(b_signal()).await;
@@ -32,9 +31,7 @@ pub fn Text(book_id: String) -> Element {
     });
 
     use_effect(move || {
-        if !css_ready() {
-            return;
-        }
+
         if chapter_idx() == usize::MAX{
             return;
         }

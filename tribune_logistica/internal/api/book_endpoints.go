@@ -10,8 +10,8 @@ import (
 	"strconv"
 
 	"github.com/book_legion-tribune_logistica/internal/epub"
-	"github.com/book_legion-tribune_logistica/internal/types"
 	"github.com/book_legion-tribune_logistica/internal/library"
+	"github.com/book_legion-tribune_logistica/internal/types"
 )
 
 func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
@@ -212,6 +212,8 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rr).Encode(map[string]interface{}{"progress": bookProgress})
 }
 
+const thumbCacheDir = "./data/cover_cache" // adjust to wherever your app stores derived data
+
 func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
@@ -293,7 +295,6 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 	rr.WriteHeader(http.StatusOK)
 	rr.Write(file)
 }
-
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
 	_, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
