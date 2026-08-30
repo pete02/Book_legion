@@ -9,3 +9,5 @@ temp
 .env
 *.epub
 .envrc
+*.tar
+*.tgz

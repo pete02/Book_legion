@@ -41,9 +41,9 @@ services:
       - ./tribune_archivum/onboard-errors:/errs
 
   tribune_dictio:
-    image: lumilukko/tribune-dictio:${VERSION:-latest}
+    image: aria.local:5001/tribune-dictio:${VERSION:-latest}
     build:
-      context: ./tribune_archivum
+      context: ./tribune_dictio
       dockerfile: Dockerfile
     container_name: booklegion-tribune-dictio
     environment:

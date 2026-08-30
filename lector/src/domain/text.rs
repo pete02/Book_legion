@@ -169,16 +169,79 @@ pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize, book_id: &st
     domain::cursor::save_bookcursor(cursor).await;
 }
 
-pub async fn get_new_chapter(chapter_idx: usize, book_id: &str, mut chapter_signal: Signal<Option<String>>) {
-    match infra::chapters::fetch_chapter(book_id, chapter_idx).await{
-        Ok(text)=>{
-            chapter_signal.set(Some(text.replace("TOKEN_PLACEHOLDER", &domain::login::current_get_token())))
-        },
-        Err(err)=>{
+pub async fn get_new_chapter(
+    chapter_idx: usize,
+    book_id: &str,
+    mut chapter_signal: Signal<Option<String>>,
+) {
+    match infra::chapters::fetch_chapter(book_id, chapter_idx).await {
+        Ok(text) => {
+            let with_blobs = inline_file_urls_as_blobs(book_id, &text).await;
+            chapter_signal.set(Some(with_blobs));
+        }
+        Err(err) => {
             dioxus::logger::tracing::error!("failed to fetch chapter: {err:?}");
-            chapter_signal.set(Some(format!("<div><p>got error in requesting chapter {:?}, Err: {:?}</p></div>",chapter_idx, err)));
+            chapter_signal.set(Some(format!(
+                "<div><p>got error in requesting chapter {:?}, Err: {:?}</p></div>",
+                chapter_idx, err
+            )));
         }
     }
+}
+use std::collections::HashMap;
+
+async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
+    // Matches the exact shape the Go backend emits, including the stray `&`
+    // before the first query param (`?&file=`) as well as the plain `?file=` form.
+    let pattern = format!(
+        r#"/api/v1/books/{}/file\?&?file=([^"'&\s]+)"#,
+        regex::escape(book_id)
+    );
+
+    let re = match Regex::new(&pattern) {
+        Ok(re) => re,
+        Err(e) => {
+            dioxus::logger::tracing::error!("bad file-url regex: {e:?}");
+            return html.to_string();
+        }
+    };
+
+    // Dedupe by the *full matched URL* so we only fetch each asset once,
+    // even if it's referenced multiple times in the chapter (e.g. shared CSS).
+    let mut targets: HashMap<String, String> = HashMap::new(); // full_url -> encoded_file_path
+    for cap in re.captures_iter(html) {
+        let full_url = cap.get(0).unwrap().as_str().to_string();
+        let encoded_file = cap.get(1).unwrap().as_str().to_string();
+        targets.entry(full_url).or_insert(encoded_file);
+    }
+
+    // Fetch all of them concurrently.
+    let fetches = targets.into_iter().map(|(full_url, encoded_file)| async move {
+        // encoded_file is already percent-encoded exactly as the backend produced it,
+        // so pass it straight through rather than re-encoding.
+        let result = infra::book::fetch_book_file_as_blob_url(book_id, &encoded_file).await;
+        (full_url, result)
+    });
+
+    let results = futures::future::join_all(fetches).await;
+
+    let mut out = html.to_string();
+    for (full_url, result) in results {
+        match result {
+            Ok(blob_url) => {
+                out = out.replace(&full_url, &blob_url);
+            }
+            Err(err) => {
+                dioxus::logger::tracing::error!(
+                    "failed to fetch file for blob url ({full_url}): {err:?}"
+                );
+                // leave the original URL in place on failure so the browser
+                // at least attempts the direct (auth-less) request as a fallback
+            }
+        }
+    }
+
+    out
 }
 
 pub async fn find_page_for_offset(

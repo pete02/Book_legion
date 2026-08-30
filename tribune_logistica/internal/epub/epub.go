@@ -562,9 +562,8 @@ func rewriteAttr(n *html.Node, key, baseDir, bookID string) {
 			n.Attr[i].Val = ""
 			return
 		}
-		n.Attr[i].Val = fmt.Sprintf("/api/v1/books/%s/file?token=%s&file=%s",
+		n.Attr[i].Val = fmt.Sprintf("/api/v1/books/%s/file?&file=%s",
 			url.PathEscape(bookID),
-			chapterTokenPlaceholder,
 			url.QueryEscape(resolved),
 		)
 		return
