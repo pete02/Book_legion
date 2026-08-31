@@ -278,6 +278,29 @@ func (e *Epub) LoadSpine() ([]SpineItem, error) {
 	return spine, nil
 }
 
+type NavHtml struct {
+	Body struct {
+		Nav []struct {
+			Type string `xml:"type,attr"`
+			Ol   NavOl  `xml:"ol"`
+		} `xml:"nav"`
+	} `xml:"body"`
+}
+
+type NavOl struct {
+	Li []NavLi `xml:"li"`
+}
+
+type NavLi struct {
+	A  *NavA  `xml:"a"`
+	Ol *NavOl `xml:"ol"` // nested sub-lists, if any
+}
+
+type NavA struct {
+	Href string `xml:"href,attr"`
+	Text string `xml:",chardata"`
+}
+
 func (e *Epub) GetToc() ([]PrettySpineItem, error) {
 	navPath, err := e.findNavPath()
 	if err != nil {
@@ -289,29 +312,70 @@ func (e *Epub) GetToc() ([]PrettySpineItem, error) {
 		return nil, fmt.Errorf("loading nav file %q: %w", navPath, err)
 	}
 
-	var nav NavToc
-	if err := xml.Unmarshal(navData, &nav); err != nil {
-		return nil, fmt.Errorf("unmarshal nav toc: %w", err)
+	navDir := path.Dir(navPath)
+	var flat []struct {
+		Href  string
+		Label string
 	}
 
-	// flatten nav points recursively, preserving document order
-	var flat []NavPoint
-	var flatten func([]NavPoint)
-	flatten = func(points []NavPoint) {
-		for _, np := range points {
-			flat = append(flat, np)
-			if len(np.Children) > 0 {
-				flatten(np.Children)
+	if strings.EqualFold(path.Ext(navPath), ".ncx") {
+		// EPUB2: navMap>navPoint
+		var nav NavToc
+		if err := xml.Unmarshal(navData, &nav); err != nil {
+			return nil, fmt.Errorf("unmarshal nav toc (ncx): %w", err)
+		}
+
+		var flattenNcx func([]NavPoint)
+		flattenNcx = func(points []NavPoint) {
+			for _, np := range points {
+				flat = append(flat, struct {
+					Href  string
+					Label string
+				}{Href: np.Content.Src, Label: np.Label})
+				if len(np.Children) > 0 {
+					flattenNcx(np.Children)
+				}
 			}
 		}
+		flattenNcx(nav.NavPoints)
+	} else {
+		// EPUB3: <nav epub:type="toc"><ol><li><a>
+		var nav NavHtml
+		if err := xml.Unmarshal(navData, &nav); err != nil {
+			return nil, fmt.Errorf("unmarshal nav toc (html): %w", err)
+		}
+
+		var tocOl *NavOl
+		for i := range nav.Body.Nav {
+			if nav.Body.Nav[i].Type == "toc" {
+				tocOl = &nav.Body.Nav[i].Ol
+				break
+			}
+		}
+		if tocOl == nil {
+			return nil, errors.New("no nav with epub:type=\"toc\" found")
+		}
+
+		var flattenHtml func(NavOl)
+		flattenHtml = func(ol NavOl) {
+			for _, li := range ol.Li {
+				if li.A != nil {
+					flat = append(flat, struct {
+						Href  string
+						Label string
+					}{Href: li.A.Href, Label: strings.TrimSpace(li.A.Text)})
+				}
+				if li.Ol != nil {
+					flattenHtml(*li.Ol)
+				}
+			}
+		}
+		flattenHtml(*tocOl)
 	}
-	flatten(nav.NavPoints)
 
-	navDir := path.Dir(navPath)
 	pretty := make([]PrettySpineItem, 0, len(flat))
-
-	for i, np := range flat {
-		href := strings.SplitN(np.Content.Src, "#", 2)[0] // strip fragment
+	for i, item := range flat {
+		href := strings.SplitN(item.Href, "#", 2)[0] // strip fragment
 		if href == "" {
 			continue
 		}
@@ -319,7 +383,7 @@ func (e *Epub) GetToc() ([]PrettySpineItem, error) {
 		pretty = append(pretty, PrettySpineItem{
 			Index:  i,
 			Number: i + 1,
-			Title:  np.Label,
+			Title:  item.Label,
 			Href:   path.Join(navDir, href),
 		})
 	}
@@ -330,7 +394,6 @@ func (e *Epub) GetToc() ([]PrettySpineItem, error) {
 
 	return pretty, nil
 }
-
 func (e *Epub) findOPFPath() (string, error) {
 	containerData, err := e.GetFile("META-INF/container.xml")
 	if err == nil {
