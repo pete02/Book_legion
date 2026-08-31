@@ -7,7 +7,6 @@ use crate::{Route, domain::{self, text}, infra, ui::components::{TopBar, TopBarE
 #[component]
 pub fn Text(book_id: String) -> Element {
     let b_signal = use_signal(|| book_id.clone());
-    let css_ready: Signal<bool> = use_signal(|| false);
     let show_extra = use_signal(|| false);
 
     let chapter_html: Signal<Option<String>> = use_signal(|| None);
@@ -111,7 +110,7 @@ pub fn Text(book_id: String) -> Element {
         TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
     ];
 
-    if !css_ready() || chapter_html().is_none() {
+    if chapter_html().is_none() {
         return rsx!(div { id: "book-renderer", "Loading reader…" });
     }
 

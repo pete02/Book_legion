@@ -1,7 +1,7 @@
 
 services:
   backend:
-    image: lumilukko/tribune-logistica-staging:${VERSION:-latest}
+    image: lumilukko/tribune-logistica:${VERSION:-latest}
     build:
       context: ./tribune_logistica
       dockerfile: Dockerfile
@@ -25,7 +25,7 @@ services:
       - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
 
   onboarder:
-    image: lumilukko/tribune-archivum-staging:${VERSION:-latest}
+    image: lumilukko/tribune-archivum:${VERSION:-latest}
     build:
       context: ./tribune_archivum
       dockerfile: Dockerfile
@@ -54,7 +54,7 @@ services:
 
 
   frontend:
-    image: lumilukko/lector-staging:${VERSION:-latest}
+    image: lumilukko/lector:${VERSION:-latest}
     build:
       context: ./lector
       dockerfile: Dockerfile

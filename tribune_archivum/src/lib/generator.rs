@@ -7,11 +7,16 @@ use crate::lib::{helpers, nav_model::{Html, Nav}, opf_model::Package, toc_model:
 
 pub fn generate_toc(path: &Path)->Result<(), Box<dyn std::error::Error>>{
     let mut archive=helpers::get_zip(path).map_err(|e|format!("error in poening zip: {}", e))?;
+    let opf_path = helpers::read_container_opf_path(&mut archive).map_err(|e| format!("Failed to get opf path: {}", e))?;
     let opf_struct=helpers::get_opf_struct(&mut archive).map_err(|e|format!("error in getting opf struct: {}",e))?;
     let nav_file=opf_struct.manifest.item.iter().filter(|f|f.id.contains("nav.")).next();
+    let opf_dir = Path::new(&opf_path).parent().unwrap_or_else(|| Path::new(""));
 
     if let Some(f)=nav_file{
-        let mut nav_file=archive.by_name(&f.href).map_err(|e|format!("error in getting nav_file: {}",e))?;
+        let nav_full_path = opf_dir.join(&f.href);
+        let nav_full_path_str = nav_full_path.to_string_lossy().replace('\\', "/"); // zip paths use '/'
+
+        let mut nav_file=archive.by_name(&nav_full_path_str).map_err(|e|format!("error in getting nav_file: {}, file. {}",e, f.href))?;
         let mut buf=Default::default();
         nav_file.read_to_string(&mut buf)?;
         let nav:Html=quick_xml::de::from_str(&buf).map_err(|e|format!("Error in reading xml to nav: {}", e))?;
@@ -22,10 +27,9 @@ pub fn generate_toc(path: &Path)->Result<(), Box<dyn std::error::Error>>{
 
         let toc=nav_to_ncx(&toc_nav, nav.head.title.clone())?;
         let toc_xml=quick_xml::se::to_string(&toc)?;
-        rewrite_epub_with_new_file(path, &Path::new(&f.href), &toc_xml).map_err(|e|format!("error in rewriting: {}", e))?;
+        rewrite_epub_with_new_file(path, &nav_full_path, &toc_xml).map_err(|e|format!("error in rewriting: {}", e))?;
 
     }else{
-        let opf_path=helpers::read_container_opf_path(&mut archive).map_err(|e|format!("Failed to get opf path: {}",e))?;
         let opf=helpers::get_opf_struct(&mut archive).map_err(|e|format!("failed to get opf struct: {}", e))?;
         let toc=spine_to_ncx(&opf).map_err(|e|format!("failed to generate ncx: {}",e))?;
         let toc_xml=quick_xml::se::to_string(&toc).map_err(|e|format!("failed to make toc xml: {}",e))?;
@@ -237,7 +241,7 @@ fn update_opf(opf_xml: &str, toc_path: &str) -> Result<String, Box<dyn std::erro
 }
 
 use urlencoding::decode;
-fn nav_to_ncx(nav: &Nav, head:String) -> Result<Ncx, Box<dyn std::error::Error>> {
+fn nav_to_ncx(nav: &Nav, head: Option<String>) -> Result<Ncx, Box<dyn std::error::Error>> {
     // Ensure this is actually a TOC nav
     if nav.epub_type != "toc" {
         return Err("Nav is not a TOC (epub:type != toc)".into());
@@ -246,8 +250,10 @@ fn nav_to_ncx(nav: &Nav, head:String) -> Result<Ncx, Box<dyn std::error::Error>>
     let mut nav_points = Vec::new();
 
     for (index, li) in nav.ol.li.iter().enumerate() {
-        let href = decode(li.a.href.trim())?.into_owned();
-        let text = li.a.text
+        let a = li.a.as_ref().ok_or("Nav entry missing <a> element")?;
+
+        let href = decode(a.href.trim())?.into_owned();
+        let text = a.text
             .as_deref()
             .unwrap_or("")
             .trim();
@@ -273,7 +279,7 @@ fn nav_to_ncx(nav: &Nav, head:String) -> Result<Ncx, Box<dyn std::error::Error>>
                 text: text.to_string(),
             },
             content: Content {
-                src: href.to_string(),
+                src: href,
             },
         };
 
@@ -284,12 +290,17 @@ fn nav_to_ncx(nav: &Nav, head:String) -> Result<Ncx, Box<dyn std::error::Error>>
         return Err("Nav contains no entries".into());
     }
 
+    let title = head
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| "Table of Contents".to_string());
+
     Ok(Ncx {
         xmlns: "http://www.daisy.org/z3986/2005/ncx/".to_string(),
         text: None,
         head: Head {},
         doc_title: DocTitle {
-            text: head,
+            text: title,
         },
         nav_map: NavMap {
             nav_point: nav_points,
