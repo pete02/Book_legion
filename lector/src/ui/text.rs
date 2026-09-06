@@ -80,11 +80,30 @@ pub fn Text(book_id: String) -> Element {
                 let mut eval = document::eval(r#"
                     const html = await dioxus.recv();
                     const host = document.getElementById("book-content");
+
                     if (host) {
                         const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-                        root.innerHTML = html;
+
+                        root.innerHTML = `
+                            <style>
+                                img {
+                                    display: block !important;
+                                    margin-left: auto !important;
+                                    margin-right: auto !important;
+                                    max-width: 100% !important;
+                                    max-height: 90dvh !important;
+                                    width: auto !important;
+                                    height: auto !important;
+                                    object-fit: contain;
+                                    break-inside: avoid;
+                                    page-break-inside: avoid;
+                                }
+                            </style>
+                            ${html}
+                        `;
                     }
                 "#);
+
                 let _ = eval.send(html);
                 total_pages.set(text::measure_total_pages("book-content"))
             });
