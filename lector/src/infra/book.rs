@@ -317,6 +317,7 @@ use crate::assets;
 #[cfg(feature = "mock")]
 pub async fn fetch_cover(
     book_id: &str,
+    width: &str
 ) -> Result<String, Box<dyn std::error::Error>> {
     use dioxus::logger::tracing;
 

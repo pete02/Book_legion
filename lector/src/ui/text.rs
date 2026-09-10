@@ -18,6 +18,8 @@ pub fn Text(book_id: String) -> Element {
     let mut chapter_idx: Signal<usize> = use_signal(|| usize::MAX);
     let mut is_restoring: Signal<bool> = use_signal(|| true);
 
+    let mut moved_page: Signal<bool> = use_signal(|| false);
+
 
     use_effect(move || {
         spawn(async move{
@@ -42,20 +44,47 @@ pub fn Text(book_id: String) -> Element {
         });
     });
     
+    use_effect(move || {
+        // Track the signal so this effect reacts if the user turns
+        // page movement on/off.
+        let moved = moved_page();
 
+        if moved {
+            return;
+        }
+
+        let Some(saved_offset) = offset() else {
+            return;
+        };
+
+        spawn(async move {
+            // Let the browser finish the resize/reflow first.
+            gloo_timers::future::TimeoutFuture::new(50).await;
+
+            // The user may have turned the page during the delay.
+            if moved_page() {
+                return;
+            }
+
+            let Some(width) = text::measure_element_width("book-renderer") else {
+                return;
+            };
+
+            column_width_px.set(Some(width));
+
+            if let Some(page) = text::resolve_offset_to_page(saved_offset, width) {
+                current_page.set(page);
+            }
+        });
+    });
 
     use_effect(move || {
         let Some(total) = total_pages() else { return; };
         if !is_restoring() {return;}
         if let Some(saved_offset) = offset() {
             spawn(async move {
-                
-                let page = text::find_page_for_offset(
-                    saved_offset,
-                    total
-                ).await;
-                tracing::debug!("set page: {}, saved offset: {}", page, saved_offset);
-                current_page.set(page);
+                tracing::debug!("set page: {}, saved offset: {}", 0, saved_offset);
+                current_page.set(0);
                 gloo_timers::future::TimeoutFuture::new(0).await;
                 is_restoring.set(false);
             });
@@ -92,8 +121,6 @@ pub fn Text(book_id: String) -> Element {
                                     margin-right: auto !important;
                                     max-width: 100% !important;
                                     max-height: 90dvh !important;
-                                    width: auto !important;
-                                    height: auto !important;
                                     object-fit: contain;
                                     break-inside: avoid;
                                     page-break-inside: avoid;
@@ -163,6 +190,7 @@ pub fn Text(book_id: String) -> Element {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         disabled: *current_page.read() <= 0 && chapter_idx() == 0,
                         onclick: move |_| {
+                            moved_page.set(true);
                             let id = b_signal();
                             let should_load_prev_chapter = *current_page.read() <= 0;
 
@@ -183,6 +211,7 @@ pub fn Text(book_id: String) -> Element {
                     button {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
+                            moved_page.set(true);
                             let id=b_signal();
                             if current_page() < text::measure_total_pages("book-content").unwrap_or(0) {
                                 *current_page.write() += 1;

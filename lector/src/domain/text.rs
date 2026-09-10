@@ -245,30 +245,154 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     out
 }
 
-pub async fn find_page_for_offset(
-    target_offset: i64,
-    total_pages: i32,
-) -> i32 {
-    let (mut lo, mut hi) = (0, total_pages - 1);
-    let mut best = 0;
-
-    while lo <= hi {
-        let mid = lo + (hi - lo) / 2;
-        tracing::debug!("testing page {mid}");
-        gloo_timers::future::TimeoutFuture::new(0).await;
-
-        match measure_current_page_html_offset().await {
-            Some(offset) if offset <= target_offset => {
-                tracing::debug!("Got offset {offset} <= {target_offset}");
-                best = mid;
-                lo = mid + 1;
-            }
-            _ => {
-                hi = mid - 1;
-                tracing::debug!("no offset found for page {mid}");
-            }
-        }
+use web_sys::{ Element, Node, NodeFilter, ShadowRoot};
+pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> {
+    if !column_width_px.is_finite() || column_width_px <= 0.0 {
+        return None;
     }
 
-    best
+    let document = web_sys::window()?.document()?;
+    let host = document.get_element_by_id("book-content")?;
+    let shadow_root = host.shadow_root()?;
+
+    let (node, local_offset) =
+        find_node_at_offset(&document, &shadow_root, offset)?;
+
+    let rect_left = caret_left(&document, &node, local_offset)?;
+
+    let host_rect = host.get_bounding_client_rect();
+
+
+
+    let local_x = rect_left - host_rect.left();
+    web_sys::console::log_1(
+        &format!(
+            "offset={offset}, local_offset={local_offset}, \
+             rect_left={rect_left}, host_left={}, \
+             local_x={}, node_text={:?}",
+            host_rect.left(),
+            rect_left - host_rect.left(),
+            node.text_content(),
+        )
+        .into(),
+    );
+
+    Some(((local_x / column_width_px).floor() as i32).max(0))
+}
+/// Walks all text nodes under `root` in document order, accumulating UTF-16
+/// length, until the node containing `offset` is found.
+///
+/// Negative offsets clamp to the very first text node. Offsets past the end
+/// of all text clamp to the end of the last text node (end of chapter).
+fn find_node_at_offset(
+    _document: &web_sys::Document,
+    root: &web_sys::ShadowRoot,
+    offset: i64,
+) -> Option<(web_sys::Node, u32)> {
+    let root: &web_sys::Node = root.unchecked_ref();
+
+    let target = offset.max(0);
+    let mut current = 0i64;
+    let mut last_text_node = None;
+    let mut last_text_len = 0u32;
+
+    fn visit(
+        node: &web_sys::Node,
+        target: i64,
+        current: &mut i64,
+        last_text_node: &mut Option<web_sys::Node>,
+        last_text_len: &mut u32,
+    ) -> Option<(web_sys::Node, u32)> {
+        if node.node_type() == web_sys::Node::TEXT_NODE {
+            let text = node.text_content().unwrap_or_default();
+
+            if text.trim().is_empty() {
+                return None;
+            }
+
+            let len = text.encode_utf16().count() as i64;
+
+            *last_text_node = Some(node.clone());
+            *last_text_len = len as u32;
+
+            if target < *current + len {
+                return Some((
+                    node.clone(),
+                    (target - *current) as u32,
+                ));
+            }
+
+            *current += len;
+            return None;
+        }
+
+        let children = node.child_nodes();
+
+        for i in 0..children.length() {
+            if let Some(child) = children.item(i) {
+                if let Some(result) = visit(
+                    &child,
+                    target,
+                    current,
+                    last_text_node,
+                    last_text_len,
+                ) {
+                    return Some(result);
+                }
+            }
+        }
+
+        None
+    }
+
+    visit(
+        root,
+        target,
+        &mut current,
+        &mut last_text_node,
+        &mut last_text_len,
+    )
+    .or_else(|| {
+        last_text_node.map(|node| (node, last_text_len))
+    })
+}
+/// Returns the viewport-relative x position of the caret at `local_offset`
+/// within `node`'s text. Tries a non-collapsed range first (more reliably
+/// gives a real rect in most engines); falls back to a collapsed range at
+/// the end of the node if we're already at its last character.
+fn caret_left(document: &Document, node: &Node, local_offset: u32) -> Option<f64> {
+    let text_len = node
+        .text_content()
+        .unwrap_or_default()
+        .encode_utf16()
+        .count() as u32;
+
+    let range = document.create_range().ok()?;
+    range.set_start(node, local_offset).ok()?;
+
+    let end_offset = (local_offset + 1).min(text_len);
+    if end_offset > local_offset {
+        range.set_end(node, end_offset).ok()?;
+    }
+    // else: local_offset == text_len == 0 case already filtered out by caller
+    // (empty text nodes are skipped in find_node_at_offset), so this branch
+    // only hits when local_offset == text_len for a non-empty node — a
+    // collapsed range at the very end, which still yields a valid rect.
+
+    let rect = range.get_bounding_client_rect();
+    if rect.width() > 0.0 || rect.height() > 0.0 {
+        return Some(rect.left());
+    }
+
+    // Fallback: some engines return an empty rect for boundary positions
+    // (e.g. right at a line/column break). Try the other direction.
+    if local_offset > 0 {
+        let range2 = document.create_range().ok()?;
+        range2.set_start(node, local_offset - 1).ok()?;
+        range2.set_end(node, local_offset).ok()?;
+        let rect2 = range2.get_bounding_client_rect();
+        return Some(rect2.right());
+    }
+
+    Some(rect.left())
 }
