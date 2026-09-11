@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/book_legion-tribune_logistica/internal/storage"
 )
@@ -29,33 +28,28 @@ type Manifest struct {
 	Series []SeriesEntry `json:"series"`
 }
 
-func SaveBook(store storage.Storage, b Book) error {
-	if err := AddBookToManifest(store, b); err != nil {
-		return err
+func SaveBook(store *storage.SQLStorage, b Book) error {
+	series := SeriesEntry{
+		SeriesID:    b.SeriesID,
+		SeriesName:  b.SeriesName,
+		FirstBookID: b.ID,
+	}
+	err := saveSeriesRow(store, series)
+	if err != nil {
+		return fmt.Errorf("failed to save series row: %w", err)
 	}
 	return saveBookRow(store, b)
 }
 
-func LoadBook(store storage.Storage, id string) (Book, error) {
-	book, err := loadBookRow(store, id)
-	if err != nil {
-		return Book{}, err
-	}
-	return enrichBookWithSeriesName(store, book)
+func LoadBook(store *storage.SQLStorage, id string, userID *string) (Book, error) {
+	return loadBookRow(store, id, userID)
 }
 
-func LoadBooks(store storage.Storage, seriesID string) ([]Book, error) {
-	books, err := loadAllBookRows(store, map[string]interface{}{"series_id": seriesID})
-	if err != nil {
-		return nil, err
-	}
-	return enrichBooksWithSeriesNames(store, books)
-}
-func DeleteBook(store storage.Storage, bookID string) error {
+func DeleteBook(store *storage.SQLStorage, bookID string) error {
 	if bookID == "" {
 		return fmt.Errorf("bookID is required")
 	}
-	book, err := loadBookRow(store, bookID)
+	book, err := loadBookRowAuth(store, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to load book %s before deletion: %w", bookID, err)
 	}
@@ -67,42 +61,19 @@ func DeleteBook(store storage.Storage, bookID string) error {
 	return deleteBookRow(store, bookID)
 }
 
-func LoadManifest(store storage.Storage) (Manifest, error) {
-	entries, err := loadAllSeriesRows(store)
-	if err != nil {
-		return Manifest{Series: []SeriesEntry{}}, nil
-	}
-	return Manifest{Series: entries}, nil
+func LoadManifest(store *storage.SQLStorage, userID *string) (Manifest, error) {
+	return loadManifest(store, userID)
 }
 
-func SaveManifest(store storage.Storage, m Manifest) error {
-	existing, _ := loadAllSeriesRows(store)
-	for _, entry := range existing {
-		_ = deleteSeriesRow(store, entry.SeriesID)
-	}
-	seen := make(map[string]bool)
-	for _, entry := range m.Series {
-		if seen[entry.SeriesID] {
-			continue
-		}
-		seen[entry.SeriesID] = true
-		if err := saveSeriesRow(store, entry); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ValidateBooks(store storage.Storage) error {
-	books, err := loadAllBookRows(store, nil)
+func ValidateBooks(store *storage.SQLStorage) error {
+	books, err := loadAllBookRows(store)
 	if err != nil {
 		return err
 	}
 	for _, book := range books {
 		if _, err := os.Stat(book.FilePath); err != nil {
 			if os.IsNotExist(err) {
-				_ = deleteBookRow(store, book.ID)
-				continue
+				return fmt.Errorf("EPUB file missing for book %s: %s", book.ID, book.FilePath)
 			}
 			return fmt.Errorf("failed to stat file for book %s: %w", book.ID, err)
 		}
@@ -110,95 +81,107 @@ func ValidateBooks(store storage.Storage) error {
 	return nil
 }
 
-func DeleteSeries(store storage.Storage, seriesID string) error {
-	books, err := loadAllBookRows(store, map[string]interface{}{"series_id": seriesID})
-	if err != nil && !strings.Contains(err.Error(), "table not found") {
-		return fmt.Errorf("failed to query books for series %s: %w", seriesID, err)
-	}
-	if len(books) > 0 {
-		return fmt.Errorf("cannot delete series %s: series is not empty", seriesID)
-	}
-	manifest, err := LoadManifest(store)
+func CleanupBooks(store *storage.SQLStorage) error {
+	books, err := loadAllBookRows(store)
 	if err != nil {
-		return fmt.Errorf("failed to load manifest: %w", err)
+		return err
 	}
-	filtered := manifest.Series[:0]
-	removed := false
-	for _, entry := range manifest.Series {
-		if entry.SeriesID == seriesID {
-			removed = true
-			continue
+
+	for _, book := range books {
+		if _, err := os.Stat(book.FilePath); err != nil {
+			if os.IsNotExist(err) {
+				if err := deleteBookRow(store, book.ID); err != nil {
+					return fmt.Errorf("failed to delete missing book %s: %w", book.ID, err)
+				}
+				continue
+			}
+
+			return fmt.Errorf("failed to stat file for book %s: %w", book.ID, err)
 		}
-		filtered = append(filtered, entry)
 	}
-	if !removed {
-		return fmt.Errorf("series %s not found in manifest", seriesID)
-	}
-	manifest.Series = filtered
-	return SaveManifest(store, manifest)
+
+	return nil
 }
 
-func UpdateSeriesName(store storage.Storage, seriesID string, newName string) error {
+func DeleteSeries(store *storage.SQLStorage, seriesID string) error {
 	if seriesID == "" {
 		return fmt.Errorf("seriesID is required")
 	}
 
-	manifest, err := LoadManifest(store)
+	var exists bool
+	err := store.DB.QueryRow(
+		`
+		SELECT EXISTS (
+			SELECT 1
+			FROM `+SeriesTable+`
+			WHERE series_id = ?
+		)
+		`,
+		seriesID,
+	).Scan(&exists)
 	if err != nil {
-		return fmt.Errorf("failed to load manifest: %w", err)
+		return err
 	}
 
-	for i, entry := range manifest.Series {
-		if entry.SeriesID == seriesID {
-			manifest.Series[i].SeriesName = newName
-			return SaveManifest(store, manifest)
-		}
+	if !exists {
+		return fmt.Errorf("series %s not found", seriesID)
 	}
 
-	return fmt.Errorf("series %s not found in manifest", seriesID)
+	var bookCount int
+	err = store.DB.QueryRow(
+		`
+		SELECT COUNT(*)
+		FROM `+BooksTable+`
+		WHERE series_id = ?
+		`,
+		seriesID,
+	).Scan(&bookCount)
+	if err != nil {
+		return fmt.Errorf("failed to check books for series %s: %w", seriesID, err)
+	}
+
+	if bookCount > 0 {
+		return fmt.Errorf("cannot delete series %s: series is not empty", seriesID)
+	}
+
+	_, err = store.DB.Exec(
+		`
+		DELETE FROM `+SeriesTable+`
+		WHERE series_id = ?
+		`,
+		seriesID,
+	)
+	return err
 }
 
-func AddBookToManifest(store storage.Storage, book Book) error {
-	fmt.Printf("saving: %v\n", book)
-	manifest, err := LoadManifest(store)
+func UpdateSeriesName(store *storage.SQLStorage, seriesID string, newName string) error {
+	if seriesID == "" {
+		return fmt.Errorf("seriesID is required")
+	}
+
+	result, err := store.DB.Exec(
+		`
+		UPDATE `+SeriesTable+`
+		SET series_name = ?
+		WHERE series_id = ?
+		`,
+		newName,
+		seriesID,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to load manifest: %w", err)
+		return err
 	}
 
-	// Look for existing series entry
-	found := false
-	index := 0
-
-	for i, entry := range manifest.Series {
-		fmt.Printf("got: %v\n", entry.SeriesID)
-		if entry.SeriesID == book.SeriesID {
-			fmt.Printf("pk\n")
-			index = i
-			found = true
-			break
-		}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
 	}
 
-	// If series not found, add a new entry
-	if !found {
-		newEntry := SeriesEntry{
-			SeriesID:    book.SeriesID,
-			SeriesName:  book.SeriesName, // optional, you can fill if available
-			FirstBookID: book.ID,
-		}
-		manifest.Series = append(manifest.Series, newEntry)
-	} else {
-		bookID := manifest.Series[index].FirstBookID
-		firstBook, err := LoadBook(store, bookID)
-		if err != nil {
-			// First book no longer exists or hasn't been saved yet — claim the spot
-			manifest.Series[index].FirstBookID = book.ID
-		} else if book.SeriesOrder < firstBook.SeriesOrder {
-			manifest.Series[index].FirstBookID = book.ID
-		}
+	if rowsAffected == 0 {
+		return fmt.Errorf("series %s not found", seriesID)
 	}
 
-	return SaveManifest(store, manifest)
+	return nil
 }
 
 func GetAbsolutePath(stored string) string {

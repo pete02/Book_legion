@@ -8,11 +8,44 @@ import (
 )
 
 type SQLStorage struct {
-	db *sql.DB
+	DB *sql.DB
 }
 
-func NewSQLStorage(db *sql.DB) *SQLStorage {
-	return &SQLStorage{db: db}
+func NewSQLStorage(DB *sql.DB) (*SQLStorage, error) {
+	s := &SQLStorage{DB: DB}
+	err := s.initSchema()
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *SQLStorage) initSchema() error {
+	_, err := s.DB.Exec(`
+		CREATE TABLE IF NOT EXISTS series (
+			series_id TEXT PRIMARY KEY,
+			series_name TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS books (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			author_id TEXT,
+			series_id TEXT NOT NULL,
+			series_order INTEGER NOT NULL,
+			file_path TEXT NOT NULL,
+			FOREIGN KEY (series_id) REFERENCES series(series_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS user_access (
+			book_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			PRIMARY KEY (book_id, user_id),
+			FOREIGN KEY (book_id) REFERENCES books(id)
+		);
+	`)
+
+	return err
 }
 
 func (s *SQLStorage) Query(table string, filter map[string]interface{}) ([]map[string]interface{}, error) {
@@ -32,13 +65,13 @@ func (s *SQLStorage) Query(table string, filter map[string]interface{}) ([]map[s
 		i++
 	}
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	return rowsToMap(rows)
+	return RowsToMap(rows)
 }
 
 func sqliteType(val interface{}) string {
@@ -61,7 +94,7 @@ func (s *SQLStorage) Insert(table string, primaryKey string, row map[string]inte
 
 	// Ensure table exists
 	pkType := sqliteType(row[primaryKey])
-	_, err := s.db.Exec(fmt.Sprintf(
+	_, err := s.DB.Exec(fmt.Sprintf(
 		"CREATE TABLE IF NOT EXISTS %s (%s %s PRIMARY KEY)",
 		table,
 		primaryKey,
@@ -77,7 +110,7 @@ func (s *SQLStorage) Insert(table string, primaryKey string, row map[string]inte
 			continue
 		}
 		colType := sqliteType(val)
-		_, err := s.db.Exec(fmt.Sprintf(
+		_, err := s.DB.Exec(fmt.Sprintf(
 			"ALTER TABLE %s ADD COLUMN %s %s",
 			table,
 			col,
@@ -114,17 +147,17 @@ func (s *SQLStorage) Insert(table string, primaryKey string, row map[string]inte
 		strings.Join(assignments, ", "),
 	)
 
-	_, err = s.db.Exec(query, values...)
+	_, err = s.DB.Exec(query, values...)
 	return err
 }
 func (s *SQLStorage) GetAll(table string) ([]map[string]interface{}, error) {
-	rows, err := s.db.Query(fmt.Sprintf("SELECT * FROM %s", table))
+	rows, err := s.DB.Query(fmt.Sprintf("SELECT * FROM %s", table))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	return rowsToMap(rows)
+	return RowsToMap(rows)
 }
 
 func (s *SQLStorage) Delete(table string, filter map[string]interface{}) error {
@@ -148,12 +181,12 @@ func (s *SQLStorage) Delete(table string, filter map[string]interface{}) error {
 		strings.Join(conds, " AND "),
 	)
 
-	_, err := s.db.Exec(query, args...)
+	_, err := s.DB.Exec(query, args...)
 	return err
 }
 
 // helper: convert sql.Rows to []map[string]interface{}
-func rowsToMap(rows *sql.Rows) ([]map[string]interface{}, error) {
+func RowsToMap(rows *sql.Rows) ([]map[string]interface{}, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err

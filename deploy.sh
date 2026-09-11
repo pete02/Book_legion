@@ -1,0 +1,1 @@
+docker compose build && docker compose push &&  ssh servu "docker compose -f /mnt/private/Serversetup/docker_compose/booklegion.yaml up -d --pull always"

@@ -33,3 +33,11 @@ tribune_build(){
   docker build -t "lumilukko/${name}" . && \
   docker push "lumilukko/${name}"
 }
+
+test(){
+  ./test.sh
+}
+
+deploy(){
+  ./deploy.sh
+}

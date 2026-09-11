@@ -1,0 +1,1 @@
+docker compose -f docker-compose-test.yaml build && docker compose -f docker-compose-test.yaml push &&  ssh servu "docker compose -f /mnt/private/Serversetup/docker_compose/staging.yaml up -d --pull always"

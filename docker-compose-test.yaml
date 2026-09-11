@@ -1,0 +1,73 @@
+
+services:
+  backend:
+    image: lumilukko/tribune-logistica-staging:${VERSION:-latest}
+    build:
+      context: ./tribune_logistica
+      dockerfile: Dockerfile
+    container_name: tribune_logistica-gen
+    volumes:
+      - ./tribune_logistica/config:/config
+      - ./tribune_logistica/data:/data
+    environment:
+      - TTS_BACKEND=http
+      - TTS_API_URL=http://192.168.88.241:8888/tts
+      - LIBRARY_ROOT=/data
+      - TRIBUNE_LOGISTICA_ADMIN_TOKEN=token
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Router for backend
+      - "traefik.http.routers.booklegion-backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.booklegion-backend.entrypoints=web"
+
+      # Service port inside container
+      - "traefik.http.services.booklegion-backend.loadbalancer.server.port=8000"
+
+  onboarder:
+    image: lumilukko/tribune-archivum-staging:${VERSION:-latest}
+    build:
+      context: ./tribune_archivum
+      dockerfile: Dockerfile
+    container_name: tribune-archivum
+    restart: unless-stopped
+    environment:
+      - HARDCOVER_API_ENDPOINT=https://api.hardcover.app/v1/graphql
+      - TRIBUNE_LOGISTICA_URL=http://tribune-logistica:8000
+      - RUST_LOG=info
+    volumes:
+      - ./tribune_logistica/data:/data
+      - ./tribune_archivum/onboard:/onboard
+      - ./tribune_archivum/onboard-errors:/errs
+
+  frontend:
+    image: lumilukko/lector-staging:${VERSION:-latest}
+    build:
+      context: ./lector
+      dockerfile: Dockerfile
+    container_name: lector-gen
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80" 
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    command:
+      - "--api.insecure=true"              # Enable Traefik dashboard at :8081
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:8000"  # Expose HTTP on port 8000
+    ports:
+      - "8000:8000"   # Main HTTP port
+      - "8081:8081"   # Dashboard (optional)
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: unless-stopped

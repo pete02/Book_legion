@@ -20,9 +20,12 @@ func setupTestDB(t *testing.T) *sql.DB {
 
 func TestSQLStorage_InsertAndGetAll(t *testing.T) {
 	db := setupTestDB(t)
-	st := NewSQLStorage(db)
+	st, err := NewSQLStorage(db)
+	if err != nil {
+		t.Fatalf("failed to create SQLStorage: %v", err)
+	}
 
-	err := st.Insert("users", "name", map[string]interface{}{
+	err = st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 		"age":  30,
 	})
@@ -46,9 +49,12 @@ func TestSQLStorage_InsertAndGetAll(t *testing.T) {
 
 func TestSQLStorage_InsertTwice(t *testing.T) {
 	db := setupTestDB(t)
-	st := NewSQLStorage(db)
+	st, err := NewSQLStorage(db)
+	if err != nil {
+		t.Fatalf("failed to create SQLStorage: %v", err)
+	}
 
-	err := st.Insert("users", "name", map[string]interface{}{
+	err = st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 		"age":  30,
 	})
@@ -83,7 +89,10 @@ func TestSQLStorage_InsertTwice(t *testing.T) {
 
 func TestSQLStorage_QueryWithFilter(t *testing.T) {
 	db := setupTestDB(t)
-	st := NewSQLStorage(db)
+	st, err := NewSQLStorage(db)
+	if err != nil {
+		t.Fatalf("failed to create SQLStorage: %v", err)
+	}
 
 	st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
@@ -112,13 +121,16 @@ func TestSQLStorage_QueryWithFilter(t *testing.T) {
 
 func TestSQLStorage_Delete(t *testing.T) {
 	db := setupTestDB(t)
-	st := NewSQLStorage(db)
+	st, err := NewSQLStorage(db)
+	if err != nil {
+		t.Fatalf("failed to create SQLStorage: %v", err)
+	}
 
 	st.Insert("users", "name", map[string]interface{}{
 		"name": "Alice",
 	})
 
-	err := st.Delete("users", map[string]interface{}{
+	err = st.Delete("users", map[string]interface{}{
 		"name": "Alice",
 	})
 	if err != nil {
@@ -137,9 +149,12 @@ func TestSQLStorage_Delete(t *testing.T) {
 
 func TestSQLStorage_DeleteWithoutFilter(t *testing.T) {
 	db := setupTestDB(t)
-	st := NewSQLStorage(db)
+	st, err := NewSQLStorage(db)
+	if err != nil {
+		t.Fatalf("failed to create SQLStorage: %v", err)
+	}
 
-	err := st.Delete("users", map[string]interface{}{})
+	err = st.Delete("users", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected error when deleting without filter")
 	}
