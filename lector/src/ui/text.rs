@@ -27,7 +27,7 @@ pub fn Text(book_id: String) -> Element {
             let bc=domain::cursor::load_bookcursor(b_signal()).await;
             chapter_idx.set(bc.cursor.chapter);
             offset.set(Some(bc.cursor.index as i64));
-            tracing::debug!("cursor: {:?}", bc.cursor);
+            tracing::info!("cursor: {:?}", bc.cursor);
         });
     });
 
@@ -44,52 +44,39 @@ pub fn Text(book_id: String) -> Element {
         });
     });
     
-    use_effect(move || {
-        // Track the signal so this effect reacts if the user turns
-        // page movement on/off.
-        let moved = moved_page();
-
-        if moved {
+    use_effect(move || { 
+        tracing::info!("start checking page offset");
+        if moved_page() {
             return;
         }
 
         let Some(saved_offset) = offset() else {
             return;
         };
+        tracing::info!("page offset required: {}", saved_offset);
 
         spawn(async move {
             // Let the browser finish the resize/reflow first.
             gloo_timers::future::TimeoutFuture::new(50).await;
-
-            // The user may have turned the page during the delay.
             if moved_page() {
                 return;
             }
-
             let Some(width) = text::measure_element_width("book-renderer") else {
+                tracing::error!("no width could be measured");
                 return;
             };
-
             column_width_px.set(Some(width));
+            if let Some(page) = text::resolve_offset_to_page_with_retry(saved_offset, width).await {
+                tracing::info!("resolved page: {}", page);
 
-            if let Some(page) = text::resolve_offset_to_page(saved_offset, width) {
                 current_page.set(page);
+            }else{
+                tracing::error!("could not resolve page")
             }
         });
     });
 
-    use_effect(move || {
-        let Some(total) = total_pages() else { return; };
-        if !is_restoring() {return;}
-        if let Some(saved_offset) = offset() {
-            spawn(async move {
-                tracing::debug!("set page: {}, saved offset: {}", 0, saved_offset);
-                current_page.set(0);
-                gloo_timers::future::TimeoutFuture::new(0).await;
-                is_restoring.set(false);
-            });
-        }
-    });
+
 
     use_effect(move || {
         if chapter_html().is_none() {
@@ -138,7 +125,7 @@ pub fn Text(book_id: String) -> Element {
     });
 
     use_effect(move ||{
-        if current_page()==-1 || *is_restoring.peek(){ 
+        if current_page()==-1 || *is_restoring.peek() || !moved_page(){ 
             return
         }
 

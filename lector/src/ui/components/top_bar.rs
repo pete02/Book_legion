@@ -30,15 +30,18 @@ pub fn TopBar(
         };
 
         check(); // measure on first mount
-        let Some(window) = web_sys::window() else { return };
-
-        // Re-check whenever the window is resized
-        let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || check());
-        web_sys::window()
-            .unwrap()
-            .add_event_listener_with_callback("resize", cb.as_ref().unchecked_ref())
-            .ok();
-        cb.forget();
+        if let Some(window) = web_sys::window() {
+            if let Some(doc) = window.document() {
+                // re-check once web fonts have actually finished loading
+                let fonts = doc.fonts();
+                let mut check2 = check.clone(); // or move a second closure with same logic
+                let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || check2());
+                let _ = fonts.ready().map(|promise| {
+                    let _ = wasm_bindgen_futures::JsFuture::from(promise);
+                    // then call check() again in the .then/await
+                });
+            }
+        }
     });
 
     rsx! {

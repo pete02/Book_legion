@@ -214,7 +214,6 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     for cap in  captures{
         let full_url = cap.get(0).unwrap().as_str().to_string();
         let encoded_file = cap.get(1).unwrap().as_str().to_string();
-        tracing::info!("found file url: {}", full_url);
         targets.entry(full_url).or_insert(encoded_file);
     }
 
@@ -245,6 +244,16 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     out
 }
 
+pub async fn resolve_offset_to_page_with_retry(offset: i64, width: f64) -> Option<i32> {
+    for attempt in 0..5 {
+        if let Some(page) = resolve_offset_to_page(offset, width) {
+            return Some(page);
+        }
+        gloo_timers::future::TimeoutFuture::new(30 * (attempt + 1)).await;
+    }
+    None
+}
+
 use web_sys::{ Element, Node, NodeFilter, ShadowRoot};
 pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> {
     if !column_width_px.is_finite() || column_width_px <= 0.0 {
@@ -255,8 +264,13 @@ pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> 
     let host = document.get_element_by_id("book-content")?;
     let shadow_root = host.shadow_root()?;
 
-    let (node, local_offset) =
-        find_node_at_offset(&document, &shadow_root, offset)?;
+    let Some((node, local_offset)) = find_node_at_offset(&document, &shadow_root, offset) else {
+        tracing::error!(
+            "find_node_at_offset failed: offset={offset}, shadow child count={}",
+            shadow_root.child_element_count()
+        );
+        return None;
+    };
 
     let rect_left = caret_left(&document, &node, local_offset)?;
 
@@ -265,17 +279,14 @@ pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> 
 
 
     let local_x = rect_left - host_rect.left();
-    web_sys::console::log_1(
-        &format!(
-            "offset={offset}, local_offset={local_offset}, \
-             rect_left={rect_left}, host_left={}, \
-             local_x={}, node_text={:?}",
-            host_rect.left(),
-            rect_left - host_rect.left(),
+    tracing::info!(
+        "offset={offset}, local_offset={local_offset}, \
+         rect_left={rect_left}, host_left={}, \
+         local_x={}, node_text={:?}",
+        host_rect.left(),
+        rect_left - host_rect.left(),
             node.text_content(),
-        )
-        .into(),
-    );
+        );
 
     Some(((local_x / column_width_px).floor() as i32).max(0))
 }

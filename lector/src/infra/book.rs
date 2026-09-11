@@ -105,7 +105,6 @@ pub async fn fetch_book_file_as_blob_url(
         book_id,
         file_path
     );
-    tracing::info!("fetching file: {}", file_path);
     let resp = get_with_auth(&url).await?;
     if !resp.ok() {
         return Err(format!(
