@@ -15,7 +15,7 @@ struct LoginRequest<'a> {
 pub struct LoginResponse {
     pub auth_token: String,
     pub refresh_token: String,
-    pub get_token: String,
+    pub pin: String,
 }
 
 #[cfg(feature = "mock")]
@@ -66,6 +66,7 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Stri
     Ok(LoginResponse {
         auth_token: "mock_auth_token".into(),
         refresh_token: "mock_refresh_token".into(),
-        get_token: "mock_get_token".into(),
+        pin: "1303".into(),
+
     })
 }

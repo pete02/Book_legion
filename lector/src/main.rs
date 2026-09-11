@@ -64,6 +64,7 @@ fn app() -> Element {
     console_error_panic_hook::set_once();
 
     use_context_provider(||user);
+    use_context_provider(|| Signal::new(domain::library::LibraryMode::Normal));
 
     return rsx! {
         

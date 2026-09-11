@@ -7,6 +7,9 @@ use serde_json::json;
 #[cfg(feature = "mock")]
 use dioxus::{logger::tracing, prelude::trace};
 
+#[cfg(feature = "mock")]
+use crate::{Route::Library, domain};
+
 
 #[derive(Deserialize)]
 pub struct ManifestResponse {
@@ -20,8 +23,10 @@ pub struct ManifestEntry {
     pub first_book_id: String,
 }
 
+use crate::domain::library;
+
 #[cfg(not(feature = "mock"))]
-pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
+pub async fn fetch_manifest(mode: library::LibraryMode) -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
     use crate::infra::auth;
 
     let resp = auth::get_with_auth("/api/v1/manifest").await?;
@@ -35,27 +40,38 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
 }
 
 #[cfg(feature = "mock")]
-pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
-    tracing::debug!("mock fetch");
-    let manifest_json = json!({
-        "series": [
-            {
-                "series_id": "s1",
-                "series_name": "Series one",
-                "first_book_id": "b1"
-            },
-            {
-                "series_id": "s2",
-                "series_name": "Series two",
-                "first_book_id": "b2"
-            },
-            {
-                "series_id": "s3",
-                "series_name": "Series three",
-                "first_book_id": "b5"
-            }
-        ]
-    });
+pub async fn fetch_manifest(mode: library::LibraryMode) -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
+    tracing::debug!("mock fetch, alt mode: {:?}", mode!=library::LibraryMode::Normal);
+    let manifest_json = match mode {
+        library::LibraryMode::Normal => json!({
+            "series": [
+                {
+                    "series_id": "s1",
+                    "series_name": "Series one",
+                    "first_book_id": "b1"
+                },
+                {
+                    "series_id": "s2",
+                    "series_name": "Series two",
+                    "first_book_id": "b2"
+                },
+                {
+                    "series_id": "s3",
+                    "series_name": "Series three",
+                    "first_book_id": "b5"
+                }
+            ]
+        }),
+        library::LibraryMode::Alt(_) => json!({
+            "series": [
+                {
+                    "series_id": "s4",
+                    "series_name": "Alt series",
+                    "first_book_id": "b1"
+                }
+            ]
+        }),
+    };
 
     let manifest: ManifestResponse= serde_json::from_value(manifest_json.clone())
         .map_err(|e| e.to_string())?;

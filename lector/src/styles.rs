@@ -93,3 +93,21 @@ pub const CHAPTER_BUTTON: &str="
     word-break: break-word;
     overflow-wrap: anywhere;
 ";
+
+
+// styles.rs
+
+pub const SEARCH_STYLE: &str = "
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto 24px auto;
+    display: block;
+    padding: 10px 16px;
+    font-size: 15px;
+    color: #e6e6e6;
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+";

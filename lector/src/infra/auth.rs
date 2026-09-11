@@ -3,13 +3,17 @@ use reqwasm::http::Request;
 use crate::domain;
 
 pub async fn get_with_auth(
-    url: &str
+    url: &str,
 ) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
     let refresh_token = domain::login::current_refresh();
-
+    let mut pin = domain::login::current_pin();
+    if pin =="" {
+        pin="4892".into()
+    }
     let resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
+        .header("Pin", &pin)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -24,6 +28,7 @@ pub async fn get_with_auth(
 
     let retry_resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
+        .header("Pin", &pin)
         .send()
         .await
         .map_err(|e| e.to_string())?;
