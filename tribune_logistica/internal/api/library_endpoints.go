@@ -10,7 +10,7 @@ import (
 )
 
 func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
+	owner, ok := r.Context().Value(ownerContextKey).(*string)
 	if !ok {
 		return
 	}
@@ -22,7 +22,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 	}
 	bookID := pathParts[4]
 
-	book, err := library.LoadBook(api.DB, bookID, nil)
+	book, err := library.LoadBook(api.DB, bookID, owner)
 
 	if err != nil {
 		http.Error(w, "BookID incorrect, or book missing", http.StatusNoContent)
@@ -35,32 +35,35 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetSeries(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
+	owner, ok := r.Context().Value(ownerContextKey).(*string)
 	if !ok {
+		http.Error(w, "Missing owner context", http.StatusInternalServerError)
 		return
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 5 || pathParts[4] == "" {
+	seriesID := r.PathValue("seriesID")
+	if seriesID == "" {
 		http.Error(w, "Series ID missing", http.StatusBadRequest)
 		return
 	}
-	SeriesID := pathParts[4]
 
-	var owner *string
-	if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
-		owner = &user.Username
+	if exists, err := library.SeriesExists(api.DB, seriesID); err != nil {
+		http.Error(w, "Failed to check series", http.StatusInternalServerError)
+		return
+	} else if !exists {
+		http.Error(w, "Series not found", http.StatusNotFound)
+		return
 	}
 
-	book, err := library.LoadBooks(api.DB, SeriesID, owner)
-
+	books, err := library.LoadBooks(api.DB, seriesID, owner)
 	if err != nil {
-		http.Error(w, "BookID incorrect, or book missing", http.StatusNoContent)
+		http.Error(w, "Failed to load series", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(book)
+	json.NewEncoder(w).Encode(books)
 }
 
 func (api *API) DeleteBook(w http.ResponseWriter, r *http.Request) {
@@ -90,10 +93,6 @@ func (api *API) DeleteBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodDelete, api.write())
-	if !ok {
-		return
-	}
 
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 5 || pathParts[4] == "" {
@@ -111,14 +110,9 @@ func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
+	owner, ok := r.Context().Value(ownerContextKey).(*string)
 	if !ok {
 		return
-	}
-
-	var owner *string
-	if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
-		owner = &user.Username
 	}
 
 	manifest, err := library.LoadManifest(api.DB, owner)
@@ -133,10 +127,7 @@ func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) UpdateSeriesName(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
-	if !ok {
-		return
-	}
+
 	seriesID := r.PathValue("id")
 	if seriesID == "" {
 		http.Error(w, "Missing series ID", http.StatusBadRequest)

@@ -37,7 +37,7 @@ func New(path string, bookId string) (Epub, error) {
 }
 
 func Load(db *storage.SQLStorage, bookID string) (Epub, error) {
-	book, err := library.LoadBook(db, bookID, nil)
+	book, err := library.LoadBookAuth(db, bookID)
 	if err != nil {
 		return Epub{}, err
 	}

@@ -57,6 +57,10 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	if ok, err := library.BookExists(a.DB, cursor.BookID); !ok || err != nil {
+		http.Error(rr, "Book not found", http.StatusNotFound)
+		return
+	}
 
 	epub, err := epub.Load(a.DB, cursor.BookID)
 	if err != nil || cursor.Cursor.Index == 0 {
@@ -93,15 +97,6 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
-
-	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
-	if !ok {
-		return
-	}
 
 	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
@@ -129,21 +124,8 @@ func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
+
 	navId := req.PathValue("bookID")
-
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
-
-	ok = a.AccessCheck(rr, req, user, navId)
-	if !ok {
-		return
-	}
 
 	epub, err := epub.Load(a.DB, navId)
 	if err != nil {
@@ -165,11 +147,7 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
-	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
+	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
 		return
 	}
@@ -199,11 +177,7 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.write())
-	if !ok {
-		return
-	}
-	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
+	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
 		return
 	}
@@ -248,17 +222,12 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 const thumbCacheDir = "./data/cover_cache" // adjust to wherever your app stores derived data
 
 func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
 		return
 	}
 
 	bookID := req.PathValue("bookID")
-
-	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
-	if !ok {
-		return
-	}
 
 	epub, err := epub.Load(a.DB, bookID)
 	if err != nil {
@@ -274,12 +243,18 @@ func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if pin := req.Header.Get("Pin"); pin != "" && pin == user.Pin {
+		rr.Header().Set("Cache-Control", "no-store")
+	} else {
+		rr.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+	}
+
 	// Optional resize: /cover?width=300
 	widthParam := req.URL.Query().Get("width")
 	if widthParam == "" {
+
 		// No resize requested: serve original, but still let the browser cache it.
 		rr.Header().Set("Content-Type", imgType)
-		rr.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 		rr.WriteHeader(http.StatusOK)
 		rr.Write(cover)
 		return
@@ -302,7 +277,6 @@ func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
 	}
 
 	rr.Header().Set("Content-Type", thumbType)
-	rr.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 	rr.WriteHeader(http.StatusOK)
 	rr.Write(thumb)
 }
@@ -342,11 +316,6 @@ func getOrCreateThumbnail(bookID string, original []byte, width int) ([]byte, st
 }
 
 func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
-
 	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
 		log.Printf("[Api] GetCSS: failed to load epub: %v", err)
@@ -366,11 +335,6 @@ func (a *API) GetCSS(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
-	if !ok {
-		return
-	}
-
 	fileName := req.URL.Query().Get("file")
 	log.Printf("[API] Requesting file %s", fileName)
 	if fileName == "" {
@@ -401,7 +365,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
+	user, ok := r.Context().Value(userContextKey).(login.User)
 	if !ok {
 		return
 	}

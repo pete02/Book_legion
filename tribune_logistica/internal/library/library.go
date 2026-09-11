@@ -2,6 +2,7 @@ package library
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -45,6 +46,52 @@ func LoadBook(store *storage.SQLStorage, id string, userID *string) (Book, error
 	return loadBookRow(store, id, userID)
 }
 
+func LoadBookAuth(store *storage.SQLStorage, id string) (Book, error) {
+	return loadBookRowAuth(store, id)
+}
+
+func BookExists(store *storage.SQLStorage, id string) (bool, error) {
+	var exists bool
+
+	err := store.DB.QueryRow(
+		`
+		SELECT EXISTS(
+			SELECT 1
+			FROM `+BooksTable+`
+			WHERE id = ?
+		)
+		`,
+		id,
+	).Scan(&exists)
+
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func SeriesExists(store *storage.SQLStorage, id string) (bool, error) {
+	var exists bool
+
+	err := store.DB.QueryRow(
+		`
+		SELECT EXISTS(
+			SELECT 1
+			FROM `+SeriesTable+`
+			WHERE series_id = ?
+		)
+		`,
+		id,
+	).Scan(&exists)
+
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
 func LoadBooks(store *storage.SQLStorage, seriesID string, userID *string) ([]Book, error) {
 	return loadSeriesRow(store, seriesID, userID)
 }
@@ -66,6 +113,12 @@ func DeleteBook(store *storage.SQLStorage, bookID string) error {
 }
 
 func LoadManifest(store *storage.SQLStorage, userID *string) (Manifest, error) {
+	if userID == nil || *userID == "" {
+		log.Println("Loading manifest for public access")
+		return loadManifest(store, nil)
+	}
+
+	log.Printf("Loading manifest for %s", *userID)
 	return loadManifest(store, userID)
 }
 

@@ -43,7 +43,14 @@ pub fn Library() -> Element {
             div { 
                 style: styles::GRID_STYLE,
                 {
-                    library.iter().filter(|e| e.name.to_ascii_lowercase().contains(&query().to_ascii_lowercase())).map(|entry| rsx!( Card{ entry: entry.clone() } ))
+                    library.iter()
+                        .filter(|e| e.name.to_ascii_lowercase().contains(&query().to_ascii_lowercase()))
+                        .map(|entry| rsx!( 
+                            Card{ 
+                                key: "{entry.path}-{entry.pic_path}", 
+                                entry: entry.clone() 
+                            } 
+                        ))
                 }
             }
         }

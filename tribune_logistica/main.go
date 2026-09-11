@@ -73,29 +73,56 @@ func main() {
 	api := api.New(manager, storage)
 
 	r := chi.NewRouter()
-	r.Get("/api/v1/cursors/{bookID}", api.GetCursor)
-	r.Post("/api/v1/cursors/save", api.SaveCursor)
-	r.Get("/api/v1/audio/{bookID}", api.AudioSocket)
-	r.Post("/api/v1/register", api.RegisterUser)
-	r.Post("/api/v1/login", api.LoginUser)
-	r.Post("/api/v1/changepin", api.ChangePin)
-	r.Post("/api/v1/refreshtoken", api.RefreshTokenHandler)
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(noCache)
+		r.With(api.ReadAccess).Get("/manifest", api.GetManifest)
 
-	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
-	r.Get("/api/v1/books/{bookID}/nav", api.GetNav)
-	r.Get("/api/v1/books/{bookID}/cover", api.GetCover)
-	r.Get("/api/v1/books/{bookID}/css", api.GetCSS)
-	r.Get("/api/v1/books/{bookID}/file", api.GetFile)
+		// Book endpoints
+		r.Route("/books/{bookID}", func(r chi.Router) {
+			r.Use(api.ReadAccess)
+			r.Use(api.BookExists)
+			r.Use(api.AccessCheck)
 
-	r.Get("/api/v1/book/{bookID}/chapterprogress", api.GetChapterProgress)
-	r.Get("/api/v1/book/{bookID}/bookprogress", api.GetBookProgress)
-	r.Get("/api/v1/manifest", api.GetManifest)
-	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
-	r.Get("/api/v1/books/{bookID}", api.GetBook)
-	r.Post("/api/v1/savebook", api.SaveBook)
-	r.Post("/api/v1/updateseries/{id}", api.UpdateSeriesName)
-	r.Delete("/api/v1/deleteseries/{SeriesID}", api.DeleteSeries)
-	r.Delete("/api/v1/deletebook/{SeriesID}", api.DeleteBook)
+			r.Get("/", api.GetBook)
+			r.Get("/chapters/{chapterIndex}", api.GetChapter)
+			r.Get("/nav", api.GetNav)
+			r.Get("/cover", api.GetCover)
+			r.Get("/css", api.GetCSS)
+			r.Get("/file", api.GetFile)
+
+			r.Get("/chapterprogress", api.GetChapterProgress)
+			r.Get("/bookprogress", api.GetBookProgress)
+		})
+
+		r.With(api.ReadAccess).Get("/series/{seriesID}", api.GetSeries)
+
+		r.With(api.AccessCheck).Get("/cursors/{bookID}", api.GetCursor)
+		r.Post("/cursors/save", api.SaveCursor)
+
+		r.Get("/audio/{bookID}", api.AudioSocket)
+
+		r.Post("/register", api.RegisterUser)
+		r.Post("/login", api.LoginUser)
+		r.Post("/changepin", api.ChangePin)
+		r.Post("/refreshtoken", api.RefreshTokenHandler)
+
+		r.With(api.WriteAccess).Post("/savebook", api.SaveBook)
+
+		r.With(api.WriteAccess).Post(
+			"/updateseries/{id}",
+			api.UpdateSeriesName,
+		)
+
+		r.With(api.WriteAccess).Delete(
+			"/books/{bookID}",
+			api.DeleteBook,
+		)
+
+		r.With(api.WriteAccess).Delete(
+			"/series/{seriesID}",
+			api.DeleteSeries,
+		)
+	})
 
 	fmt.Println("Server listening on http://localhost:8000")
 	if err := http.ListenAndServe(":8000", r); err != nil {
@@ -184,4 +211,11 @@ func FromEnv() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
 }
