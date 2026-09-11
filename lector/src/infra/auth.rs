@@ -1,13 +1,18 @@
+use std::num::FpCategory::Normal;
+
 use reqwasm::http::Request;
 
-use crate::domain;
+use crate::domain::{self, library};
 
 pub async fn get_with_auth(
     url: &str,
 ) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
     let refresh_token = domain::login::current_refresh();
-    let mut pin = domain::login::current_pin();
+    let mut pin = match domain::library::read_library_mode() {
+        library::LibraryMode::Normal=>"4328".to_owned(),
+        library::LibraryMode::Alt(p) => p
+    };
     if pin =="" {
         pin="4892".into()
     }
@@ -133,4 +138,27 @@ async fn refresh_auth_token(refresh_token: &str) -> Result<String, String> {
         .as_str()
         .ok_or("Invalid response")?;
     Ok(new_token.to_string())
+}
+
+// infra/auth.rs
+pub async fn post_with_auth_with_headers(
+    url: &str,
+    body: String,
+    extra_headers: &[(&str, &str)],
+) -> Result<gloo_net::http::Response, String> {
+    let token = domain::login::current_auth(); // however you currently attach auth
+
+    let mut req = gloo_net::http::Request::post(url)
+        .header("Authorization", &format!("Bearer {}", token.unwrap_or_default()))
+        .header("Content-Type", "application/json");
+
+    for (k, v) in extra_headers {
+        req = req.header(k, v);
+    }
+
+    req.body(body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())
 }

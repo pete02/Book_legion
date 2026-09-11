@@ -171,48 +171,6 @@ func (api *API) AudioSocket(w http.ResponseWriter, r *http.Request) {
 			time.Now().Add(writeWait))
 		return
 	}
-	/*
-		epub, err := epub.Load(api.DB, bookID)
-		if err != nil {
-			log.Printf("[audio] failed to load epub for user %s: %v", userID, err)
-			http.Error(w, "failed to load epub", http.StatusInternalServerError)
-			return
-		}
-
-		ChapterHTML, err := epub.GetChapter(cursor.Cursor.Chapter)
-		if err != nil {
-			log.Printf("[audio] failed to load chapter html for user %s: %v", userID, err)
-			http.Error(w, "failed to load chapter html", http.StatusInternalServerError)
-			return
-		}
-
-		NearestSplit := types.NearestPrecedingSplit(string(ChapterHTML), cursor.Cursor.Index)
-		log.Printf("[audio] Nearest split: %v", NearestSplit)
-
-		//debug
-		nearestChunkIdentifier := types.ChunkIdentifier{
-			ID:          bookID,
-			Chapter:     cursor.Cursor.Chapter,
-			StartOffset: NearestSplit,
-			EndOffset:   NearestSplit + 500,
-		}
-
-		nearestChunk, err := types.BuildTextChunk(string(ChapterHTML), nearestChunkIdentifier, types.DefaultChunkConfig())
-		log.Printf("[Audio] Debug: Nearest chunk: %s", nearestChunk)
-
-		cursorChunkIdentifier := types.ChunkIdentifier{
-			ID:          bookID,
-			Chapter:     cursor.Cursor.Chapter,
-			StartOffset: cursor.Cursor.Index,
-			EndOffset:   cursor.Cursor.Index + 500,
-		}
-
-		cursorChunk, err := types.BuildTextChunk(string(ChapterHTML), cursorChunkIdentifier, types.DefaultChunkConfig())
-		log.Printf("[Audio] Debug: Cursor chunk: %s", cursorChunk)
-		//<-debug
-
-		cursor.Cursor.Index = NearestSplit
-	*/
 	tracker := wsAudioHeader{
 		ID:          "",
 		Chapter:     cursor.Cursor.Chapter,

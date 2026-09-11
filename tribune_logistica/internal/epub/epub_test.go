@@ -825,10 +825,10 @@ func TestRewriteResourceLinks(t *testing.T) {
 		if file != "page_styles.css" {
 			t.Errorf("file = %q, want %q", file, "page_styles.css")
 		}
-		if token != chapterTokenPlaceholder {
-			t.Errorf("token = %q, want placeholder %q", token, chapterTokenPlaceholder)
+		if token != "" {
+			t.Errorf("token = %q, want nada", token)
 		}
-		if !strings.HasPrefix(hrefs[0], "/api/v1/books/"+bookID+"/file?token=TOKEN_PLACEHOLDER&file=page_styles.css") {
+		if !strings.HasPrefix(hrefs[0], "/api/v1/books/"+bookID+"/file?file=page_styles.css") {
 			t.Errorf("rewritten href doesn't point at expected endpoint: %q", hrefs[0])
 		}
 
@@ -848,8 +848,8 @@ func TestRewriteResourceLinks(t *testing.T) {
 		if file != "images/cover.jpg" {
 			t.Errorf("file = %q, want %q", file, "images/cover.jpg")
 		}
-		if token != chapterTokenPlaceholder {
-			t.Errorf("token = %q, want placeholder %q", token, chapterTokenPlaceholder)
+		if token != "" {
+			t.Errorf("token = %q, want nada", token)
 		}
 	})
 
@@ -942,8 +942,8 @@ func TestGetChapter_RewritesResourceLinks(t *testing.T) {
 	if file != "images/cover.jpg" {
 		t.Errorf("file = %q, want %q", file, "images/cover.jpg")
 	}
-	if token != chapterTokenPlaceholder {
-		t.Errorf("token = %q, want placeholder", token)
+	if token != "" {
+		t.Errorf("token = %q, want nada", token)
 	}
 
 	linkHrefs := findAttr(t, data, "link", "href")

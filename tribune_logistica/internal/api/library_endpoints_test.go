@@ -118,6 +118,7 @@ func TestGetBook_Success(t *testing.T) {
 		SeriesID:    seriesID,
 		SeriesName:  "The Lord of the Rings",
 		SeriesOrder: 1,
+		FilePath:    "<filepath>",
 	})
 
 	req := withValidAuth(httptest.NewRequest(http.MethodGet, "/api/v1/books/"+book.ID, nil), token)
@@ -209,11 +210,11 @@ func TestGetSeries_Success(t *testing.T) {
 	seriesID := uniqueUsername(t)
 	book1 := seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "Book One", AuthorID: "author-x",
-		SeriesID: seriesID, SeriesName: "My Series", SeriesOrder: 1,
+		SeriesID: seriesID, SeriesName: "My Series", SeriesOrder: 1, FilePath: "FilePath",
 	})
 	book2 := seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "Book Two", AuthorID: "author-x",
-		SeriesID: seriesID, SeriesName: "My Series", SeriesOrder: 2,
+		SeriesID: seriesID, SeriesName: "My Series", SeriesOrder: 2, FilePath: "FilePath",
 	})
 
 	req := withValidAuth(httptest.NewRequest(http.MethodGet, "/api/v1/series/"+seriesID, nil), token)
@@ -392,7 +393,7 @@ func TestDeleteSeries_NotEmptyRejected(t *testing.T) {
 	seriesID := uniqueUsername(t)
 	seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "Still Here", AuthorID: "author-v",
-		SeriesID: seriesID, SeriesName: "Occupied Series", SeriesOrder: 1,
+		SeriesID: seriesID, SeriesName: "Occupied Series", SeriesOrder: 1, FilePath: "FilePath",
 	})
 
 	req := withValidAuth(httptest.NewRequest(http.MethodDelete, "/api/v1/series/"+seriesID, nil), token)
@@ -410,7 +411,7 @@ func TestDeleteSeries_Success(t *testing.T) {
 	seriesID := uniqueUsername(t)
 	book := seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "Solo Book", AuthorID: "author-w",
-		SeriesID: seriesID, SeriesName: "Solo Series", SeriesOrder: 1,
+		SeriesID: seriesID, SeriesName: "Solo Series", SeriesOrder: 1, FilePath: "FilePath",
 	})
 
 	// Empty the series out first — DeleteSeries refuses non-empty series.
@@ -490,11 +491,11 @@ func TestGetManifest_Success(t *testing.T) {
 
 	bookA := seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "A1", AuthorID: "author-a",
-		SeriesID: seriesA, SeriesName: "Series A", SeriesOrder: 1,
+		SeriesID: seriesA, SeriesName: "Series A", SeriesOrder: 1, FilePath: "FilePath",
 	})
 	bookB := seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "B1", AuthorID: "author-b",
-		SeriesID: seriesB, SeriesName: "Series B", SeriesOrder: 1,
+		SeriesID: seriesB, SeriesName: "Series B", SeriesOrder: 1, FilePath: "FilePath",
 	})
 
 	manifest := fetchManifest(t, a, token)
@@ -622,7 +623,7 @@ func TestUpdateSeriesName_Success(t *testing.T) {
 	seriesID := uniqueUsername(t)
 	seedBook(t, a, library.Book{
 		ID: uniqueUsername(t), Title: "Renamed Series Book", AuthorID: "author-u",
-		SeriesID: seriesID, SeriesName: "Old Name", SeriesOrder: 1,
+		SeriesID: seriesID, SeriesName: "Old Name", SeriesOrder: 1, FilePath: "FilePath",
 	})
 
 	req := withValidAuth(httptest.NewRequest(http.MethodPost, "/api/v1/series/"+seriesID+"/name", jsonBody(t, map[string]string{"name": "New Name"})), token)

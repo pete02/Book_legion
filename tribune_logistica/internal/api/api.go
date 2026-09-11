@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,7 +13,7 @@ import (
 
 type API struct {
 	Manager *manager.Organizer
-	DB      storage.Storage
+	DB      *storage.SQLStorage
 }
 
 func (a API) ReadOnly() string {
@@ -22,14 +23,14 @@ func (a API) ReadOnly() string {
 func (a API) write() string {
 	return "write"
 }
-func New(manager *manager.Organizer, db storage.Storage) API {
+func New(manager *manager.Organizer, db *storage.SQLStorage) API {
 	return API{
 		Manager: manager,
 		DB:      db,
 	}
 }
 
-func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (login.User, bool) {
 	var authToken string
 
 	// Standard HTTP Bearer authentication.
@@ -41,17 +42,17 @@ func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (string, bool)
 	if authToken == "" {
 		log.Println("Login failed")
 		http.Error(w, "Missing authentication token", http.StatusUnauthorized)
-		return "", false
+		return login.User{}, false
 	}
 
 	userID, err := login.VerifyUserSession(authToken)
 	if err != nil {
 		log.Println("Unauthorized access")
 		http.Error(w, "Unauthorized access", http.StatusUnauthorized)
-		return "", false
+		return login.User{}, false
 	}
 
-	return userID.Username, true
+	return userID, true
 }
 
 func (api *API) GetTokenCheck(w http.ResponseWriter, r *http.Request) bool {
@@ -69,21 +70,30 @@ func (api *API) GetTokenCheck(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func (a *API) RequestCheck(w http.ResponseWriter, r *http.Request, method string, permission string) (string, bool) {
+// Checks whether or not we have access, and returns user.Username
+func (a *API) RequestCheck(w http.ResponseWriter, r *http.Request, method string, permission string) (login.User, bool) {
 	if r.Method != method {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return "", false
+		return login.User{}, false
 	}
-	if permission == a.ReadOnly() {
-		get := a.GetTokenCheck(w, r)
-		if !get {
-			_, ok := a.AuthCheck(w, r)
-			return "", ok
-		} else {
-			return "", get
-		}
-
-	}
-
 	return a.AuthCheck(w, r)
+}
+
+func (a *API) AccessCheck(w http.ResponseWriter, r *http.Request, user login.User, bookID string) bool {
+	var owner string
+	if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
+		owner = user.Username
+	}
+
+	access, err := login.UserHasAccess(a.DB, owner, bookID)
+	if !access || err != nil {
+		fmt.Printf("No access for user %v and book %v: %v\n", user.Username, bookID, err)
+		http.Error(w, "Failed to load epub", http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
+func (a *API) Health(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }

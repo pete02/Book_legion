@@ -13,9 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/book_legion-tribune_logistica/internal/epub"
 	"github.com/book_legion-tribune_logistica/internal/library"
+	"github.com/book_legion-tribune_logistica/internal/login"
 	"github.com/book_legion-tribune_logistica/internal/types"
 	"github.com/disintegration/imaging"
 )
@@ -26,7 +28,7 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
+	cursor, err := types.LoadUserCursor(a.DB, user.Username, req.PathValue("bookID"))
 	if err != nil {
 		log.Printf("[Api] Failed to load cursor for user %v: %v", user, err)
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
@@ -51,7 +53,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if user != cursor.UserID {
+	if user.Username != cursor.UserID {
 		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -91,7 +93,12 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) GetChapter(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	if !ok {
+		return
+	}
+
+	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
 	if !ok {
 		return
 	}
@@ -128,6 +135,16 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 	}
 	navId := req.PathValue("bookID")
 
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	if !ok {
+		return
+	}
+
+	ok = a.AccessCheck(rr, req, user, navId)
+	if !ok {
+		return
+	}
+
 	epub, err := epub.Load(a.DB, navId)
 	if err != nil {
 		log.Printf("[Api] GetNav: Failed to load epub: %v", err)
@@ -152,7 +169,12 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
-	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
+	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
+	if !ok {
+		return
+	}
+
+	cursor, err := types.LoadUserCursor(a.DB, user.Username, req.PathValue("bookID"))
 	if err != nil {
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
 		return
@@ -181,7 +203,12 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
-	cursor, err := types.LoadUserCursor(a.DB, user, req.PathValue("bookID"))
+	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
+	if !ok {
+		return
+	}
+
+	cursor, err := types.LoadUserCursor(a.DB, user.Username, req.PathValue("bookID"))
 	if err != nil {
 		http.Error(rr, "Failed to load cursor", http.StatusInternalServerError)
 		return
@@ -221,12 +248,17 @@ func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 const thumbCacheDir = "./data/cover_cache" // adjust to wherever your app stores derived data
 
 func (a *API) GetCover(rr http.ResponseWriter, req *http.Request) {
-	_, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
+	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.ReadOnly())
 	if !ok {
 		return
 	}
 
 	bookID := req.PathValue("bookID")
+
+	ok = a.AccessCheck(rr, req, user, req.PathValue("bookID"))
+	if !ok {
+		return
+	}
 
 	epub, err := epub.Load(a.DB, bookID)
 	if err != nil {
@@ -348,6 +380,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 
 	epub, err := epub.Load(a.DB, req.PathValue("bookID"))
 	if err != nil {
+		log.Printf("[API] GetFile: failed to load epub: %v", err)
 		http.Error(rr, "Failed to load epub", http.StatusInternalServerError)
 		return
 	}
@@ -368,7 +401,7 @@ func (a *API) GetFile(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
+	user, ok := api.RequestCheck(w, r, http.MethodPost, api.write())
 	if !ok {
 		return
 	}
@@ -379,13 +412,41 @@ func (api *API) SaveBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := library.SaveBook(api.DB, req)
-
+	// The user making the change must already have access to the book.
+	// A nonexistent/unrestricted book passes this check.
+	hasAccess, err := login.UserHasAccess(api.DB, user.Username, req.ID)
 	if err != nil {
-		log.Printf("Failed to save book: %v", err)
+		log.Printf("[API] Failed to check book access: %v", err)
+		http.Error(w, "Failed to check book access", http.StatusInternalServerError)
+		return
+	}
+
+	if !hasAccess {
+		log.Printf("[API] Attempted to save inaccessible book %q by user %q", req.ID, user)
 		http.Error(w, "Failed to save book", http.StatusInternalServerError)
 		return
-	} else {
-		w.WriteHeader(http.StatusOK)
 	}
+	if err := library.SaveBook(api.DB, req); err != nil {
+		log.Printf("[API] Failed to save book: %v", err)
+		http.Error(w, "Failed to save book", http.StatusInternalServerError)
+		return
+	}
+
+	if accessHeader := r.Header.Get("X-Book-Access"); accessHeader != "" {
+		for _, username := range strings.Split(accessHeader, ",") {
+			username = strings.TrimSpace(username)
+			if username == "" {
+				continue
+			}
+
+			accessUser := login.User{Username: username}
+			if err := login.InsertUserAccess(api.DB, accessUser, req.ID); err != nil {
+				log.Printf("[API] Failed to grant book access to %q: %v", username, err)
+				http.Error(w, "Failed to update book access", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

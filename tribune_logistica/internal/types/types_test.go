@@ -1,11 +1,35 @@
 package types
 
 import (
-	"os"
+	"database/sql"
 	"testing"
 
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	_ "modernc.org/sqlite"
 )
+
+func setupTestDB(t *testing.T) *storage.SQLStorage {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+
+	db.SetMaxOpenConns(1)
+
+	store, err := storage.NewSQLStorage(db)
+	if err != nil {
+		db.Close()
+		t.Fatalf("failed to create SQL storage: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return store
+}
 
 func TestCursorNext(t *testing.T) {
 	cases := []struct {
@@ -85,13 +109,7 @@ func TestCursorStepBack(t *testing.T) {
 }
 
 func TestUserUserCursorSaveAndLoad(t *testing.T) {
-	tmpFile := "test_UserCursors.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create JSONStorage: %v", err)
-	}
+	store := setupTestDB(t)
 
 	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
 	UserCursor2 := UserCursor{UserID: "u2", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
@@ -118,13 +136,7 @@ func TestUserUserCursorSaveAndLoad(t *testing.T) {
 }
 
 func TestLoadNonExistingCursor(t *testing.T) {
-	tmpFile := "test_UserCursors.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create JSONStorage: %v", err)
-	}
+	store := setupTestDB(t)
 
 	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
 
@@ -153,13 +165,7 @@ func TestLoadNonExistingCursor(t *testing.T) {
 }
 
 func TestLoadNonExistingCursorAsNew(t *testing.T) {
-	tmpFile := "test_UserCursors.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create JSONStorage: %v", err)
-	}
+	store := setupTestDB(t)
 
 	loaded, err := LoadUserCursor(store, "u1", "b2")
 
@@ -182,13 +188,7 @@ func TestLoadNonExistingCursorAsNew(t *testing.T) {
 }
 
 func TestUserUserCursorPersistence(t *testing.T) {
-	tmpFile := "test_UserCursors.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create JSONStorage: %v", err)
-	}
+	store := setupTestDB(t)
 
 	UserCursor1 := UserCursor{UserID: "u1", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
 	UserCursor2 := UserCursor{UserID: "u2", BookID: "b1", Cursor: Cursor{Chapter: 2, Index: 1}}
@@ -202,16 +202,8 @@ func TestUserUserCursorPersistence(t *testing.T) {
 		}
 	}
 
-	store.Save()
-
-	// Reload store from file
-	storeReloaded, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to reload JSONStorage: %v", err)
-	}
-
 	for _, c := range UserCursors {
-		loaded, err := LoadUserCursor(storeReloaded, c.UserID, c.BookID)
+		loaded, err := LoadUserCursor(store, c.UserID, c.BookID)
 		if err != nil {
 			t.Fatalf("LoadUserUserCursor failed: %v", err)
 		}

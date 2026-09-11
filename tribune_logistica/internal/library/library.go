@@ -45,6 +45,10 @@ func LoadBook(store *storage.SQLStorage, id string, userID *string) (Book, error
 	return loadBookRow(store, id, userID)
 }
 
+func LoadBooks(store *storage.SQLStorage, seriesID string, userID *string) ([]Book, error) {
+	return loadSeriesRow(store, seriesID, userID)
+}
+
 func DeleteBook(store *storage.SQLStorage, bookID string) error {
 	if bookID == "" {
 		return fmt.Errorf("bookID is required")

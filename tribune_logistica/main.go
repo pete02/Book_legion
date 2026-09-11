@@ -78,6 +78,7 @@ func main() {
 	r.Get("/api/v1/audio/{bookID}", api.AudioSocket)
 	r.Post("/api/v1/register", api.RegisterUser)
 	r.Post("/api/v1/login", api.LoginUser)
+	r.Post("/api/v1/changepin", api.ChangePin)
 	r.Post("/api/v1/refreshtoken", api.RefreshTokenHandler)
 
 	r.Get("/api/v1/books/{bookID}/chapters/{chapterIndex}", api.GetChapter)
@@ -88,12 +89,11 @@ func main() {
 
 	r.Get("/api/v1/book/{bookID}/chapterprogress", api.GetChapterProgress)
 	r.Get("/api/v1/book/{bookID}/bookprogress", api.GetBookProgress)
-
 	r.Get("/api/v1/manifest", api.GetManifest)
 	r.Get("/api/v1/series/{seriesID}", api.GetSeries)
 	r.Get("/api/v1/books/{bookID}", api.GetBook)
 	r.Post("/api/v1/savebook", api.SaveBook)
-	r.Post("/api/v1/uupdateseries/{id}", api.UpdateSeriesName)
+	r.Post("/api/v1/updateseries/{id}", api.UpdateSeriesName)
 	r.Delete("/api/v1/deleteseries/{SeriesID}", api.DeleteSeries)
 	r.Delete("/api/v1/deletebook/{SeriesID}", api.DeleteBook)
 
@@ -103,21 +103,23 @@ func main() {
 	}
 }
 
-func createStorage(cfg Config) (storage.Storage, error) {
+func createStorage(cfg Config) (*storage.SQLStorage, error) {
 	switch cfg.DBType {
 	case DBJSON:
-		return storage.NewJSONStorage(cfg.DBPath)
+		return nil, fmt.Errorf("JSON storage is not supported")
 	case DBSQLite:
 		{
 			db, err := sql.Open("sqlite", cfg.DBPath)
 			if err != nil {
 				log.Fatalf("failed to open sqlite db: %v", err)
+				return nil, err
 			}
 			if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
 				log.Fatalf("failed to enable WAL mode: %v", err)
+				return nil, err
 			}
 
-			return storage.NewSQLStorage(db), err
+			return storage.NewSQLStorage(db)
 		}
 	case DBAPI:
 		// Skip for now if you don't support API DB
@@ -128,7 +130,7 @@ func createStorage(cfg Config) (storage.Storage, error) {
 			if err != nil {
 				log.Fatal(err)
 			}
-			return storage.NewSQLStorage(db), err
+			return storage.NewSQLStorage(db)
 		}
 	}
 }

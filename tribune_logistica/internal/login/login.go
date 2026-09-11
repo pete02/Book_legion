@@ -16,22 +16,18 @@ type User struct {
 	PasswordHash string
 	refreshToken string
 	authToken    string
-	getToken     string
+	Pin          string
 }
 
 func (u User) GetAuthToken() string {
 	return u.authToken
 }
 
-func (u User) GetGetToken() string {
-	return u.getToken
-}
-
 func (u User) GetRefreshToken() string {
 	return u.refreshToken
 }
 
-func NewUser(username string, password string) (User, error) {
+func NewUser(username string, password string, pin string) (User, error) {
 	passwordHash, err := argon2id.CreateHash(password, argon2id.DefaultParams)
 	if err != nil {
 		return User{}, err
@@ -42,7 +38,7 @@ func NewUser(username string, password string) (User, error) {
 		PasswordHash: passwordHash,
 		refreshToken: "",
 		authToken:    "",
-		getToken:     "",
+		Pin:          pin,
 	}
 
 	return user, nil
@@ -52,10 +48,40 @@ func InsertUser(store storage.Storage, user User) error {
 	row := map[string]interface{}{
 		"username":      user.Username,
 		"password_hash": user.PasswordHash,
+		"pin":           user.Pin,
 		"refresh_token": user.refreshToken,
-		"get_token":     user.getToken,
 	}
 	return store.Insert("users", "username", row)
+}
+
+func InsertUserAccess(store *storage.SQLStorage, user User, bookID string) error {
+	_, err := store.DB.Exec(`
+		INSERT INTO user_access (book_id, user_id)
+		VALUES (?, ?)
+	`, bookID, user.Username)
+
+	return err
+}
+
+func UserHasAccess(store *storage.SQLStorage, userName, bookID string) (bool, error) {
+	var hasAccess bool
+
+	err := store.DB.QueryRow(`
+		SELECT
+			NOT EXISTS (
+				SELECT 1
+				FROM user_access
+				WHERE book_id = ?
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM user_access
+				WHERE book_id = ?
+					AND user_id = ?
+			)
+	`, bookID, bookID, userName).Scan(&hasAccess)
+
+	return hasAccess, err
 }
 
 func getUser(store storage.Storage, username string) (User, error) {
@@ -75,8 +101,18 @@ func getUser(store storage.Storage, username string) (User, error) {
 		PasswordHash: rows[0]["password_hash"].(string),
 		refreshToken: rows[0]["refresh_token"].(string),
 		authToken:    "",
-		getToken:     "",
+		Pin:          rows[0]["pin"].(string),
 	}, nil
+}
+
+func ChangeUserPIN(store *storage.SQLStorage, username, pin string) error {
+	_, err := store.DB.Exec(`
+		UPDATE users
+		SET pin = ?
+		WHERE username = ?
+	`, pin, username)
+
+	return err
 }
 
 // verifyPassword checks password against argon2id hash
@@ -101,7 +137,6 @@ func VerifyUserLogin(username, password string, storage storage.Storage) (User, 
 
 	user.refreshToken = GenerateRandomToken(32)
 	user.authToken = GenerateRandomToken(32)
-	user.getToken = GenerateRandomToken(32)
 	err = InsertUser(storage, user)
 	if err != nil {
 		return User{}, err
@@ -206,7 +241,6 @@ func newSession(user User, sessionStore *SessionStore) User {
 	sessionStore.byUser[user.Username] = user.authToken
 	sessionStore.byAuthToken[user.authToken] = &session
 	sessionStore.byRefreshToken[user.refreshToken] = user.authToken
-	sessionStore.byGetToken[user.getToken] = user.authToken
 
 	return user
 }

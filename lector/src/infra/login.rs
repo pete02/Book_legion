@@ -18,6 +18,13 @@ pub struct LoginResponse {
     pub pin: String,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+
+pub struct ChangePinRequest {
+	pub pin: String
+}
+
+
 #[cfg(feature = "mock")]
 static LOGIN_COUNTER: once_cell::sync::Lazy<Arc<AtomicUsize>> =
     once_cell::sync::Lazy::new(|| Arc::new(AtomicUsize::new(1)));
@@ -66,7 +73,34 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Stri
     Ok(LoginResponse {
         auth_token: "mock_auth_token".into(),
         refresh_token: "mock_refresh_token".into(),
-        pin: "1303".into(),
+        pin: "0000".into(),
 
     })
+}
+
+use crate::infra::auth::post_with_auth;
+use crate::domain;
+
+#[cfg(not(feature = "mock"))]
+pub async fn change_pin(new_pin: &str) -> Result<(), String> {
+    if new_pin == ""{
+        return Err("New PIN cannot be empty".into());
+    }
+    let resp= post_with_auth("/api/v1/changepin", serde_json::to_string(&ChangePinRequest { pin: new_pin.into() }).unwrap()).await.map_err(|e|e.to_string())?;
+    if !resp.ok(){
+        return Err("Failed to change PIN".into());
+    }
+    let request: ChangePinRequest = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse PIN response: {e}"))?;
+
+    domain::login::set_pin(request.pin);
+    Ok(())
+}
+
+#[cfg(feature = "mock")]
+pub async fn change_pin(new_pin: &str) -> Result<(), String> {
+    domain::login::set_pin(new_pin.to_owned());
+    Ok(())
 }

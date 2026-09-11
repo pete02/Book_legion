@@ -133,20 +133,22 @@ func saveSeriesRow(store *storage.SQLStorage, entry SeriesEntry) error {
 	})
 }
 
-func loadSeriesRow(store *storage.SQLStorage, id string, userID *string) (SeriesEntry, error) {
-	var entry SeriesEntry
-
-	err := store.DB.QueryRow(
+func loadSeriesRow(store *storage.SQLStorage, seriesID string, userID *string) ([]Book, error) {
+	rows, err := store.DB.Query(
 		`
 		SELECT
-			s.series_id,
+			b.id,
+			b.title,
+			b.author_id,
+			b.series_id,
 			s.series_name,
-			b.id AS first_book_id
-		FROM `+SeriesTable+` s
-		JOIN `+BooksTable+` b
+			b.series_order,
+			b.file_path
+		FROM `+BooksTable+` b
+		JOIN `+SeriesTable+` s
 			ON b.series_id = s.series_id
 		WHERE
-			s.series_id = ?
+			b.series_id = ?
 			AND (
 				(
 					? IS NULL
@@ -164,25 +166,45 @@ func loadSeriesRow(store *storage.SQLStorage, id string, userID *string) (Series
 				)
 			)
 		ORDER BY b.series_order ASC
-		LIMIT 1
 		`,
-		id,
+		seriesID,
 		userID,
 		userID,
-	).Scan(
-		&entry.SeriesID,
-		&entry.SeriesName,
-		&entry.FirstBookID,
 	)
-
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return SeriesEntry{}, fmt.Errorf("series not found: %s", id)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []Book
+
+	for rows.Next() {
+		var book Book
+
+		if err := rows.Scan(
+			&book.ID,
+			&book.Title,
+			&book.AuthorID,
+			&book.SeriesID,
+			&book.SeriesName,
+			&book.SeriesOrder,
+			&book.FilePath,
+		); err != nil {
+			return nil, err
 		}
-		return SeriesEntry{}, err
+
+		books = append(books, book)
 	}
 
-	return entry, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(books) == 0 {
+		return nil, fmt.Errorf("series not found: %s", seriesID)
+	}
+
+	return books, nil
 }
 
 func loadManifest(store *storage.SQLStorage, userID *string) (Manifest, error) {

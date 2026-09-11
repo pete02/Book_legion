@@ -22,7 +22,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 	}
 	bookID := pathParts[4]
 
-	book, err := library.LoadBook(api.DB, bookID)
+	book, err := library.LoadBook(api.DB, bookID, nil)
 
 	if err != nil {
 		http.Error(w, "BookID incorrect, or book missing", http.StatusNoContent)
@@ -35,7 +35,7 @@ func (api *API) GetBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) GetSeries(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
+	user, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}
@@ -47,7 +47,12 @@ func (api *API) GetSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	SeriesID := pathParts[4]
 
-	book, err := library.LoadBooks(api.DB, SeriesID)
+	var owner *string
+	if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
+		owner = &user.Username
+	}
+
+	book, err := library.LoadBooks(api.DB, SeriesID, owner)
 
 	if err != nil {
 		http.Error(w, "BookID incorrect, or book missing", http.StatusNoContent)
@@ -105,17 +110,21 @@ func (api *API) DeleteSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 }
-
 func (api *API) GetManifest(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
+	user, ok := api.RequestCheck(w, r, http.MethodGet, api.ReadOnly())
 	if !ok {
 		return
 	}
 
-	manifest, err := library.LoadManifest(api.DB)
+	var owner *string
+	if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
+		owner = &user.Username
+	}
 
+	manifest, err := library.LoadManifest(api.DB, owner)
 	if err != nil {
 		http.Error(w, "could not fetch manifest", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

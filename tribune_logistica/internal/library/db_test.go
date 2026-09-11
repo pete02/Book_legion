@@ -1,6 +1,7 @@
 package library
 
 import (
+	"reflect"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -334,18 +335,20 @@ func TestLoadSeriesRow(t *testing.T) {
 		t.Fatalf("loadSeriesRow() error = %v", err)
 	}
 
-	want := SeriesEntry{
-		SeriesID:    series.SeriesID,
-		SeriesName:  series.SeriesName,
-		FirstBookID: book1.ID,
+	want := []Book{book1, book2}
+
+	if len(got) != len(want) {
+		t.Fatalf("loadSeriesRow() returned %d books, want %d", len(got), len(want))
 	}
 
-	if got != want {
-		t.Errorf("loadSeriesRow() = %+v, want %+v", got, want)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("loadSeriesRow()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
 
-func TestLoadSeriesRowUsesFirstAccessibleBook(t *testing.T) {
+func TestLoadSeriesRowAccess(t *testing.T) {
 	store := setupTestDB(t)
 
 	series := testSeries()
@@ -361,6 +364,11 @@ func TestLoadSeriesRowUsesFirstAccessibleBook(t *testing.T) {
 	book2.Title = "The Second Book"
 	book2.SeriesOrder = 2
 
+	book3 := book1
+	book3.ID = "book-3"
+	book3.Title = "The Third Book"
+	book3.SeriesOrder = 3
+
 	if err := saveBookRow(store, book1); err != nil {
 		t.Fatalf("saveBookRow(book1) error = %v", err)
 	}
@@ -369,41 +377,62 @@ func TestLoadSeriesRowUsesFirstAccessibleBook(t *testing.T) {
 		t.Fatalf("saveBookRow(book2) error = %v", err)
 	}
 
-	// The first book is restricted to user-1.
+	if err := saveBookRow(store, book3); err != nil {
+		t.Fatalf("saveBookRow(book3) error = %v", err)
+	}
+
+	// Book 1 is restricted to user-1.
 	_, err := store.DB.Exec(`
 		INSERT INTO user_access (book_id, user_id)
 		VALUES (?, ?)
 	`, book1.ID, "user-1")
 	if err != nil {
-		t.Fatalf("failed to create access row: %v", err)
+		t.Fatalf("failed to create access row for book1: %v", err)
 	}
 
-	// Anonymous access should therefore select book 2.
+	// Book 2 is restricted to user-2.
+	_, err = store.DB.Exec(`
+		INSERT INTO user_access (book_id, user_id)
+		VALUES (?, ?)
+	`, book2.ID, "user-2")
+	if err != nil {
+		t.Fatalf("failed to create access row for book2: %v", err)
+	}
+
+	// Anonymous users should only see unrestricted books.
 	got, err := loadSeriesRow(store, series.SeriesID, nil)
 	if err != nil {
 		t.Fatalf("anonymous loadSeriesRow() error = %v", err)
 	}
 
-	if got.FirstBookID != book2.ID {
-		t.Errorf(
-			"anonymous first book = %q, want %q",
-			got.FirstBookID,
-			book2.ID,
-		)
+	want := []Book{book3}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("anonymous loadSeriesRow() = %+v, want %+v", got, want)
 	}
 
-	// user-1 should get book 1.
+	// user-1 should only see book 1.
 	got, err = loadSeriesRow(store, series.SeriesID, stringPtr("user-1"))
 	if err != nil {
-		t.Fatalf("user loadSeriesRow() error = %v", err)
+		t.Fatalf("user-1 loadSeriesRow() error = %v", err)
 	}
 
-	if got.FirstBookID != book1.ID {
-		t.Errorf(
-			"user first book = %q, want %q",
-			got.FirstBookID,
-			book1.ID,
-		)
+	want = []Book{book1}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("user-1 loadSeriesRow() = %+v, want %+v", got, want)
+	}
+
+	// user-2 should only see book 2.
+	got, err = loadSeriesRow(store, series.SeriesID, stringPtr("user-2"))
+	if err != nil {
+		t.Fatalf("user-2 loadSeriesRow() error = %v", err)
+	}
+
+	want = []Book{book2}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("user-2 loadSeriesRow() = %+v, want %+v", got, want)
 	}
 }
 

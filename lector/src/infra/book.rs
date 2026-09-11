@@ -10,14 +10,20 @@ use serde::{Deserialize, Serialize};
 
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+// infra/book.rs
 pub struct BookInfo {
     pub id: String,
     pub title: String,
     pub author_id: String,
     pub series_id: String,
+    pub series_name: String,
     pub series_order: usize,
     pub file_path: String,
+    #[serde(default)]
+    pub grant_access: String, // comma-separated usernames, UI-only, not persisted as a body field
 }
+
+
 impl BookInfo {
     pub fn new()->BookInfo{
         BookInfo{
@@ -25,8 +31,10 @@ impl BookInfo {
             title: "".to_string(),
             author_id: "".to_string(),
             series_id: "".to_string(),
+            series_name: "".to_string(),
             series_order: 0,
             file_path: "".to_string(),
+            grant_access: "".to_string(),
         }
     }
 }
@@ -56,7 +64,7 @@ pub async fn delete_book(book_id: &str)-> Result<(),String>{
 
 #[cfg(not(feature = "mock"))]
 pub async fn save_book(book: &BookInfo) -> Result<(), String> {
-    use crate::infra::auth::post_with_auth;
+    use crate::infra::auth::post_with_auth_with_headers;
 
     let url = "/api/v1/savebook";
     let body = serde_json::json!({
@@ -65,17 +73,24 @@ pub async fn save_book(book: &BookInfo) -> Result<(), String> {
         "author_id": book.author_id,
         "series_id": book.series_id,
         "series_order": book.series_order,
-        "series_name": "",
+        "series_name": book.series_name,
         "file_path": book.file_path,
     }).to_string();
 
-    let resp = post_with_auth(url, body).await;
-    if resp.is_ok() {
-        Ok(())
+    let access = book.grant_access.trim();
+    let headers: Vec<(&str, &str)> = if access.is_empty() {
+        vec![]
     } else {
-        Err(resp.unwrap_err())
+        vec![("X-Book-Access", access)]
+    };
+
+    let resp = post_with_auth_with_headers(url, body, &headers).await;
+    match resp {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
     }
 }
+
 #[cfg(feature = "mock")]
 pub async fn save_book(book: &BookInfo) -> Result<(), String> {
     info!("save book: {:?}", book);

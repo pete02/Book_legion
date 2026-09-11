@@ -149,6 +149,18 @@ fn EditBookInfo(book_id: String, mut draft: Signal<Option<BookInfo>>) -> Element
                 }
             }
 
+            Field {
+                label: "Grant access to (comma-separated usernames)",
+                child: rsx! {
+                    input {
+                        style: INPUT_STYLE,
+                        placeholder: "alice, bob",
+                        value: "{d.grant_access}",
+                        oninput: move |evt| update_draft(draft, |b| b.grant_access = evt.value()),
+                    }
+                }
+            }
+
             div {
                 style: "display: flex; gap: 10px; justify-content: flex-end;",
 

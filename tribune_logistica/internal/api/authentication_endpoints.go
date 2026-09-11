@@ -19,8 +19,18 @@ type LoginRequest struct {
 type LoginResponse struct {
 	AuthToken    string `json:"auth_token"`
 	RefreshToken string `json:"refresh_token"`
-	GetToken     string `json:"get_token"`
+	Pin          string `json:"pin"`
 	ExpiresIn    int    `json:"expires_in"`
+}
+
+type RegisterRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Pin      string `json:"pin"`
+}
+
+type ChangePinRequest struct {
+	Pin string `json:"pin"`
 }
 
 type RegisterResponse struct {
@@ -58,19 +68,19 @@ func (api *API) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Decode request body
-	var req LoginRequest
+	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
-	if req.Username == "" || req.Password == "" {
-		http.Error(w, "Username and password required", http.StatusBadRequest)
+	if req.Username == "" || req.Password == "" || req.Pin == "" {
+		http.Error(w, "Username, password, and pin required", http.StatusBadRequest)
 		return
 	}
 
 	// Create user object
-	user, err := login.NewUser(req.Username, req.Password)
+	user, err := login.NewUser(req.Username, req.Password, req.Pin)
 	if err != nil {
 		http.Error(w, "Could not create a user", http.StatusInternalServerError)
 		return
@@ -105,9 +115,11 @@ func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
+
 	fmt.Printf("Logging in: %v\n", req.Username)
 	user, err := login.NewUserSession(req.Username, req.Password, api.DB)
 	if err != nil {
+		log.Printf("[API] Error logging in user, %v\n", err)
 		http.Error(w, "Wrong credentials", http.StatusUnauthorized)
 		return
 	}
@@ -115,13 +127,40 @@ func (api *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 	resp := LoginResponse{
 		AuthToken:    user.GetAuthToken(),
 		RefreshToken: user.GetRefreshToken(),
-		GetToken:     user.GetGetToken(),
+		Pin:          user.Pin,
 		ExpiresIn:    int(login.GetAuthTokenTTL().Seconds()),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (api *API) ChangePin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := api.AuthCheck(w, r)
+	if !ok {
+		return
+	}
+
+	var req ChangePinRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	err := login.ChangeUserPIN(api.DB, user.Username, req.Pin)
+	if err != nil {
+		http.Error(w, "Could not change PIN", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(req)
 }
 
 func (api *API) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {

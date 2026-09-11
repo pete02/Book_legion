@@ -2,18 +2,19 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/book_legion-tribune_logistica/internal/login"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	_ "modernc.org/sqlite"
 )
 
 // ---------------------------------------------------------------------
@@ -21,6 +22,29 @@ import (
 // ---------------------------------------------------------------------
 
 const testAdminToken = "test-admin-token"
+
+func setupTestDB(t *testing.T) *storage.SQLStorage {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+
+	db.SetMaxOpenConns(1)
+
+	store, err := storage.NewSQLStorage(db)
+	if err != nil {
+		db.Close()
+		t.Fatalf("failed to create SQL storage: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return store
+}
 
 func withAdminToken(t *testing.T) {
 	t.Helper()
@@ -31,20 +55,14 @@ func withAdminToken(t *testing.T) {
 // NewTestAPI spins up an API backed by a real, throwaway JSONStorage file
 // so handlers exercise their actual DB read/write paths instead of a mock.
 func NewTestAPI(t *testing.T) *API {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "db.json")
-	store, err := storage.NewJSONStorage(path)
-	if err != nil {
-		t.Fatalf("failed to create test storage: %v", err)
-	}
-	return &API{DB: store}
+	return &API{DB: setupTestDB(t)}
 }
 
 // seedUser writes a user directly via the login package (bypassing the HTTP
 // handler) so Login/Refresh tests don't depend on RegisterUser working.
 func seedUser(t *testing.T, a *API, username, password string) {
 	t.Helper()
-	user, err := login.NewUser(username, password)
+	user, err := login.NewUser(username, password, "0000")
 	if err != nil {
 		t.Fatalf("failed to build user %q: %v", username, err)
 	}
@@ -200,9 +218,10 @@ func TestRegisterUser_Success(t *testing.T) {
 	username := uniqueUsername(t)
 	password := "correct horse battery staple"
 
-	req := httptest.NewRequest(http.MethodPost, "/register", jsonBody(t, LoginRequest{
+	req := httptest.NewRequest(http.MethodPost, "/register", jsonBody(t, RegisterRequest{
 		Username: username,
 		Password: password,
+		Pin:      "0000",
 	}))
 	req.Header.Set("Authorization", "Bearer "+testAdminToken)
 	rr := httptest.NewRecorder()

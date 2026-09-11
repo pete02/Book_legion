@@ -1,29 +1,46 @@
 package login
 
 import (
-	"os"
+	"database/sql"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/book_legion-tribune_logistica/internal/storage"
+	_ "modernc.org/sqlite"
 )
 
-func setupTestUser(t *testing.T) (*storage.JSONStorage, User, string) {
+func setupTestDB(t *testing.T) *storage.SQLStorage {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+
+	db.SetMaxOpenConns(1)
+
+	store, err := storage.NewSQLStorage(db)
+	if err != nil {
+		db.Close()
+		t.Fatalf("failed to create SQL storage: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return store
+}
+
+func setupTestUser(t *testing.T) (*storage.SQLStorage, User, string) {
 	t.Helper() // marks this as a helper for nicer test output
 
-	// Create temporary JSONStorage
-	tmpFile := "test_data.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
+	store := setupTestDB(t)
 	password := "mysecretpassword"
 
-	user, err := NewUser("pete", password)
+	user, _ := NewUser("pete", password, "0000")
 	// Insert user
 	if err := InsertUser(store, user); err != nil {
 		t.Fatalf("InsertUser failed: %v", err)
@@ -240,29 +257,9 @@ func TestVerifyGetToken_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestVerifyGetToken_ValidToken(t *testing.T) {
-	store, user, password := setupTestUser(t)
-	user, err := NewUserSession(user.Username, password, store)
-	if err != nil {
-		t.Fatalf("NewUserSession failed: %v", err)
-	}
-
-	ok, err := VerifyGetSession(user.getToken)
-	if err != nil || !ok {
-		t.Fatal("Expected valid token to pass verification")
-	}
-}
-
 func TestRefreshTokenPersistence(t *testing.T) {
-	// 1️⃣ Create temporary JSON file
-	tmpFile := "test_persistence.json"
-	defer os.Remove(tmpFile)
-
 	// 2️⃣ Create first store and insert user
-	store1, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create store1: %v", err)
-	}
+	store1 := setupTestDB(t)
 
 	password := "mypassword"
 	passwordHash, err := argon2id.CreateHash(password, argon2id.DefaultParams)
@@ -273,6 +270,7 @@ func TestRefreshTokenPersistence(t *testing.T) {
 	user := User{
 		Username:     "alice",
 		PasswordHash: passwordHash,
+		Pin:          "0000",
 	}
 
 	if err := InsertUser(store1, user); err != nil {
@@ -286,17 +284,6 @@ func TestRefreshTokenPersistence(t *testing.T) {
 	}
 	if user.refreshToken == "" {
 		t.Fatal("Expected refresh token, got empty string")
-	}
-
-	// 4️⃣ Save the store to disk
-	if err := store1.Save(); err != nil {
-		t.Fatalf("Failed to save store: %v", err)
-	}
-
-	// 5️⃣ Re-create the store (simulate app restart)
-	store2, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create store2: %v", err)
 	}
 
 	// 6️⃣ Verify that refresh token still works
@@ -315,15 +302,6 @@ func TestRefreshTokenPersistence(t *testing.T) {
 	if user.Username != "alice" {
 		t.Fatalf("Expected username 'alice', got %s", user.Username)
 	}
-
-	// 7️⃣ Verify password still works after reload
-	user2, err := NewUserSession("alice", password, store2)
-	if err != nil {
-		t.Fatalf("NewUserSession failed after reload: %v", err)
-	}
-	if user2.refreshToken == "" {
-		t.Fatal("Expected refresh token after reload, got empty string")
-	}
 }
 
 func TestRefreshAuthTokenWithIncorrectUsername(t *testing.T) {
@@ -340,17 +318,10 @@ func TestRefreshAuthTokenWithIncorrectUsername(t *testing.T) {
 	}
 }
 
-func setupMultipleUsers(t *testing.T, usernames []string) (*storage.JSONStorage, map[string]string) {
+func setupMultipleUsers(t *testing.T, usernames []string) (*storage.SQLStorage, map[string]string) {
 	t.Helper() // marks this as a helper for nicer test output
 
-	// Create temporary JSONStorage
-	tmpFile := "test_data.json"
-	defer os.Remove(tmpFile)
-
-	store, err := storage.NewJSONStorage(tmpFile)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
+	store := setupTestDB(t)
 	passwords := make(map[string]string)
 
 	for _, u := range usernames {
@@ -363,6 +334,7 @@ func setupMultipleUsers(t *testing.T, usernames []string) (*storage.JSONStorage,
 		user := User{
 			Username:     u,
 			PasswordHash: hash,
+			Pin:          "0000",
 		}
 		if err := InsertUser(store, user); err != nil {
 			t.Fatalf("InsertUser failed for %s: %v", u, err)
@@ -472,5 +444,37 @@ func TestMultiUserTokenExpiry(t *testing.T) {
 		if err == nil {
 			t.Fatalf("Expired auth token for %s should not be valid", u)
 		}
+	}
+}
+
+func TestChangeUserPIN(t *testing.T) {
+	store := setupTestDB(t)
+
+	user := User{
+		Username:     "alice",
+		PasswordHash: "hash",
+		Pin:          "1234",
+	}
+
+	if err := InsertUser(store, user); err != nil {
+		t.Fatalf("failed to insert user: %v", err)
+	}
+
+	if err := ChangeUserPIN(store, user.Username, "5678"); err != nil {
+		t.Fatalf("failed to change PIN: %v", err)
+	}
+
+	var pin string
+	err := store.DB.QueryRow(`
+		SELECT pin
+		FROM users
+		WHERE username = ?
+	`, user.Username).Scan(&pin)
+	if err != nil {
+		t.Fatalf("failed to read PIN: %v", err)
+	}
+
+	if pin != "5678" {
+		t.Errorf("expected PIN %q, got %q", "5678", pin)
 	}
 }
