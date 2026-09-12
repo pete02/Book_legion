@@ -75,13 +75,12 @@ func main() {
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(noCache)
-		r.With(api.ReadAccess).Get("/manifest", api.GetManifest)
+		r.With(api.AccessCheck).Get("/manifest", api.GetManifest)
 
 		// Book endpoints
 		r.Route("/books/{bookID}", func(r chi.Router) {
-			r.Use(api.ReadAccess)
-			r.Use(api.BookExists)
 			r.Use(api.AccessCheck)
+			r.Use(api.BookExists)
 
 			r.Get("/", api.GetBook)
 			r.Get("/chapters/{chapterIndex}", api.GetChapter)
@@ -94,7 +93,7 @@ func main() {
 			r.Get("/bookprogress", api.GetBookProgress)
 		})
 
-		r.With(api.ReadAccess).Get("/series/{seriesID}", api.GetSeries)
+		r.With(api.AccessCheck).Get("/series/{seriesID}", api.GetSeries)
 
 		r.With(api.AccessCheck).Get("/cursors/{bookID}", api.GetCursor)
 		r.Post("/cursors/save", api.SaveCursor)

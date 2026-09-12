@@ -23,8 +23,9 @@ import (
 )
 
 func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodGet, a.write())
+	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
+		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -42,8 +43,9 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 }
 
 func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
-	user, ok := a.RequestCheck(rr, req, http.MethodPost, a.write())
+	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
+		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -57,6 +59,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+
 	if ok, err := library.BookExists(a.DB, cursor.BookID); !ok || err != nil {
 		http.Error(rr, "Book not found", http.StatusNotFound)
 		return
@@ -149,6 +152,7 @@ func (a *API) GetNav(rr http.ResponseWriter, req *http.Request) {
 func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
+		log.Println("[Api] GetChapterProgress: Could not get user")
 		return
 	}
 
@@ -179,6 +183,7 @@ func (a *API) GetChapterProgress(rr http.ResponseWriter, req *http.Request) {
 func (a *API) GetBookProgress(rr http.ResponseWriter, req *http.Request) {
 	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
+		log.Println("[Api] GetBookProgress: Could not get user")
 		return
 	}
 

@@ -1,8 +1,7 @@
 use dioxus::prelude::*;
 use crate::{
     Route, domain::{
-        book::{ get_book_info},
-        library::get_library
+        self, book::get_book_info, library::get_library
     }, infra, ui::components::{TopBar, TopBarEntry}
 };
 
@@ -66,6 +65,23 @@ fn EmptyBookInfo(book_id: String) -> Element {
 fn EditBookInfo(book_id: String, mut draft: Signal<Option<BookInfo>>) -> Element {
     let series_list = get_library();
     let d = draft().unwrap();
+
+    // Track just the currently-selected series id. use_memo only notifies
+    // subscribers when the *value* changes, so editing the title/author/etc.
+    // won't trigger a refetch below — only actually switching series does.
+    let series_id_memo = use_memo(move || {
+        draft().map(|b| b.series_id.clone()).unwrap_or_default()
+    });
+
+    // Reload the book count for whatever series is currently selected in the
+    // draft (not necessarily the book's originally-saved series). Because
+    // domain::series::get_book_count reads the memo reactively, this
+    // automatically refetches if the user moves the book to a different
+    // series before saving.
+    let series_count = domain::series::get_book_count(series_id_memo);
+
+    let can_rename_series = !d.series_id.is_empty() && series_count() == Some(1);
+
     rsx! {
         div {
             style: "
@@ -144,6 +160,21 @@ fn EditBookInfo(book_id: String, mut draft: Signal<Option<BookInfo>>) -> Element
                                     update_draft(draft, |b| b.series_order = v);
                                 }
                             },
+                        }
+                    }
+                }
+            }
+
+            // Only the sole book in a series may rename that series, since doing
+            // so here wouldn't unexpectedly affect any other book.
+            if can_rename_series {
+                Field {
+                    label: "Series Name",
+                    child: rsx! {
+                        input {
+                            style: INPUT_STYLE,
+                            value: "{d.series_name}",
+                            oninput: move |evt| update_draft(draft, |b| b.series_name = evt.value()),
                         }
                     }
                 }

@@ -71,48 +71,44 @@ func (api *API) GetTokenCheck(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// Checks whether or not we have access, and returns user.Username
-func (a *API) RequestCheck(w http.ResponseWriter, r *http.Request, method string, permission string) (login.User, bool) {
-	if r.Method != method {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return login.User{}, false
-	}
-	return a.AuthCheck(w, r)
-}
-
 func (a *API) AccessCheck(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bookID := r.PathValue("bookID")
-
-		user, ok := r.Context().Value(userContextKey).(login.User)
+		user, ok := a.AuthCheck(w, r)
 		if !ok {
-			log.Println("[AccessCheck Middleware] Could not get user")
-			http.Error(w, "Book not found", http.StatusNotFound)
-			return
-		}
-
-		var owner string
-		if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
-			owner = user.Username
-		}
-
-		access, err := login.UserHasAccess(a.DB, owner, bookID)
-		if !access || err != nil {
 			log.Printf(
-				"[AccessCheck Middleware] No access for user %v and book %v: %v",
+				"[AccessCheck Middleware] Request check failed for user %v\n",
 				user.Username,
-				bookID,
-				err,
 			)
-			http.Error(w, "Book not found", http.StatusNotFound)
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		var owner *string
+		if pin := r.Header.Get("Pin"); pin != "" && pin == user.Pin {
+			owner = &user.Username
+		}
+
+		ctx := context.WithValue(r.Context(), userContextKey, user)
+		ctx = context.WithValue(ctx, ownerContextKey, owner)
+
+		if bookID := r.PathValue("bookID"); bookID != "" {
+			var ownerName string
+			if owner != nil {
+				ownerName = *owner
+			}
+
+			access, err := login.UserHasAccess(a.DB, ownerName, bookID)
+			if !access || err != nil {
+				log.Printf(
+					"[AccessCheck Middleware] No access for user %v and book %v: %v\n",
+					user.Username, bookID, err,
+				)
+				http.Error(w, "Book not found", http.StatusNotFound)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-func (a *API) Health(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
 }
 
 type contextKey string
@@ -123,7 +119,7 @@ const ownerContextKey contextKey = "owner"
 
 func (a *API) ReadAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, ok := a.RequestCheck(w, r, http.MethodGet, a.ReadOnly())
+		user, ok := a.AuthCheck(w, r)
 		if !ok {
 			return
 		}
@@ -152,13 +148,13 @@ func (a *API) BookExists(next http.Handler) http.Handler {
 
 		exists, err := library.BookExists(a.DB, bookID)
 		if err != nil {
-			log.Printf("[Book Exists middleware] Failed to check book %s: %v", bookID, err)
+			log.Printf("[Book Exists middleware] Failed to check book %s: %v\n", bookID, err)
 			http.Error(w, "Failed to check book", http.StatusInternalServerError)
 			return
 		}
 
 		if !exists {
-			log.Printf("[Book Exists middleware] Book %s does not exist", bookID)
+			log.Printf("[Book Exists middleware] Book %s does not exist\n", bookID)
 
 			http.Error(w, "Book not found", http.StatusNotFound)
 			return
@@ -170,14 +166,12 @@ func (a *API) BookExists(next http.Handler) http.Handler {
 
 func (a *API) WriteAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, ok := a.RequestCheck(w, r, http.MethodPost, a.write())
+		user, ok := a.AuthCheck(w, r)
 		if !ok {
 			return
 		}
 
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
-
-		next.ServeHTTP(w, r)
 	})
 }

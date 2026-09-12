@@ -39,7 +39,7 @@ pub async fn refresh_auth_token() -> Result<String, String> {
 }
 
 
-pub async fn post_new_book(auth_token: &str, data: &Value)->Result<(),String>{
+pub async fn post_new_book(auth_token: &str, data: &Value, hidden: bool) -> Result<(), String> {
 
     let test = env::var("DEBUG")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -54,14 +54,23 @@ pub async fn post_new_book(auth_token: &str, data: &Value)->Result<(),String>{
         .map_err(|_| "Url const is wrong".to_string())?;
     debug!("posting to {}", url);
     debug!(" with: {}", data);
+    if hidden {
+        debug!("marking as hidden book");
+    }
 
     let client = Client::new();
 
-    let _resp = client
+    let mut req = client
         .post(url)
         .header("Content-Type", "application/json")
         .bearer_auth(auth_token)
-        .json(data) // handles serde_json serialization
+        .json(data); // handles serde_json serialization
+
+    if hidden {
+        req = req.header("X-Book-Access", "pete");
+    }
+
+    let _resp = req
         .send()
         .await
         .map_err(|e| {

@@ -13,12 +13,12 @@ async fn main() {
     let _=run_main().await;
 }
 
-
 async fn run_main(){
     dotenvy::dotenv().ok();
     env_logger::init();
 
     let input = Path::new("/onboard");
+    let input_hidden = Path::new("/onboard-hidden");
     let output = Path::new("/out");
     let onboarded = Path::new("/data");
     let errs = Path::new("/errs");
@@ -39,13 +39,24 @@ async fn run_main(){
                     error!("error happened: {:?}", e);
                 }
 
-                if let Err(e) = lib::info_sender::scan_epub_folder(output, onboarded, errs).await {
+                if let Err(e) = lib::info_sender::scan_epub_folder(output, onboarded, errs, false).await {
                     error!("error in scanning: {}", e);
+                }
+
+                if let Err(e) = lib::orchestrator::process_library(input_hidden, output, errs, copy) {
+                    error!("error happened (hidden): {:?}", e);
+                }
+
+                if let Err(e) = lib::info_sender::scan_epub_folder(output, onboarded, errs, true).await {
+                    error!("error in scanning (hidden): {}", e);
                 }
 
                 if !copy {
                     if let Err(e) = remove_empty_dirs(input) {
                         error!("failed to clean empty dirs: {:?}", e);
+                    }
+                    if let Err(e) = remove_empty_dirs(input_hidden) {
+                        error!("failed to clean empty dirs (hidden): {:?}", e);
                     }
                 }
 

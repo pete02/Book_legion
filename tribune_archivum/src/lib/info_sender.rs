@@ -480,6 +480,7 @@ pub async fn scan_epub_folder(
     folder: &Path,
     output_dir: &Path,
     err_dir: &Path,
+    hidden: bool
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut epubs = Vec::new();
@@ -516,7 +517,7 @@ pub async fn scan_epub_folder(
                 match get_book_data(epub_path.to_str().unwrap()).await {
                     Ok(data) => {
                         if let Err(e) =
-                            handle_successful_book(&epub_path, &output_dir, data).await
+                            handle_successful_book(&epub_path, &output_dir, data, hidden).await
                         {
                             error!(
                                 "Failed to move {}: {}",
@@ -543,6 +544,7 @@ async fn handle_successful_book(
     source_path: &Path,
     output_dir: &Path,
     mut data: BookData,
+    hidden: bool
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     // Sanitize components
@@ -609,14 +611,18 @@ async fn handle_successful_book(
 
     let auth=gate::refresh_auth_token().await.map_err(|e|format!("Error in getting refresh token: {}", e))?;
     debug!(" auth ok");
-    gate::post_new_book(&auth, &sending).await?;
-
-
-    info!(
-        "Moved → data: {}"
-        , sending.to_string()
-    );
-
+    gate::post_new_book(&auth, &sending, hidden).await?;
+    if !hidden{
+        info!(
+            "Moved → data: {}"
+            , sending.to_string()
+        );
+    }else{
+        info!(
+            "Moved → data(hidden): {}"
+            , sending.to_string()
+        );
+    }
     Ok(())
 }
 

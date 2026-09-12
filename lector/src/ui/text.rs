@@ -68,7 +68,7 @@ pub fn Text(book_id: String) -> Element {
             column_width_px.set(Some(width));
             if let Some(page) = text::resolve_offset_to_page_with_retry(saved_offset, width).await {
                 tracing::info!("resolved page: {}", page);
-
+                is_restoring.set(false);
                 current_page.set(page);
             }else{
                 tracing::error!("could not resolve page")

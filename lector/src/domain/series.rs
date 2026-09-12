@@ -3,11 +3,11 @@ use dioxus::{logger::tracing, prelude::*};
 use crate::infra::{self, series};
 use crate::domain::cover::{CardData, create_cover_path};
 
-async fn load_series(book_id: String, title: Signal<String>) -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
+async fn load_series(series_id: String, title: Signal<String>) -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
     let mut books=Vec::new();
     let mut title=title.clone();
 
-    let mut series=series::fetch_series(&book_id).await?;
+    let mut series=series::fetch_series(&series_id).await?;
     series.sort_by_key(|b|b.series_order);
 
     for entry in series{
@@ -38,6 +38,25 @@ pub fn delete_series(series_id:String){
             Err(_)=>error!("Could not delete the series")
         }
     });
+}
+
+// domain/series.rs
+pub fn get_book_count(series_id: Memo<String>) -> Resource<i32> {
+    use_resource(move || {
+        let series_id = series_id(); // reactive read — tracked, so this reruns whenever the memo changes
+        async move {
+            if series_id.is_empty() {
+                return 0;
+            }
+            match infra::series::fetch_series(&series_id).await {
+                Ok(c) => c.len() as i32,
+                Err(e) => {
+                    tracing::error!("Err in loading series book count: {}", e);
+                    0
+                }
+            }
+        }
+    })
 }
 
 pub fn use_series(book_id: String, title: Signal<String>) -> Signal<Vec<CardData>> {

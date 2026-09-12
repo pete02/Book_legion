@@ -215,7 +215,7 @@ pub async fn fetch_chapter_progress(
     book_id: &str,
 ) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
     let url = format!(
-        "/api/v1/book/{}/chapterprogress",
+        "/api/v1/books/{}/chapterprogress",
         book_id
     );
 
@@ -237,7 +237,7 @@ pub async fn fetch_book_progress(
     book_id: &str,
 ) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
     let url = format!(
-        "/api/v1/book/{}/bookprogress",
+        "/api/v1/books/{}/bookprogress",
         book_id
     );
 
