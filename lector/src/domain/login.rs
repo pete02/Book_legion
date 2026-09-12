@@ -1,5 +1,5 @@
 use dioxus::{logger::tracing, prelude::*};
-use crate::infra::login;
+use crate::infra::{self, login};
 
 
 
@@ -105,6 +105,27 @@ pub fn persist_user(user: &User) {
     storage.set_item("username", &user.username).unwrap();
 }
 
+pub async fn refresh_auth()->Result<(), String>{
+    let refresh= current_refresh().unwrap_or_default();
+    if refresh == "" {
+        set_auth(None);
+        set_refresh(None);
+        return Err("No refresh token available".into())
+    }
+
+    let new_auth= match infra::auth::refresh_auth_token(&refresh).await {
+        Ok(auth) => auth,
+        Err(e) => {
+            set_auth(None);
+            set_refresh(None);
+            return Err(format!("Failed to refresh auth token: {}", e));
+        }
+    };
+
+    set_auth(Some(new_auth));
+
+    Ok(())
+}
 
 
 pub fn attempt_login(username: String, password: String, error:Signal<String>, loading:Signal<bool>) {

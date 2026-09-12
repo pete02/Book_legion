@@ -11,6 +11,7 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
+use crate::domain::login;
 use crate::{domain, ui::components::{TopBar, TopBarEntry, card::Cover}, Route, assets};
 
 
@@ -69,7 +70,7 @@ pub fn Audio(book_id: String) -> Element {
                 queue,
                 sender,
             }
-
+             WakeLock { playing } 
             AudioPlayer {
                 queue,
                 playing,
@@ -147,71 +148,92 @@ fn WebSocketConnection(
         let book_id = book_id.clone();
 
         spawn(async move {
-            dioxus::logger::tracing::info!("Connecting websocket for {book_id}");
-            status.set("Connecting...".into());
+            let mut backoff_ms: u32 = 500;
+            const MAX_BACKOFF_MS: u32 = 15_000;
 
-            let mut ws = match WebSocket::open(&format!(
-                "/api/v1/audio/{}",
-                book_id
-            )) {
-                Ok(ws) => ws,
-                Err(e) => {
-                    status.set(format!("Connection failed: {e:?}"));
-                    return;
+            loop {
+                let _ = login::refresh_auth().await;
+                if domain::login::current_auth().is_none() {
+                    status.set("Session expired".into());
+                    connected.set(false);
+                    sender.set(None);
+                    break; // stop retrying; login guard takes it from here
                 }
-            };
 
-            connected.set(true);
-            status.set("Connected".into());
-            let _= ws.send(Message::Text(json!({"type": "auth", "token": &domain::login::current_auth()}).to_string())).await;
-            let (tx, mut rx) = ws.split();
-            sender.set(Some(tx));
 
-            let mut pending_header: Option<AudioHeader> = None;
+                dioxus::logger::tracing::info!("Connecting websocket for {book_id}");
+                status.set("Connecting...".into());
 
-            while let Some(msg) = rx.next().await {
-                match msg {
-                    Ok(Message::Text(text)) => {
-                        match serde_json::from_str::<AudioHeader>(&text) {
-                            Ok(header) => pending_header = Some(header),
-                            Err(e) => {
-                                dioxus::logger::tracing::warn!(
-                                    "Bad audio header, dropping: {e:?} ({text})"
-                                );
-                                pending_header = None;
-                            }
-                        }
-                    }
-                    Ok(Message::Bytes(bytes)) => {
-                        dioxus::logger::tracing::info!("Received {} bytes", bytes.len());
-                        match pending_header.take() {
-                            Some(header) => {
-                                queue.write().push_back(AudioChunk { header, bytes });
-                            }
-                            None => {
-                                dioxus::logger::tracing::warn!(
-                                    "Got {} bytes with no preceding header, dropping",
-                                    bytes.len()
-                                );
-                            }
-                        }
-                    }
+                let mut ws = match WebSocket::open(&format!("/api/v1/audio/{}", book_id)) {
+                    Ok(ws) => ws,
                     Err(e) => {
-                        status.set(format!("Socket error: {e:?}"));
-                        break;
+                        status.set(format!("Connection failed: {e:?}"));
+                        gloo_timers::future::TimeoutFuture::new(backoff_ms).await;
+                        backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
+                        continue;
+                    }
+                };
+
+
+                connected.set(true);
+                status.set("Connected".into());
+                let _ = ws
+                    .send(Message::Text(
+                        json!({"type": "auth", "token": &domain::login::current_auth()}).to_string(),
+                    ))
+                    .await;
+                let (tx, mut rx) = ws.split();
+                sender.set(Some(tx));
+
+                // Reset backoff once we're actually connected.
+                backoff_ms = 500;
+                let mut pending_header: Option<AudioHeader> = None;
+
+                while let Some(msg) = rx.next().await {
+                    match msg {
+                        Ok(Message::Text(text)) => {
+                            match serde_json::from_str::<AudioHeader>(&text) {
+                                Ok(header) => pending_header = Some(header),
+                                Err(e) => {
+                                    dioxus::logger::tracing::warn!(
+                                        "Bad audio header, dropping: {e:?} ({text})"
+                                    );
+                                    pending_header = None;
+                                }
+                            }
+                        }
+                        Ok(Message::Bytes(bytes)) => {
+                            dioxus::logger::tracing::info!("Received {} bytes", bytes.len());
+                            match pending_header.take() {
+                                Some(header) => {
+                                    queue.write().push_back(AudioChunk { header, bytes });
+                                }
+                                None => {
+                                    dioxus::logger::tracing::warn!(
+                                        "Got {} bytes with no preceding header, dropping",
+                                        bytes.len()
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            status.set(format!("Socket error: {e:?}"));
+                            break;
+                        }
                     }
                 }
-            }
 
-            connected.set(false);
-            status.set("Disconnected".into());
-            sender.set(None);
+                connected.set(false);
+                sender.set(None);
+                status.set("Reconnecting...".into());
+                gloo_timers::future::TimeoutFuture::new(backoff_ms).await;
+                backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
+            }
         });
     });
 
     rsx! {}
 }
-
 
 fn audio_element() -> Option<HtmlAudioElement> {
     web_sys::window()?
@@ -364,4 +386,99 @@ pub fn TimeBar(book_id: String, headers: Signal<Option<AudioHeader>>) -> Element
             }
         }
     }
+}
+
+
+// ---------------------------------------------------------------------
+// Screen wake lock (keeps the device from sleeping while audio plays)
+// ---------------------------------------------------------------------
+
+/// Requests a screen wake lock via `navigator.wakeLock.request("screen")`.
+/// Uses `js_sys::Reflect` instead of typed `web_sys::WakeLock` bindings so
+/// we don't need the "WakeLock"/"WakeLockSentinel" web-sys features just
+/// for this. Returns the sentinel (needed to release the lock later), or
+/// `None` if the API isn't available or the request failed.
+async fn request_wake_lock() -> Option<JsValue> {
+    let navigator = web_sys::window()?.navigator();
+    let wake_lock = js_sys::Reflect::get(&navigator, &JsValue::from_str("wakeLock")).ok()?;
+    if wake_lock.is_undefined() || wake_lock.is_null() {
+        return None;
+    }
+    let request_fn = js_sys::Reflect::get(&wake_lock, &JsValue::from_str("request")).ok()?;
+    let request_fn: js_sys::Function = request_fn.dyn_into().ok()?;
+    let promise = request_fn.call1(&wake_lock, &JsValue::from_str("screen")).ok()?;
+    let promise: js_sys::Promise = promise.dyn_into().ok()?;
+    wasm_bindgen_futures::JsFuture::from(promise).await.ok()
+}
+
+/// Releases a sentinel obtained from `request_wake_lock`. Fire-and-forget.
+fn release_wake_lock(sentinel: &JsValue) {
+    if let Ok(release_fn) = js_sys::Reflect::get(sentinel, &JsValue::from_str("release")) {
+        if let Ok(release_fn) = release_fn.dyn_into::<js_sys::Function>() {
+            let _ = release_fn.call0(sentinel);
+        }
+    }
+}
+
+fn document_visible() -> bool {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| js_sys::Reflect::get(&d, &JsValue::from_str("visibilityState")).ok())
+        .and_then(|v| v.as_string())
+        .map(|s| s == "visible")
+        .unwrap_or(true)
+}
+use crate::dioxus_core::use_drop;
+/// Headless component that holds a screen wake lock for as long as
+/// `playing` is true, and re-acquires it when the page becomes visible
+/// again (the browser force-releases it whenever the tab is hidden).
+#[component]
+fn WakeLock(playing: Signal<bool>) -> Element {
+    let mut sentinel: Signal<Option<JsValue>> = use_signal(|| None);
+
+    use_effect(move || {
+        let want_lock = playing();
+        spawn(async move {
+            if want_lock {
+                if sentinel.read().is_none() {
+                    if let Some(s) = request_wake_lock().await {
+                        sentinel.set(Some(s));
+                    }
+                }
+            } else if let Some(s) = sentinel.write().take() {
+                release_wake_lock(&s);
+            }
+        });
+    });
+
+    use_effect(move || {
+        let closure = Closure::wrap(Box::new(move || {
+            if document_visible() && playing() && sentinel.read().is_none() {
+                spawn(async move {
+                    if sentinel.read().is_none() {
+                        if let Some(s) = request_wake_lock().await {
+                            sentinel.set(Some(s));
+                        }
+                    }
+                });
+            }
+        }) as Box<dyn Fn()>);
+
+        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+            let _ = doc.add_event_listener_with_callback(
+                "visibilitychange",
+                closure.as_ref().unchecked_ref(),
+            );
+        }
+        // Leaked intentionally, same rationale as the "ended" listener above.
+        closure.forget();
+    });
+
+    use_drop(move || {
+        if let Some(s) = sentinel.write().take() {
+            release_wake_lock(&s);
+        }
+    });
+
+    rsx! {}
 }
