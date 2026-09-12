@@ -93,6 +93,9 @@ fn Login() -> Element {
     let mut password = use_signal(|| String::new());
     let mut error = use_signal(|| "".to_owned());
     let loading = use_signal(|| false);
+    let mut library_mode = domain::library::use_library_mode();
+
+    library_mode.set(domain::library::LibraryMode::Normal);
 
     rsx! {
         div { style: styles::LOGIN_CONTAINER,

@@ -47,15 +47,23 @@ pub fn TopBar(
     rsx! {
         div {
             id: "topbar-root",
-            style: "{styles::TOPBAR} position: relative;",
+            style: "{styles::TOPBAR} position: relative;  overflow-x: clip;",
 
             // ── Hidden probe ─────────────────────────────────────────────
             // Always in the DOM so we can measure the natural width of all
             // items without being constrained by the container.
             div {
                 id: "topbar-probe",
-                style: "position: absolute; visibility: hidden; pointer-events: none;
-                        display: flex; gap: 12px; white-space: nowrap;",
+                style: "
+                    position: fixed;
+                    left: 0;
+                    top: -10000px;
+                    visibility: hidden;
+                    pointer-events: none;
+                    display: flex;
+                    gap: 12px;
+                    white-space: nowrap;
+                ",
                 { nav_items(&entries) }
                 { extra_button(show_extra, &text_extra, &on_extra) }
             }
