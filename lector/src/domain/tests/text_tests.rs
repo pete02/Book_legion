@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod page_count_tests {
-    use super::*;
+    
     use crate::domain::text::compute_total_pages;
     #[test]
     fn exact_multiple_gives_correct_page_count() {
@@ -36,9 +36,9 @@ mod page_count_tests {
 // domain/text_tests.rs  (or a #[cfg(test)] mod at the bottom of text.rs)
 
 
-use wasm_bindgen::JsCast;
+
 use wasm_bindgen_test::*;
-use web_sys::{Document, Element, ShadowRootInit, ShadowRootMode};
+use web_sys::{Element, ShadowRootInit, ShadowRootMode};
 
 use crate::domain::text::resolve_offset_to_page;
 
@@ -129,7 +129,7 @@ fn resolve_offset_to_page_tests() {
     let diagnosis=false;
     //diagnosis
     {
-        if(diagnosis){
+        if diagnosis {
             let _fixture = three_page_fixture();
 
             let page0 = resolve_offset_to_page(0, 200.0);

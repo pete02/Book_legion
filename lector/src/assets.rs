@@ -4,9 +4,9 @@ pub const MAIN_CSS: Asset = asset!("/assets/main.css");
 pub const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 pub const PAUSE: Asset = asset!("/assets/pause.png");
 pub const PLAY: Asset = asset!("/assets/play.png");
-pub const FORWARD: Asset = asset!("/assets/forward.png");
+pub const _FORWARD: Asset = asset!("/assets/forward.png");
 pub const LOADING: Asset= asset!("/assets/loading.png");
-pub const ERROR: Asset = asset!("/assets/error.png");
+pub const _ERROR: Asset = asset!("/assets/error.png");
 
 #[cfg(feature = "mock")]
 pub const MOCK_COVER: Asset = asset!("/test_assets/test.jpg");

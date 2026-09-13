@@ -113,8 +113,7 @@ pub async fn fetch_book_file_as_blob_url(
     book_id: &str,
     file_path: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use dioxus::logger::tracing;
-
+    
     let url = format!(
         "/api/v1/books/{}/file?file={}",
         book_id,
@@ -150,8 +149,8 @@ fn bytes_to_blob_url(bytes: &[u8], content_type: &str) -> Result<String, JsValue
     let parts = js_sys::Array::new();
     parts.push(&array.buffer());
 
-    let mut opts = web_sys::BlobPropertyBag::new();
-    opts.type_(content_type);
+    let opts = web_sys::BlobPropertyBag::new();
+    opts.set_type(content_type);
 
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &opts)?;
     web_sys::Url::create_object_url_with_blob(&blob)

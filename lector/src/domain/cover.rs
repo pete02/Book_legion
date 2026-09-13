@@ -1,4 +1,3 @@
-use dioxus::{logger::tracing};
 #[derive(Clone, PartialEq, Eq)]
 pub struct CardData {
     pub name: String,

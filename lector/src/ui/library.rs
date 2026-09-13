@@ -11,7 +11,8 @@ pub fn Library() -> Element {
     let mut mode: Signal<library::LibraryMode> =library::use_library_mode();
     let mut query = use_signal(String::new);
 
-    let mut library = library::use_library();
+    let library = library::use_library(mode);
+
 
     return rsx! {
         div { style: styles::CONTAINER_STYLE,

@@ -22,11 +22,11 @@ pub struct ManifestEntry {
     pub series_name: String,
     pub first_book_id: String,
 }
-
+#[cfg(feature = "mock")]
 use crate::domain::library;
 
 #[cfg(not(feature = "mock"))]
-pub async fn fetch_manifest(mode: library::LibraryMode) -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
+pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
     use crate::infra::auth;
 
     let resp = auth::get_with_auth("/api/v1/manifest").await?;
@@ -40,9 +40,9 @@ pub async fn fetch_manifest(mode: library::LibraryMode) -> Result<Vec<ManifestEn
 }
 
 #[cfg(feature = "mock")]
-pub async fn fetch_manifest(mode: library::LibraryMode) -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
-    tracing::debug!("mock fetch, alt mode: {:?}", mode!=library::LibraryMode::Normal);
-    let manifest_json = match mode {
+pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
+    tracing::debug!("mock fetch, alt mode: {:?}", library::read_library_mode()!=library::LibraryMode::Normal);
+    let manifest_json = match library::read_library_mode() {
         library::LibraryMode::Normal => json!({
             "series": [
                 {

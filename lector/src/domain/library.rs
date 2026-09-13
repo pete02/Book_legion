@@ -28,13 +28,13 @@ pub fn read_library_mode() -> LibraryMode {
 
 pub fn get_library() -> Resource<Vec<ManifestEntry>> {
     use_resource(move || async move {
-        manifest::fetch_manifest(LibraryMode::Normal).await.unwrap_or_default()
+        manifest::fetch_manifest().await.unwrap_or_default()
     })
 }
 
-async fn load_library(mode: LibraryMode) -> Result<Vec<CardData>, Box<dyn std::error::Error>> {
+async fn load_library() -> Result<Vec<CardData>, Box<dyn std::error::Error>> {
     let mut books = Vec::new();
-    let manifest = manifest::fetch_manifest(mode).await?;
+    let manifest = manifest::fetch_manifest().await?;
 
     for entry in manifest {
         books.push(CardData {
@@ -48,17 +48,15 @@ async fn load_library(mode: LibraryMode) -> Result<Vec<CardData>, Box<dyn std::e
 
 /// Sole owner of the fetch effect. Reactively refetches whenever mode changes —
 /// no manual "update" call needed anywhere else.
-pub fn use_library() -> Signal<Vec<CardData>> {
-    let mode = use_library_mode();
+pub fn use_library(mode: Signal<LibraryMode>) -> Signal<Vec<CardData>> {
     let mut books = use_signal(Vec::new);
 
     use_effect(move || {
         // Synchronous read here — this is what makes the effect track `mode`
         // and rerun automatically whenever it changes.
-        let mode_value = mode.read().clone();
-
+        let _ = mode();
         spawn(async move {
-            match load_library(mode_value).await {
+            match load_library().await {
                 Ok(data) => books.set(data),
                 Err(e) => {
                     tracing::error!("Err in loading library: {}", e);

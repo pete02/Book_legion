@@ -1,8 +1,6 @@
-use std::thread::current;
-
 use dioxus::{logger::{self, tracing}, prelude::*};
 
-use crate::{Route, domain::{self, text}, infra, ui::components::{TopBar, TopBarEntry}};
+use crate::{Route, domain::{self, text}, ui::components::{TopBar, TopBarEntry}};
 
 #[component]
 pub fn Text(book_id: String) -> Element {
@@ -93,7 +91,7 @@ pub fn Text(book_id: String) -> Element {
     use_effect(move || {
         if let Some(html) = chapter_html() {
             spawn(async move {
-                let mut eval = document::eval(r#"
+                let eval = document::eval(r#"
                     const html = await dioxus.recv();
                     const host = document.getElementById("book-content");
 
@@ -199,7 +197,6 @@ pub fn Text(book_id: String) -> Element {
                         style: "flex: 1 1 0; cursor: pointer; background: transparent;",
                         onclick: move |_| {
                             moved_page.set(true);
-                            let id=b_signal();
                             if current_page() < text::measure_total_pages("book-content").unwrap_or(0) {
                                 *current_page.write() += 1;
                             }else{

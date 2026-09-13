@@ -1,6 +1,6 @@
-use dioxus::{core::use_drop, prelude::*};
+use dioxus::prelude::*;
 use crate::{Route, styles};
-use wasm_bindgen::JsCast;
+
 
 
 
@@ -24,22 +24,22 @@ pub fn TopBar(
             let Some(window) = web_sys::window() else { return };
             let Some(doc) = window.document() else { return };
             let Some(probe) = doc.get_element_by_id("topbar-probe") else { return };
-            let Some(root)  = doc.get_element_by_id("topbar-root")  else { return };
+            let Some(root) = doc.get_element_by_id("topbar-root") else { return };
             let _ = hamburger.try_write().map(|mut h| *h = probe.scroll_width() > root.client_width());
-
         };
 
         check(); // measure on first mount
+
         if let Some(window) = web_sys::window() {
             if let Some(doc) = window.document() {
-                // re-check once web fonts have actually finished loading
                 let fonts = doc.fonts();
-                let mut check2 = check.clone(); // or move a second closure with same logic
-                let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || check2());
-                let _ = fonts.ready().map(|promise| {
-                    let _ = wasm_bindgen_futures::JsFuture::from(promise);
-                    // then call check() again in the .then/await
-                });
+                if let Ok(promise) = fonts.ready() {
+                    let mut check2 = check.clone();
+                    spawn(async move {
+                        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+                        check2(); // re-check once fonts are actually ready
+                    });
+                }
             }
         }
     });

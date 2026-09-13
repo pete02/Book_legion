@@ -123,6 +123,7 @@ pub fn select_chapter(book: Signal<BookData>, progress: Signal<f64>, index: usiz
     });
 }
 
+#[allow(dead_code)]
 pub async fn get_book_progress(book_id: String)->f64{
     match infra::book::fetch_book_progress(&book_id).await{
         Err(_)=>return 0.0,

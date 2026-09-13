@@ -1,5 +1,5 @@
 use dioxus::{logger::tracing, prelude::*};
-use crate::{domain::{cover::{CardData,get_cached_cover}, login}, styles};
+use crate::{domain::cover::{CardData,get_cached_cover}, styles};
 
 #[component]
 pub fn Cover(

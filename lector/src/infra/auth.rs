@@ -1,14 +1,10 @@
-use std::num::FpCategory::Normal;
-
 use reqwasm::http::Request;
-
 use crate::domain::{self, library};
 
 pub async fn get_with_auth(
     url: &str,
 ) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
-    let refresh_token = domain::login::current_refresh();
     let mut pin = match domain::library::read_library_mode() {
         library::LibraryMode::Normal=>"4328".to_owned(),
         library::LibraryMode::Alt(p) => p
@@ -51,7 +47,6 @@ pub async fn delete_with_auth(
     url: &str
 ) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
-    let refresh_token = domain::login::current_refresh();
 
     let resp = Request::delete(url)
         .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
@@ -87,7 +82,7 @@ pub async fn post_with_auth(
     body: String,
 ) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
-    let refresh_token = domain::login::current_refresh();
+
 
     let resp = Request::post(url)
         .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))

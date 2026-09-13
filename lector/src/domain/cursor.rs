@@ -1,4 +1,8 @@
 use std::cmp::Ordering;
+use dioxus::logger::tracing;
+use serde::{Deserialize, Serialize};
+use crate::{domain, infra::cursor as infra};
+
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cursor {
@@ -65,42 +69,11 @@ pub async fn load_bookcursor(book_id: String)->BookCursor{
         Err(_) => return  BookCursor::new(&book_id, 0, 0),
     }
 }
-use crate::infra::cursor::CursorTextResponse;
 
 
-
-
-pub async fn save_cursor_text(book_id: &str, text: &str, chapter_idx:usize) -> Result<(), Box<dyn std::error::Error>> {
-    match infra::get_cursor_from_text(book_id, chapter_idx, text).await {
-        Ok(cursor) => {
-            infra::save_cursor(&cursor).await?;
-            Ok(())
-        }
-        Err(e) => {
-            console(&format!("Error saving cursor text: {}", e));
-            Err(e.into())
-        }
-    }
-}
 
 pub async fn save_bookcursor(cursor:BookCursor){
     let _=infra::save_cursor(&cursor).await;
 }
 
-
-
-use dioxus::logger::tracing;
-use serde::{Deserialize, Serialize};
-use crate::{domain, infra::cursor as infra};
-
-#[cfg(target_arch = "wasm32")]
-use web_sys::console;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
-pub fn console(text: &str){
-    #[cfg(target_arch = "wasm32")]
-    console::log_1(&JsValue::from_str(text));
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", text);
-}
 

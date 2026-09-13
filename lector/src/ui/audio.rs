@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use dioxus::prelude::*;
 use futures_util::stream::SplitSink;
-use futures_util::{Sink, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use gloo_net::websocket::futures::WebSocket;
 use gloo_net::websocket::Message;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ use crate::{domain, ui::components::{TopBar, TopBarEntry, card::Cover}, Route, a
 
 
 #[derive(Debug, Deserialize,Serialize,  Clone, PartialEq)]
-struct AudioHeader {
+pub struct AudioHeader {
     id: String,
     chapter: i32,
     start_offset: i32,
@@ -49,8 +49,7 @@ pub fn Audio(book_id: String) -> Element {
     let sender: Signal<Option<Sender>> = use_signal(|| None);
     let playing = use_signal(||true);
     let current_header: Signal<Option<AudioHeader>> = use_signal(|| None);
-    let cover_path=domain::cover::create_cover_path(book_id.clone());
-
+    
 
     let top_entries = vec![
         TopBarEntry { name: "Library".into(), path: Route::Library {} },
