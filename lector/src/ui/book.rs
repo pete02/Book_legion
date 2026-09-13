@@ -3,15 +3,12 @@ use dioxus::{logger::tracing, prelude::*};
 
 use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{ components::{TopBar, TopBarEntry, card::Cover}}};
 
-
 #[component]
 pub fn Book(book_id: String) -> Element {
     let book = use_book(book_id.clone());
-    let b=book_id.clone();
+    let b = book_id.clone();
     let cover_path = domain::cover::create_cover_path(book_id.clone());
     let nav = use_navigator();
-    
-
 
     let top_entries = vec![
         TopBarEntry {
@@ -46,14 +43,12 @@ pub fn Book(book_id: String) -> Element {
                     padding: 20px;
                     flex-wrap: wrap;
                 ",
-                // Cover stays at top/left
                 Cover {
                     book_id: book_id.clone(),
                     width: "200px".to_string(),
                     max_width: "300px".to_string(),
                 }
 
-                // Book text
                 div {
                     style: "
                         flex: 1 1 300px;
@@ -73,7 +68,6 @@ pub fn Book(book_id: String) -> Element {
                     }
                 }
 
-                // Chapter list scrollable
                 div {
                     style: "
                         display: flex;
@@ -83,7 +77,16 @@ pub fn Book(book_id: String) -> Element {
                         max-height: 400px;
                     ",
                     h3 { "Chapters:" }
-                    ChapterList { book, book_id: book_id }
+                    // key forces Dioxus to unmount + remount ChapterList
+                    // whenever the current chapter changes, instead of
+                    // trying to patch the existing DOM subtree.
+                    ChapterList {
+                        key: "{book().current_chapter}",
+                        chapters: book().chapters.clone(),
+                        current: book().current_chapter,
+                        book,
+                        book_id: book_id.clone(),
+                    }
                 }
             }
         }
@@ -91,31 +94,49 @@ pub fn Book(book_id: String) -> Element {
 }
 
 #[component]
-fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
-    let chapters = book().chapters.clone();
-    let current = book().current_chapter;
+fn ChapterList(
+    chapters: Vec<String>,
+    current: usize,
+    book: Signal<BookData>,
+    book_id: String,
+) -> Element {
+    // Only fetch what this component actually owns: chapter progress.
     let progress = domain::book::get_chapter_progress(book_id.clone());
-    let mut found_current=use_signal(||false);
-
+    tracing::info!("loading chapter list");
     use_effect(move || {
-            // Get the element by ID
-            if !found_current(){return;}
-            if let Some(window) = web_sys::window() {
-                if let Some(document) = window.document() {
-                    if let Some(current_elem) = document.get_element_by_id("current-chapter") {
-                        if let Some(w)=document.get_element_by_id("chapterlist"){
-                            let top=(current_elem.get_bounding_client_rect().top()-w.get_bounding_client_rect().top()).floor();
-                            w.set_scroll_top(top as i32);
-                            tracing::info!("setting top to: {}. w top: {}",top, w.get_bounding_client_rect().top());
-                        }else{
-                            tracing::error!("could not find the element")
-                        }
-                    }
-                }else{
-                    tracing::error!("not found")
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let (Some(current_elem), Some(list_elem)) = (
+                    document.get_element_by_id("current-chapter"),
+                    document.get_element_by_id("chapterlist"),
+                ) {
+                    let top = (current_elem.get_bounding_client_rect().top()
+                        - list_elem.get_bounding_client_rect().top())
+                        .floor();
+                    list_elem.set_scroll_top(top as i32);
+                } else {
+                    tracing::error!("could not find chapter list elements");
                 }
             }
-        });
+        }
+    });
+
+    use_effect(move || {
+        let current_id = format!("chapter-row-{current}");
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let (Some(current_elem), Some(list_elem)) = (
+                    document.get_element_by_id(&current_id),
+                    document.get_element_by_id("chapterlist"),
+                ) {
+                    let top = (current_elem.get_bounding_client_rect().top()
+                        - list_elem.get_bounding_client_rect().top())
+                        .floor();
+                    list_elem.set_scroll_top(top as i32);
+                }
+            }
+        }
+    });
 
     return rsx! {
         ul {
@@ -124,23 +145,26 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
                 padding: 0;
                 margin: 0;
                 overflow-y: auto;
-                scrollbar-width: none; /* Firefox */
-                -ms-overflow-style: none; /* IE 10+ */
+                scrollbar-width: none;
+                -ms-overflow-style: none;
             ",
             id: "chapterlist",
-            class: "no-scrollbar", // For Chrome/Safari
+            class: "no-scrollbar",
             {
                 chapters.iter().enumerate().map(|(idx, chapter)| {
                     let is_current = idx == current;
+                    tracing::debug!("current chapter check for: {}, {}", idx, is_current);
                     let id = book_id.clone();
-                    found_current.set(true);
+                    let row_id = format!("chapter-row-{idx}");
                     rsx! {
                         li {
+                            key: "{idx}-{is_current}",
                             class: if is_current { "current-chapter" } else { "" },
-                            id: if is_current { "current-chapter" } else { "" },
+                            id: "{row_id}",
                             button {
+                                key: "{idx}-{is_current}",
                                 onclick: move |_| {
-                                   domain::book::select_chapter(book, progress, idx, id.clone());
+                                    domain::book::select_chapter(book, progress, idx, id.clone());
                                 },
                                 style: format!(
                                     "{} border-left: 4px solid {}; font-weight: {};",
@@ -149,9 +173,9 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
                                     if is_current { "bold" } else { "normal" },
                                 ),
                                 span { "{chapter}" }
-
                                 if is_current {
                                     span {
+                                        key: "{idx}-{is_current}",
                                         style: "font-size: 0.85em; color: #6b7280;",
                                         "    {(progress() * 100.0).round()}%"
                                     }
@@ -160,7 +184,7 @@ fn ChapterList(book: Signal<BookData>, book_id: String) -> Element {
                         }
                     }
                 })
-            }
+}
         }
     }
 }

@@ -27,10 +27,11 @@ pub async fn get_with_auth(
         return Ok(resp);
     }
 
-    let refresh_token = refresh_token.ok_or("No refresh token available")?;
-    let new_auth = refresh_auth_token(&refresh_token).await?;
-    domain::login::set_auth(Some(new_auth.clone()));
+    if domain::login::refresh_auth().await.is_err(){
+        return Err("could not refresh auth token".into())
+    }
 
+    let new_auth=domain::login::current_auth().unwrap_or_default();
     let retry_resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .header("Pin", &pin)
@@ -62,10 +63,10 @@ pub async fn delete_with_auth(
         return Ok(resp);
     }
 
-    let refresh_token = refresh_token.ok_or("No refresh token available")?;
-    let new_auth = refresh_auth_token(&refresh_token).await?;
-    domain::login::set_auth(Some(new_auth.clone()));
-
+    if domain::login::refresh_auth().await.is_err(){
+        return Err("could not refresh auth token".into())
+    }
+    let new_auth=domain::login::current_auth().unwrap_or_default();    
     let retry_resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .send()
@@ -100,10 +101,10 @@ pub async fn post_with_auth(
         return Ok(resp);
     }
 
-    let refresh_token = refresh_token.ok_or("No refresh token available")?;
-    let new_auth = refresh_auth_token(&refresh_token).await?;
-    domain::login::set_auth(Some(new_auth.clone()));
-
+    if domain::login::refresh_auth().await.is_err(){
+        return Err("could not refresh auth token".into())
+    }
+    let new_auth=domain::login::current_auth().unwrap_or_default();
     let retry_resp = Request::post(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .header("Content-Type", "application/json")

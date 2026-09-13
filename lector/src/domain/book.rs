@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{logger::tracing, prelude::*};
 
 use crate::{domain, infra::{self, book::BookInfo}};
 
@@ -95,26 +95,33 @@ pub fn use_book(book_id: String) -> Signal<BookData> {
 }
 
 
-pub fn select_chapter(book: Signal<BookData>, progress:Signal<f64>, index: usize, book_id: String) {
-    let mut book=book.clone();
-    let mut progress=progress.clone();
-    book.with_mut(|f| f.current_chapter = index);
+pub fn select_chapter(book: Signal<BookData>, progress: Signal<f64>, index: usize, book_id: String) {
+    let mut book = book;
+    let mut progress = progress;
 
-    // 2. Persist cursor asynchronously
+    
+    tracing::info!("select_chapter: setting current_chapter to {}", index);
+    book.with_mut(|f| f.current_chapter = index);
+    tracing::info!("select_chapter: book.current_chapter is now {}", book().current_chapter);
+
     spawn(async move {
         let mut cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
         cursor.cursor.chapter = index;
         cursor.cursor.index = 0;
 
         let _ = domain::cursor::save_bookcursor(cursor).await;
-        match infra::book::fetch_book_progress(&book_id).await{
-            Err(_)=>{},
-            Ok(p)=>progress.set(p.progress),
+        match infra::book::fetch_chapter_progress(&book_id).await {
+            Err(_) => {}
+            Ok(p) => progress.set(p.progress),
         };
-        
+
+        // Sanity check: did anything reset current_chapter after we set it?
+        tracing::info!(
+            "select_chapter: after async work, book.current_chapter is {}",
+            book().current_chapter
+        );
     });
 }
-
 
 pub async fn get_book_progress(book_id: String)->f64{
     match infra::book::fetch_book_progress(&book_id).await{

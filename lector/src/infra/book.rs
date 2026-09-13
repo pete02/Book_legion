@@ -43,18 +43,18 @@ impl BookInfo {
 pub struct ProgressResponse {
     pub progress: f64,
 }
+
 #[cfg(not(feature = "mock"))]
-pub async fn delete_book(book_id: &str)-> Result<(),String>{
-    let url = format!("/api/v1/deletebook/{}", book_id);
-    let resp=delete_with_auth(&url).await;
-    if resp.is_ok(){
-        return Ok(());
-    }else{
-        return Err(resp.unwrap_err());
+pub async fn delete_book(book_id: &str) -> Result<(), String> {
+    let url = format!("/api/v1/books/{}", book_id);
+    let resp = delete_with_auth(&url).await?;
+
+    if resp.ok() {
+        Ok(())
+    } else {
+        Err(format!("Failed to delete book: HTTP {}", resp.status()))
     }
-
 }
-
 #[cfg(feature = "mock")]
 pub async fn delete_book(book_id: &str)-> Result<(),String>{
     info!("delete a booK: {}", book_id);
@@ -183,7 +183,9 @@ pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
             author_id: "a1".to_string(),
             series_id: "s1".to_string(),
             series_order: 1,
+            series_name: "Series One".to_string(),
             file_path: "/mock/path/to/book1.epub".to_string(),
+            grant_access: "".to_string(),
         },
         "b2" => BookInfo {
             id: "b2".to_string(),
@@ -191,15 +193,19 @@ pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
             author_id: "a1".to_string(),
             series_id: "s1".to_string(),
             series_order: 2,
+            series_name: "Series One".to_string(),
             file_path: "/mock/path/to/book2.epub".to_string(),
+            grant_access: "".to_string(),
         },
         _ => BookInfo {
             id: book_id.to_string(),
             title: format!("Mock Book {}", book_id),
             author_id: "a0".to_string(),
             series_id: "s0".to_string(),
+            series_name: "series".to_string(),
             series_order: 0,
             file_path: "/mock/path/to/default.epub".to_string(),
+            grant_access: "".to_string(),
         },
     };
 

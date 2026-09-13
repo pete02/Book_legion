@@ -41,14 +41,14 @@ func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (login.User, b
 	}
 
 	if authToken == "" {
-		log.Println("Login failed")
+		log.Println("[Auth check middleware] Login failed")
 		http.Error(w, "Missing authentication token", http.StatusUnauthorized)
 		return login.User{}, false
 	}
 
 	userID, err := login.VerifyUserSession(authToken)
 	if err != nil {
-		log.Println("Unauthorized access")
+		log.Println("[Auth check middleware] Unauthorized access")
 		http.Error(w, "Unauthorized access", http.StatusUnauthorized)
 		return login.User{}, false
 	}
@@ -59,12 +59,12 @@ func (api *API) AuthCheck(w http.ResponseWriter, r *http.Request) (login.User, b
 func (api *API) GetTokenCheck(w http.ResponseWriter, r *http.Request) bool {
 	getToken := r.URL.Query().Get("token")
 	if getToken == "" {
-		log.Println("Missing get token")
+		log.Println("[Get Token Check middleware] Missing get token")
 		return false
 	}
 	ok, err := login.VerifyGetSession(getToken)
 	if err != nil || !ok {
-		log.Println("Invalid get token")
+		log.Println("[Get Token Check middleware] Invalid get token")
 		return false
 	}
 
@@ -168,6 +168,7 @@ func (a *API) WriteAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := a.AuthCheck(w, r)
 		if !ok {
+			log.Println("Authentication failed")
 			return
 		}
 

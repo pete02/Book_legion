@@ -96,7 +96,7 @@ func main() {
 		r.With(api.AccessCheck).Get("/series/{seriesID}", api.GetSeries)
 
 		r.With(api.AccessCheck).Get("/cursors/{bookID}", api.GetCursor)
-		r.Post("/cursors/save", api.SaveCursor)
+		r.With(api.AccessCheck).Post("/cursors/save", api.SaveCursor)
 
 		r.Get("/audio/{bookID}", api.AudioSocket)
 

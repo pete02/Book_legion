@@ -45,22 +45,26 @@ func (a *API) GetCursor(rr http.ResponseWriter, req *http.Request) {
 func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 	user, ok := req.Context().Value(userContextKey).(login.User)
 	if !ok {
+		log.Println("[Api] SaveCursor: Could not get user")
 		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	var cursor types.UserCursor
 	if err := json.NewDecoder(req.Body).Decode(&cursor); err != nil {
+		log.Printf("[Api] SaveCursor: Failed to decode cursor: %v", err)
 		http.Error(rr, "Failed to decode cursor", http.StatusBadRequest)
 		return
 	}
 
 	if user.Username != cursor.UserID {
+		log.Printf("[Api] SaveCursor: User %v is not the owner of cursor for book %v", user.Username, cursor.BookID)
 		http.Error(rr, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	if ok, err := library.BookExists(a.DB, cursor.BookID); !ok || err != nil {
+		log.Printf("[Api] SaveCursor: Book not found: %v", cursor.BookID)
 		http.Error(rr, "Book not found", http.StatusNotFound)
 		return
 	}
@@ -72,7 +76,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 			http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
 			return
 		}
-		log.Println("[API] SaveCursor: Could not load the book, trusting the cursor")
+		log.Printf("[Api] SaveCursor: Could not load the book, trusting the cursor")
 		rr.WriteHeader(http.StatusCreated)
 		return
 	}
@@ -84,7 +88,7 @@ func (a *API) SaveCursor(rr http.ResponseWriter, req *http.Request) {
 			http.Error(rr, "Failed to save cursor", http.StatusInternalServerError)
 			return
 		}
-		log.Println("[API] SaveCursor: Could not load the book, trusting the cursor")
+		log.Printf("[Api] SaveCursor: Could not load the book, trusting the cursor")
 		rr.WriteHeader(http.StatusCreated)
 		return
 	}
