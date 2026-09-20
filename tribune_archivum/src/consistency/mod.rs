@@ -96,3 +96,6 @@ fn validate_nav_spine(
     
     result
 }
+
+#[cfg(test)]
+mod tests;
