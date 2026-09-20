@@ -30,11 +30,11 @@ fn validate_spine_manifest(
 ) -> ValidationResult {
     let mut result = ValidationResult::new();
     
-    for itemref in &spine_info.linear_items {
+    for (index, itemref) in spine_info.linear_items.iter().enumerate() {
         if manifest_info.id_to_item.get(&itemref.idref).is_none() {
             result.add_error(ValidationError::new(
                 ErrorCode::SpineManifestMismatch,
-                ValidationLocation::Spine,
+                ValidationLocation::SpineItem { index },
             ));
         }
     }

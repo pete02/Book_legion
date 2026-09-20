@@ -12,7 +12,7 @@ pub fn validate_manifest(
     if manifest_items.is_empty() {
         result.add_error(ValidationError::new(
             ErrorCode::MissingManifest,
-            ValidationLocation::Manifest,
+            ValidationLocation::Root,
         ));
         return Err(result);
     }

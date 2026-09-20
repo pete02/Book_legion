@@ -66,6 +66,8 @@ pub enum ErrorCode {
     
     // Cover errors
     MissingCover,
+    UnreadableCover,
+    InvalidCoverFormat,
     
     // Consistency errors
     SpineManifestMismatch,
@@ -111,7 +113,9 @@ impl ErrorCode {
             
             ErrorCode::MissingChapterFile | ErrorCode::UnparsableHtml => ValidationCategory::Content,
             
-            ErrorCode::MissingCover => ValidationCategory::Cover,
+            ErrorCode::MissingCover
+            | ErrorCode::UnreadableCover
+            | ErrorCode::InvalidCoverFormat => ValidationCategory::Cover,
             
             ErrorCode::SpineManifestMismatch
             | ErrorCode::ManifestArchiveMismatch
@@ -135,7 +139,7 @@ impl ErrorCode {
             ErrorCode::EmptySpine => "Spine has no linear items",
             ErrorCode::MissingItemRef => "Item reference missing from manifest",
             ErrorCode::DuplicateManifestId => "Duplicate manifest ID",
-            ErrorCode::InvalidManifestId => "Invalid manifest ID",
+            ErrorCode::InvalidManifestId => "Empty manifest ID",
             ErrorCode::MissingMediaType => "Missing media-type attribute",
             ErrorCode::MissingNavDocument => "No EPUB3 nav or EPUB2 NCX found",
             ErrorCode::InvalidNavXml => "Nav document is not valid HTML",
@@ -146,6 +150,8 @@ impl ErrorCode {
             ErrorCode::MissingChapterFile => "Chapter file not found in archive",
             ErrorCode::UnparsableHtml => "Chapter HTML cannot be parsed",
             ErrorCode::MissingCover => "No cover image found",
+            ErrorCode::UnreadableCover => "Cover file cannot be read",
+            ErrorCode::InvalidCoverFormat => "Cover is not a supported format",
             ErrorCode::SpineManifestMismatch => "Spine itemref not found in manifest",
             ErrorCode::ManifestArchiveMismatch => "Manifest item not found in archive",
             ErrorCode::NavSpineMismatch => "Navigation target not in spine",
@@ -153,14 +159,18 @@ impl ErrorCode {
     }
 }
 
-/// Location of a validation issue within the EPUB
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Location information for a validation error
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ValidationLocation {
-    Root,
-    ArchiveEntry { path: String },
-    Opf { path: String },
-    Spine,
-    Manifest,
+    Root,                              // e.g., root-level validation
+    ArchiveEntry { path: String },      // e.g., "META-INF/container.xml"
+    Opf { path: String },               // e.g., "content.opf"
+    OpfElement { file: String, element: String }, // e.g., {"content.opf", "spine/itemref"}
+    NavElement { file: String, element: String },
+    NcxElement { file: String, element: String },
+    ManifestItem { id: String },
+    Spine,                             // spine-level validation
+    SpineItem { index: usize },
     Navigation { path: String },
     Ncx { path: String },
     Chapter { path: String },
@@ -174,12 +184,16 @@ impl std::fmt::Display for ValidationLocation {
             ValidationLocation::Root => write!(f, "root"),
             ValidationLocation::ArchiveEntry { path } => write!(f, "{}", path),
             ValidationLocation::Opf { path } => write!(f, "OPF ({})", path),
+            ValidationLocation::OpfElement { file, element } => write!(f, "OPF element {}/{}", file, element),
+            ValidationLocation::NavElement { file, element } => write!(f, "nav element {}/{}", file, element),
+            ValidationLocation::NcxElement { file, element } => write!(f, "NCX element {}/{}", file, element),
+            ValidationLocation::ManifestItem { id } => write!(f, "manifest item id='{}'", id),
             ValidationLocation::Spine => write!(f, "spine"),
-            ValidationLocation::Manifest => write!(f, "manifest"),
-            ValidationLocation::Navigation { path } => write!(f, "navigation ({})", path),
-            ValidationLocation::Ncx { path } => write!(f, "NCX ({})", path),
-            ValidationLocation::Chapter { path } => write!(f, "chapter ({})", path),
-            ValidationLocation::Cover { path } => write!(f, "cover ({})", path),
+            ValidationLocation::SpineItem { index } => write!(f, "spine item #{}", index),
+            ValidationLocation::Navigation { path } => write!(f, "navigation: {}", path),
+            ValidationLocation::Ncx { path } => write!(f, "NCX: {}", path),
+            ValidationLocation::Chapter { path } => write!(f, "chapter: {}", path),
+            ValidationLocation::Cover { path } => write!(f, "cover: {}", path),
             ValidationLocation::TocEntry { index } => write!(f, "TOC entry #{}", index),
         }
     }
