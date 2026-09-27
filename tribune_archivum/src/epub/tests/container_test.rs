@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::archive::{entry_exists, read_entry};
-    use crate::core::{ErrorCode, OpfInfo, ValidationLocation, ValidationResult, ValidationError};
+    use crate::core::ErrorCode;
+    use crate::epub::validate_container;
+    use crate::core::ValidationLocation;
     use std::fs::File;
     use std::io::Write;
     use tempfile::TempDir;
+    use zip::ZipArchive;
+    
 
     /// Creates a minimal valid container.xml content
     fn create_valid_container_xml(opf_path: &str) -> Vec<u8> {
@@ -28,7 +30,7 @@ mod tests {
         
         // Create a minimal EPUB structure
         let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
         
         // Add container.xml
         archive.start_file("META-INF/container.xml", options).unwrap();
@@ -63,7 +65,7 @@ mod tests {
         // Write to file
         let buffer = archive.finish().unwrap();
         let mut file = File::create(&epub_path).unwrap();
-        file.write_all(&buffer).unwrap();
+        file.write_all(buffer.get_ref()).unwrap();
         
         (temp_dir, epub_path.to_str().unwrap().to_string())
     }
@@ -94,7 +96,7 @@ mod tests {
         
         // Create an EPUB without container.xml
         let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
         
         // Add OPF file directly (no container.xml)
         let opf_content = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -117,7 +119,7 @@ mod tests {
         
         let buffer = archive.finish().unwrap();
         let mut file = File::create(&epub_path).unwrap();
-        file.write_all(&buffer).unwrap();
+        file.write_all(buffer.get_ref()).unwrap();
         
         let file = File::open(&epub_path).unwrap();
         let mut archive = ZipArchive::new(file).unwrap();
@@ -134,13 +136,13 @@ mod tests {
 
     #[test]
     fn test_invalid_container_xml() {
-        let (temp_dir, epub_path) = {
+        let (_temp_dir, epub_path) = {
             let temp_dir = TempDir::new().unwrap();
             let epub_path = temp_dir.path().join("test.epub");
             
             // Create EPUB with invalid container.xml
             let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-            let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
             
             // Add invalid container.xml
             archive.start_file("META-INF/container.xml", options).unwrap();
@@ -148,7 +150,7 @@ mod tests {
             
             let buffer = archive.finish().unwrap();
             let mut file = File::create(&epub_path).unwrap();
-            file.write_all(&buffer).unwrap();
+            file.write_all(buffer.get_ref()).unwrap();
             
             (temp_dir, epub_path.to_str().unwrap().to_string())
         };
@@ -167,12 +169,12 @@ mod tests {
 
     #[test]
     fn test_missing_opf_reference() {
-        let (temp_dir, epub_path) = {
+        let (_temp_dir, epub_path) = {
             let temp_dir = TempDir::new().unwrap();
             let epub_path = temp_dir.path().join("test.epub");
             
             let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-            let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
             
             // Add container.xml without rootfile
             let container_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -186,7 +188,7 @@ mod tests {
             
             let buffer = archive.finish().unwrap();
             let mut file = File::create(&epub_path).unwrap();
-            file.write_all(&buffer).unwrap();
+            file.write_all(buffer.get_ref()).unwrap();
             
             (temp_dir, epub_path.to_str().unwrap().to_string())
         };
@@ -205,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_invalid_opf_reference() {
-        let (temp_dir, epub_path) = create_temp_epub(
+        let (_temp_dir, epub_path) = create_temp_epub(
             &create_valid_container_xml("OEBPS/nonexistent.opf"),
             "OEBPS/nonexistent.opf",
         );
@@ -229,7 +231,7 @@ mod tests {
             let epub_path = temp_dir.path().join("test.epub");
             
             let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-            let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
             
             // Add container.xml with multiple rootfiles (should take first)
             let container_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -264,7 +266,7 @@ mod tests {
             
             let buffer = archive.finish().unwrap();
             let mut file = File::create(&epub_path).unwrap();
-            file.write_all(&buffer).unwrap();
+            file.write_all(buffer.get_ref()).unwrap();
             
             (temp_dir, epub_path.to_str().unwrap().to_string())
         };
@@ -287,6 +289,24 @@ mod tests {
         let container_str = String::from_utf8(container_xml.clone()).unwrap();
         
         // Test XML parsing
+        #[derive(serde::Deserialize, Debug)]
+        struct ContainerRoot {
+            #[serde(rename = "rootfiles")]
+            root_files: RootFiles,
+        }
+        
+        #[derive(serde::Deserialize, Debug)]
+        struct RootFiles {
+            #[serde(rename = "rootfile")]
+            root_files: Vec<RootFile>,
+        }
+        
+        #[derive(serde::Deserialize, Debug)]
+        struct RootFile {
+            #[serde(rename = "@full-path")]
+            full_path: String,
+        }
+        
         let container: ContainerRoot = quick_xml::de::from_str(&container_str).unwrap();
         assert_eq!(container.root_files.root_files.len(), 1);
         assert_eq!(container.root_files.root_files[0].full_path, "OEBPS/content.opf");
@@ -299,7 +319,7 @@ mod tests {
             let epub_path = temp_dir.path().join("test.epub");
             
             let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-            let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
             
             let container_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opf:endpoints">
@@ -331,7 +351,7 @@ mod tests {
             
             let buffer = archive.finish().unwrap();
             let mut file = File::create(&epub_path).unwrap();
-            file.write_all(&buffer).unwrap();
+            file.write_all(buffer.get_ref()).unwrap();
             
             (temp_dir, epub_path.to_str().unwrap().to_string())
         };

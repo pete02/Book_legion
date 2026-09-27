@@ -1,26 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::core::{ErrorCode, SpineItem, ValidationLocation, ValidationResult, ValidationError};
+    use crate::core::{ErrorCode, SpineItem};
+    use crate::epub::validate_spine;
 
     #[test]
     fn test_valid_spine_with_linear_items() {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter2".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter3".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -40,19 +37,16 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "cover".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
             SpineItem {
                 idref: "chapter2".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -86,13 +80,11 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "cover".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
             SpineItem {
                 idref: "frontmatter".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
@@ -113,7 +105,6 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -133,7 +124,6 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "cover".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
@@ -154,25 +144,21 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter2".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
             SpineItem {
                 idref: "chapter3".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter4".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -200,13 +186,11 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec!["pagebreak".to_string()],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter2".to_string(),
-                id: None,
                 properties: vec!["svg".to_string()],
                 linear: "yes".to_string(),
             },
@@ -227,13 +211,11 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter2".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "no".to_string(),
             },
@@ -254,13 +236,11 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -281,7 +261,6 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
@@ -302,19 +281,16 @@ mod tests {
         let spine_items = vec![
             SpineItem {
                 idref: "chapter-1".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter_2".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },
             SpineItem {
                 idref: "chapter.3".to_string(),
-                id: None,
                 properties: vec![],
                 linear: "yes".to_string(),
             },

@@ -1,11 +1,6 @@
 pub mod types;
 pub mod result;
 
-#[cfg(test)]
-mod types_test;
-
-#[cfg(test)]
-mod result_test;
 
 pub use types::{
     ArchiveInfo,
@@ -25,3 +20,6 @@ pub use types::{
 };
 
 pub use result::{ValidationResult, ValidationResultBuilder};
+
+#[cfg(test)]
+mod tests;

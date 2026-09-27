@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::super::result::*;
+    use super::super::super::result::*;
     use crate::core::types::{ErrorCode, Severity, ValidationLocation, ValidationError};
 
     // ==================== ValidationResult Tests ====================

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::core::{ErrorCode, ManifestItem, ValidationLocation, ValidationResult, ValidationError};
+    use crate::core::{ErrorCode, ManifestItem};
+    use crate::epub::validate_manifest;
 
     #[test]
     fn test_valid_manifest() {
@@ -69,7 +69,7 @@ mod tests {
         let result = validate_manifest(&manifest_items);
 
         assert!(result.is_err(), "Manifest with empty ID should fail");
-        let validation_result = result.unwrap_err();
+        let validation_result = result.clone().unwrap_err();
         
         assert!(validation_result.errors.iter().any(|e| {
             e.code == ErrorCode::InvalidManifestId

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::core::{ErrorCode, OpfPackage, ValidationLocation, ValidationResult, ValidationError};
+    use crate::core::ErrorCode;
+    use crate::epub::parse_opf;
 
     /// Creates a minimal valid OP2 package document
     fn create_valid_opf_epub2() -> Vec<u8> {

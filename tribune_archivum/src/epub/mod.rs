@@ -11,3 +11,6 @@ pub use opf::parse_opf;
 pub use spine::validate_spine;
 pub use manifest::validate_manifest;
 pub use navigation::validate_navigation;
+
+#[cfg(test)]
+mod tests;
