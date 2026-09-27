@@ -8,6 +8,12 @@ use zip::ZipArchive;
 /// EPUB3 navigation document root element
 #[derive(Debug, Deserialize)]
 struct NavDocument {
+    #[serde(rename = "body")]
+    body: NavBody,
+}
+
+#[derive(Debug, Deserialize)]
+struct NavBody {
     #[serde(rename = "nav")]
     nav_element: NavElement,
 }
@@ -195,7 +201,7 @@ fn validate_epub3_nav(
     // Check for toc navigation
     let mut toc_entries = Vec::new();
     
-    if let Some(nav_list) = nav.nav_element.ordered_list {
+    if let Some(nav_list) = nav.body.nav_element.ordered_list {
         for (index, item) in nav_list.list_items.iter().enumerate() {
             if let Some(link) = item.links.first() {
                 // Skip fragment-only links

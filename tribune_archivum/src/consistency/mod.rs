@@ -80,20 +80,27 @@ fn validate_nav_spine(
     
     // Check navigation entries
     for (index, entry) in nav_info.toc_entries.iter().enumerate() {
-        // Check for empty href
         if entry.href.is_empty() {
-            result.add_warning(ValidationError::new(
+            result.add_error(ValidationError::new(
                 ErrorCode::NavSpineMismatch,
                 ValidationLocation::TocEntry { index },
             ));
             continue;
         }
-        
-        // Note: Full implementation would resolve relative paths and check
-        // if the target exists in the linear spine set
-        // For now, we validate that hrefs are non-empty
+
+        // Strip a fragment before comparing against the spine document path.
+        let document_path = entry.href
+            .split_once('#')
+            .map(|(path, _)| path)
+            .unwrap_or(&entry.href);
+
+        if !linear_paths.contains(document_path) {
+            result.add_error(ValidationError::new(
+                ErrorCode::NavSpineMismatch,
+                ValidationLocation::TocEntry { index },
+            ));
+        }
     }
-    
     result
 }
 
