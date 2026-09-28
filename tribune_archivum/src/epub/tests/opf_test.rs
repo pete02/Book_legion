@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::core::ErrorCode;
+    use crate::core::ErrorCode::{self, MissingManifest};
     use crate::epub::parse_opf;
-
+    use crate::core::{ValidationError,ValidationLocation};
     /// Creates a minimal valid OP2 package document
     fn create_valid_opf_epub2() -> Vec<u8> {
         format!(
@@ -123,9 +123,13 @@ mod tests {
         
         let result = parse_opf(&opf_data);
         
-        assert!(result.is_ok(), "OPF without manifest should still parse");
-        let opf = result.unwrap();
-        assert!(opf.manifest_items.is_empty(), "Manifest should be empty");
+        assert!(result.is_err(), "OPF without manifest should not parse");
+        let codes: Vec<ErrorCode> = result.unwrap_err().errors.iter().map(|e| e.code).collect();
+        assert!(codes.contains(&ErrorCode::MissingManifest), "got {codes:?}");
+
+        // The spine is present, so it should be the only error:
+        assert_eq!(codes, vec![ErrorCode::MissingManifest]);
+        
     }
 
     #[test]
@@ -146,9 +150,9 @@ mod tests {
         
         let result = parse_opf(&opf_data);
         
-        assert!(result.is_ok(), "OPF without spine should still parse");
-        let opf = result.unwrap();
-        assert!(opf.spine_items.is_empty(), "Spine should be empty");
+        assert!(result.is_err(), "OPF without spine should still parse");
+        let codes: Vec<ErrorCode> = result.unwrap_err().errors.iter().map(|e| e.code).collect();
+        assert!(codes.contains(&ErrorCode::MissingSpine), "got {codes:?}");
     }
 
     #[test]
@@ -170,10 +174,13 @@ mod tests {
         
         let result = parse_opf(&opf_data);
         
-        assert!(result.is_ok(), "OPF with empty manifest should parse");
-        let opf = result.unwrap();
-        assert!(opf.manifest_items.is_empty(), "Manifest should be empty");
-        assert!(opf.spine_items.is_empty(), "Spine should be empty");
+        assert!(result.is_err(), "OPF without manifest should not parse");
+        let codes: Vec<ErrorCode> = result.unwrap_err().errors.iter().map(|e| e.code).collect();
+        assert!(codes.contains(&ErrorCode::MissingManifest), "got {codes:?}");
+
+        // The spine is present, so it should be the only error:
+        assert!(codes.contains(&ErrorCode::MissingManifest));
+        assert!(codes.contains(&ErrorCode::MissingSpine));
     }
 
     #[test]
@@ -196,10 +203,9 @@ mod tests {
         
         let result = parse_opf(&opf_data);
         
-        assert!(result.is_ok(), "OPF with empty spine should parse");
-        let opf = result.unwrap();
-        assert_eq!(opf.manifest_items.len(), 1);
-        assert!(opf.spine_items.is_empty(), "Spine should be empty");
+        assert!(result.is_err(), "OPF with empty spine should not parse");
+        let codes: Vec<ErrorCode> = result.unwrap_err().errors.iter().map(|e| e.code).collect();
+        assert!(codes.contains(&ErrorCode::MissingSpine), "got {codes:?}");
     }
 
     #[test]
@@ -463,4 +469,71 @@ mod tests {
         // Version should be preserved in metadata if present
         assert!(opf.metadata.is_object());
     }
+    const VALID: &str = r#"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:title id="t1" xml:lang="en">My &amp; Book</dc:title>
+  <dc:creator>A</dc:creator><dc:creator>B</dc:creator>
+  <dc:language>en</dc:language>
+  <dc:identifier>urn:uuid:1</dc:identifier>
+  <dc:subject/>
+  <meta property="dcterms:modified">2024-01-01T00:00:00Z</meta>
+</metadata>
+<manifest>
+  <item id="c1" href="a&amp;b.xhtml" media-type="application/xhtml+xml" properties="nav scripted"/>
+</manifest>
+<spine toc="ncx"><itemref idref="c1"/></spine>
+</package>"#;
+
+  #[test]
+  fn parses_valid_package() {
+      let pkg = parse_opf(VALID.as_bytes()).expect("should parse");
+      assert_eq!(pkg.manifest_items.len(), 1);
+      assert_eq!(pkg.manifest_items[0].href, "a&b.xhtml");
+      assert_eq!(pkg.manifest_items[0].properties, vec!["nav", "scripted"]);
+      assert_eq!(pkg.spine_items[0].linear, "yes");
+      assert_eq!(pkg.metadata["title"], "My & Book");
+      assert_eq!(pkg.metadata["creators"].as_array().unwrap().len(), 2);
+  }
+
+  #[test]
+  fn handles_prefixed_root_and_empty_dc_elements() {
+      let xml = VALID
+          .replace("<package ", "<opf:package ")
+          .replace("</package>", "</opf:package>")
+          .replace("xmlns=", "xmlns:opf=")
+          .replace("<dc:title id=\"t1\" xml:lang=\"en\">My &amp; Book</dc:title>", "<dc:title/>");
+      let pkg = parse_opf(xml.as_bytes()).expect("should parse");
+      assert_eq!(pkg.metadata["title"], "");
+      assert_eq!(pkg.manifest_items.len(), 1);
+  }
+
+  #[test]
+  fn rejects_unclosed_package() {
+      assert!(parse_opf(b"<package version=\"3.0\"><manifest>").is_err());
+  }
+
+  #[test]
+  fn rejects_wrong_root() {
+      assert!(parse_opf(b"<html><manifest/></html>").is_err());
+  }
+
+  #[test]
+  fn rejects_invalid_utf8() {
+      assert!(parse_opf(&[0xFF, 0xFE, 0x00]).is_err());
+  }
+
+  #[test]
+  fn missing_manifest_and_spine_is_an_error() {
+      let err = parse_opf(b"<package version=\"3.0\"><metadata/></package>").unwrap_err();
+      assert_eq!(err.errors.len(), 2);
+  }
+  const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
+
+  #[test]
+  fn accepts_bom() {
+      let mut data = UTF8_BOM.to_vec();
+      data.extend_from_slice(VALID.as_bytes());
+      assert!(parse_opf(&data).is_ok());
+  }
 }

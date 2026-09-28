@@ -137,9 +137,22 @@ fn create_valid_opf() -> OpfPackage {
 
 /// Helper function to create a valid ManifestInfo for testing
 fn create_valid_manifest_info() -> ManifestInfo {
+    let mut items = Vec::new();
+    let mut id_to_item = std::collections::HashMap::new();
+    
+    // Add a nav item to the manifest
+    let nav_item = crate::core::ManifestItem {
+        id: "nav".to_string(),
+        href: "OEBPS/nav.xhtml".to_string(),
+        media_type: "application/xhtml+xml".to_string(),
+        properties: vec!["nav".to_string()],
+    };
+    items.push(nav_item.clone());
+    id_to_item.insert("nav".to_string(), nav_item);
+    
     ManifestInfo {
-        items: vec![],
-        id_to_item: std::collections::HashMap::new(),
+        items,
+        id_to_item,
     }
 }
 
@@ -158,8 +171,8 @@ mod tests {
         let result = validate_navigation(&mut archive, &opf, &manifest_info);
         
         assert!(result.is_ok(), "Expected valid EPUB3 nav to pass validation");
-        
         let nav_info = result.unwrap();
+        println!("Nav Info: {:?}", nav_info);
         assert!(nav_info.nav_path.is_some());
         assert!(nav_info.ncx_path.is_none());
         assert_eq!(nav_info.toc_entries.len(), 2);

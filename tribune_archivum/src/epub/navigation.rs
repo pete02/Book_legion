@@ -2,6 +2,8 @@ use crate::archive::entry_exists;
 use crate::archive::read_entry;
 use crate::core::{ErrorCode, ManifestInfo, NavInfo, ValidationLocation, ValidationResult, ValidationError};
 use quick_xml::de::from_str;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use serde::Deserialize;
 use zip::ZipArchive;
 
@@ -44,6 +46,20 @@ struct NavLink {
     href: String,
     #[serde(rename = "#text", default)]
     title: Option<String>,
+}
+
+/// Parsed navigation link with title
+#[derive(Debug, Clone)]
+struct ParsedNavLink {
+    href: String,
+    title: String,
+}
+
+/// Parsed navigation list item
+#[derive(Debug, Clone)]
+struct ParsedNavItem {
+    links: Vec<ParsedNavLink>,
+    subitems: Option<Vec<ParsedNavItem>>,
 }
 
 /// EPUB2 NCX document root element
@@ -156,6 +172,160 @@ fn find_ncx_document(
     None
 }
 
+/// Manually parses EPUB3 nav XML using EventReader to extract text content
+fn parse_nav_xml(nav_str: &str) -> Result<Vec<ParsedNavItem>, ()> {
+    let mut reader = Reader::from_str(nav_str);
+    reader.trim_text(true);
+    
+    let mut in_nav = false;
+    let mut in_ol = false;
+    let mut in_li = false;
+    let mut current_item = ParsedNavItem {
+        links: Vec::new(),
+        subitems: None,
+    };
+    let mut current_link = ParsedNavLink {
+        href: String::new(),
+        title: String::new(),
+    };
+    let mut in_a = false;
+    let mut in_sub_ol = false;
+    let mut sub_items: Vec<ParsedNavItem> = Vec::new();
+    let mut sub_current_item = ParsedNavItem {
+        links: Vec::new(),
+        subitems: None,
+    };
+    let mut sub_in_a = false;
+    let mut sub_current_link = ParsedNavLink {
+        href: String::new(),
+        title: String::new(),
+    };
+    
+    let mut result: Vec<ParsedNavItem> = Vec::new();
+    
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) => {
+                let local_name = e.name().0;
+                
+                eprintln!("DEBUG Start: local_name={:?}, in_nav={}, in_ol={}, in_li={}, in_sub_ol={}", 
+                         std::str::from_utf8(local_name).unwrap_or("invalid"), in_nav, in_ol, in_li, in_sub_ol);
+                
+                if local_name == b"nav" {
+                    eprintln!("DEBUG: Hit nav branch");
+                    in_nav = true;
+                } else if in_nav && local_name == b"ol" {
+                    eprintln!("DEBUG: Hit nav+ol branch");
+                    in_ol = true;
+                } else if in_sub_ol && local_name == b"li" {
+                    // Handle nested <li> first (before checking parent <li>)
+                    eprintln!("DEBUG: Hit sub_ol+li branch");
+                    sub_current_item = ParsedNavItem {
+                        links: Vec::new(),
+                        subitems: None,
+                    };
+                } else if in_ol && local_name == b"li" {
+                    eprintln!("DEBUG: Hit ol+li branch");
+                    in_li = true;
+                    eprintln!("DEBUG: Found <li>, creating current_item");
+                    current_item = ParsedNavItem {
+                        links: Vec::new(),
+                        subitems: None,
+                    };
+                } else if in_li && local_name == b"a" {
+                    in_a = true;
+                    eprintln!("DEBUG: Found <a> in <li>, creating current_link");
+                    current_link = ParsedNavLink {
+                        href: String::new(),
+                        title: String::new(),
+                    };
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"href" {
+                            current_link.href = String::from_utf8_lossy(&attr.value).to_string();
+                        }
+                    }
+                } else if in_li && local_name == b"ol" {
+                    eprintln!("DEBUG: Hit li+ol branch");
+                    in_sub_ol = true;
+                    sub_items = Vec::new();
+                    sub_current_item = ParsedNavItem {
+                        links: Vec::new(),
+                        subitems: None,
+                    };
+                } else if in_sub_ol && local_name == b"a" {
+                    sub_in_a = true;
+                    sub_current_link = ParsedNavLink {
+                        href: String::new(),
+                        title: String::new(),
+                    };
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"href" {
+                            sub_current_link.href = String::from_utf8_lossy(&attr.value).to_string();
+                        }
+                    }
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                let text = e.unescape().unwrap_or_default();
+                let text = text.trim().to_string();
+                
+                if in_a {
+                    if !text.is_empty() {
+                        eprintln!("DEBUG: Setting current_link.title to '{}'", text);
+                        current_link.title = text;
+                    }
+                } else if sub_in_a {
+                    if !text.is_empty() {
+                        eprintln!("DEBUG: Setting sub_current_link.title to '{}'", text);
+                        sub_current_link.title = text;
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                let local_name = e.name().0;
+                
+                if local_name == b"a" {
+                    if in_a {
+                        current_item.links.push(current_link.clone());
+                        in_a = false;
+                    } else if sub_in_a {
+                        sub_current_item.links.push(sub_current_link.clone());
+                        sub_in_a = false;
+                    }
+                } else if local_name == b"li" {
+                    if in_sub_ol {
+                        eprintln!("DEBUG: Pushing sub_item with {} links", sub_current_item.links.len());
+                        sub_items.push(sub_current_item.clone());
+                        sub_in_a = false;
+                    } else if in_li {
+                        eprintln!("DEBUG: Pushing current_item with {} links", current_item.links.len());
+                        in_li = false;
+                        result.push(current_item.clone());
+                    }
+                } else if local_name == b"ol" {
+                    if in_sub_ol {
+                        in_sub_ol = false;
+                        current_item.subitems = Some(sub_items.clone());
+                    } else if in_ol {
+                        in_ol = false;
+                    }
+                } else if local_name == b"nav" {
+                    in_nav = false;
+                }
+            }
+            Ok(Event::Eof) => {
+                break;
+            }
+            Err(_) => {
+                return Err(());
+            }
+            _ => {}
+        }
+    }
+    
+    Ok(result)
+}
+
 /// Validates the EPUB3 navigation document
 fn validate_epub3_nav(
     archive: &mut ZipArchive<std::fs::File>,
@@ -187,8 +357,9 @@ fn validate_epub3_nav(
         }
     };
     
-    let nav: NavDocument = match from_str(&nav_str) {
-        Ok(n) => n,
+    // Parse nav document using manual EventReader parsing to extract text content
+    let nav_items = match parse_nav_xml(&nav_str) {
+        Ok(items) => items,
         Err(_) => {
             result.add_error(ValidationError::new(
                 ErrorCode::InvalidNavXml,
@@ -201,47 +372,45 @@ fn validate_epub3_nav(
     // Check for toc navigation
     let mut toc_entries = Vec::new();
     
-    if let Some(nav_list) = nav.body.nav_element.ordered_list {
-        for (index, item) in nav_list.list_items.iter().enumerate() {
-            if let Some(link) = item.links.first() {
-                // Skip fragment-only links
-                if !link.href.is_empty() && !link.href.starts_with('#') {
-                    let title = link.title.clone().unwrap_or_default();
-                    let href = link.href.clone();
-                    
-                    // Check for empty href
-                    if href.is_empty() {
-                        result.add_error(ValidationError::new(
-                            ErrorCode::InvalidTocEntry,
-                            ValidationLocation::TocEntry { index },
-                        ));
-                        continue;
-                    }
-                    
-                    let mut entry = crate::core::TocEntry {
-                        title,
-                        href,
-                        children: Vec::new(),
-                    };
-                    
-                    // Process subitems
-                    if let Some(sublist) = item.subitems.as_ref() {
-                        for subitem in &sublist.list_items {
-                            if let Some(link) = subitem.links.first() {
-                                if !link.href.is_empty() && !link.href.starts_with('#') {
-                                    entry.children.push(crate::core::TocEntry {
-                                        title: link.title.clone().unwrap_or_default(),
-                                        href: link.href.clone(),
-                                        children: Vec::new(),
-                                    });
-                                }
-                            }
+    for (index, item) in nav_items.iter().enumerate() {
+        if let Some(link) = item.links.first() {
+            let title = link.title.clone();
+            let href = link.href.clone();
+            
+            // Skip fragment-only links and empty hrefs
+            if href.is_empty() || href.starts_with('#') {
+                // Add error for empty href, but skip fragment-only links silently
+                if href.is_empty() {
+                    result.add_error(ValidationError::new(
+                        ErrorCode::InvalidTocEntry,
+                        ValidationLocation::TocEntry { index },
+                    ));
+                }
+                continue;
+            }
+            
+            let mut entry = crate::core::TocEntry {
+                title,
+                href,
+                children: Vec::new(),
+            };
+            
+            // Process subitems
+            if let Some(sublist) = item.subitems.as_ref() {
+                for subitem in sublist {
+                    for sublink in &subitem.links {
+                        if !sublink.href.is_empty() && !sublink.href.starts_with('#') {
+                            entry.children.push(crate::core::TocEntry {
+                                title: sublink.title.clone(),
+                                href: sublink.href.clone(),
+                                children: Vec::new(),
+                            });
                         }
                     }
-                    
-                    toc_entries.push(entry);
                 }
             }
+            
+            toc_entries.push(entry);
         }
     }
     
@@ -251,6 +420,11 @@ fn validate_epub3_nav(
             ErrorCode::EmptyToc,
             ValidationLocation::Navigation { path: nav_path.to_string() },
         ));
+    }
+    
+    // Return error if there are any validation errors
+    if !result.errors.is_empty() {
+        return Err(result);
     }
     
     Ok(NavInfo {

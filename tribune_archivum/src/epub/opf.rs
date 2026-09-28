@@ -1,66 +1,76 @@
-use crate::core::{ErrorCode, OpfPackage, ValidationLocation, ValidationResult, ValidationError};
-use quick_xml::de::from_str;
+use crate::core::{
+    ErrorCode, ManifestItem, OpfPackage, SpineItem, ValidationError, ValidationLocation,
+    ValidationResult,
+};
 use serde::Deserialize;
 
-/// OPF Package document root element
-#[derive(Debug, Deserialize)]
-struct OpfPackageRoot {
-    #[serde(rename = "@xmlns")]
-    #[allow(dead_code)]
-    namespace: String,
-    #[serde(rename = "@version")]
-    #[allow(dead_code)]
-    version: String,
-    #[serde(rename = "metadata")]
+const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
+
+// ---- Serde model of the OPF document -------------------------------------
+// quick-xml's deserializer matches elements by local name (so `dc:title` and
+// `opf:package` work) and maps attributes via the `@` prefix.
+
+/// Root wrapper: makes deserialization fail unless the root element is <package>.
+#[derive(Deserialize)]
+enum Root {
+    #[serde(rename = "package")]
+    Package(Package),
+}
+
+#[derive(Deserialize)]
+struct Package {
+    #[serde(default)]
     metadata: Metadata,
-    #[serde(rename = "manifest")]
-    manifest: OpfManifest,
-    #[serde(rename = "spine")]
-    spine: OpfSpine,
+    manifest: Option<Manifest>,
+    spine: Option<Spine>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Default)]
 struct Metadata {
-    #[serde(rename = "dc:title", default)]
-    title: Option<String>,
-    #[serde(rename = "dc:creator", default)]
-    creators: Vec<String>,
-    #[serde(rename = "dc:language", default)]
-    language: Option<String>,
-    #[serde(rename = "dc:identifier", default)]
-    identifiers: Vec<String>,
+    #[serde(rename = "title", default)]
+    titles: Vec<Text>,
+    #[serde(rename = "creator", default)]
+    creators: Vec<Text>,
+    #[serde(rename = "language", default)]
+    languages: Vec<Text>,
+    #[serde(rename = "identifier", default)]
+    identifiers: Vec<Text>,
 }
 
-#[derive(Debug, Deserialize)]
-struct OpfManifest {
+/// An element's text content; the struct form tolerates attributes (id, xml:lang, opf:role...).
+#[derive(Deserialize)]
+struct Text {
+    #[serde(rename = "$text", default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct Manifest {
     #[serde(rename = "item", default)]
-    items: Vec<ManifestItem>,
+    items: Vec<Item>,
 }
 
-#[derive(Debug, Deserialize)]
-struct OpfSpine {
-    #[serde(rename = "@toc")]
-    #[allow(dead_code)]
-    toc: Option<String>,
-    #[serde(rename = "itemref", default)]
-    items: Vec<SpineItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManifestItem {
-    #[serde(rename = "@id")]
+#[derive(Deserialize)]
+struct Item {
+    #[serde(rename = "@id", default)]
     id: String,
-    #[serde(rename = "@href")]
+    #[serde(rename = "@href", default)]
     href: String,
-    #[serde(rename = "@media-type")]
+    #[serde(rename = "@media-type", default)]
     media_type: String,
     #[serde(rename = "@properties", default)]
     properties: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SpineItem {
-    #[serde(rename = "@idref")]
+#[derive(Deserialize)]
+struct Spine {
+    #[serde(rename = "itemref", default)]
+    items: Vec<ItemRef>,
+}
+
+#[derive(Deserialize)]
+struct ItemRef {
+    #[serde(rename = "@idref", default)]
     idref: String,
     #[serde(rename = "@linear", default = "default_linear")]
     linear: String,
@@ -72,92 +82,85 @@ fn default_linear() -> String {
     "yes".to_string()
 }
 
-/// Parses and validates the OPF document
+// ---- Conversion ------------------------------------------------------------
+
+fn split_properties(p: Option<String>) -> Vec<String> {
+    p.map(|s| s.split_whitespace().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+fn texts(v: &[Text]) -> Vec<String> {
+    v.iter().map(|t| t.text.trim().to_string()).collect()
+}
+
+/// Parses and validates the OPF document (path unknown).
 pub fn parse_opf(opf_data: &[u8]) -> Result<OpfPackage, ValidationResult> {
+    parse_opf_at("", opf_data)
+}
+
+/// Parses and validates the OPF document, reporting errors against `path`.
+pub fn parse_opf_at(path: &str, opf_data: &[u8]) -> Result<OpfPackage, ValidationResult> {
     let mut result = ValidationResult::new();
-    
-    // Parse OPF XML
-    let opf_str = match String::from_utf8(opf_data.to_vec()) {
-        Ok(s) => s,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidOpfXml,
-                ValidationLocation::Opf { path: String::new() },
-            ));
-            return Err(result);
-        }
+    let location = || ValidationLocation::Opf { path: path.to_string() };
+
+    let bytes = opf_data.strip_prefix(UTF8_BOM).unwrap_or(opf_data);
+    let parsed = std::str::from_utf8(bytes)
+        .ok()
+        .and_then(|s| quick_xml::de::from_str::<Root>(s).ok());
+
+    let Some(Root::Package(pkg)) = parsed else {
+        result.add_error(ValidationError::new(ErrorCode::InvalidOpfXml, location()));
+        return Err(result);
     };
-    
-    let opf: OpfPackageRoot = match from_str(&opf_str) {
-        Ok(o) => o,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidOpfXml,
-                ValidationLocation::Opf { path: String::new() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    // Check for manifest
-    if opf.manifest.items.is_empty() {
-        result.add_error(ValidationError::new(
-            ErrorCode::MissingManifest,
-            ValidationLocation::Opf { path: String::new() },
-        ));
+
+    let mut failed = false;
+    if pkg.manifest.as_ref().map_or(true, |m| m.items.is_empty()) {
+        result.add_error(ValidationError::new(ErrorCode::MissingManifest, location()));
+        failed = true;
     }
-    
-    // Check for spine
-    if opf.spine.items.is_empty() {
-        result.add_error(ValidationError::new(
-            ErrorCode::MissingSpine,
-            ValidationLocation::Opf { path: String::new() },
-        ));
+    if pkg.spine.as_ref().map_or(true, |s| s.items.is_empty()) {
+        result.add_error(ValidationError::new(ErrorCode::MissingSpine, location()));
+        failed = true;
     }
-    
-    // Convert to our internal types
-    let manifest_items: Vec<crate::core::ManifestItem> = opf
+    if failed {
+        return Err(result);
+    }
+
+    let manifest_items = pkg
         .manifest
-        .items
-        .iter()
-        .map(|item| crate::core::ManifestItem {
-            id: item.id.clone(),
-            href: item.href.clone(),
-            media_type: item.media_type.clone(),
-            properties: item
-                .properties
-                .clone()
-                .map(|p| p.split_whitespace().map(|s| s.to_string()).collect())
-                .unwrap_or_default(),
+        .into_iter()
+        .flat_map(|m| m.items)
+        .map(|i| ManifestItem {
+            id: i.id,
+            href: i.href,
+            media_type: i.media_type,
+            properties: split_properties(i.properties),
         })
         .collect();
-    
-    let spine_items: Vec<crate::core::SpineItem> = opf
+
+    let spine_items = pkg
         .spine
-        .items
-        .iter()
-        .map(|item| crate::core::SpineItem {
-            idref: item.idref.clone(),
-            linear: item.linear.clone(),
-            properties: item
-                .properties
-                .clone()
-                .map(|p| p.split_whitespace().map(|s| s.to_string()).collect())
-                .unwrap_or_default(),
+        .into_iter()
+        .flat_map(|s| s.items)
+        .map(|i| SpineItem {
+            idref: i.idref,
+            linear: i.linear,
+            properties: split_properties(i.properties),
         })
         .collect();
-    
-    // Convert metadata to JSON
+
+    // Multiple titles/languages are allowed; the first is the primary.
+    let m = &pkg.metadata;
     let metadata = serde_json::json!({
-        "title": opf.metadata.title,
-        "creators": opf.metadata.creators,
-        "language": opf.metadata.language,
-        "identifiers": opf.metadata.identifiers,
+        "title": texts(&m.titles).into_iter().next(),
+        "creators": texts(&m.creators),
+        "language": texts(&m.languages).into_iter().next(),
+        "identifiers": texts(&m.identifiers),
     });
-    
+
     Ok(OpfPackage {
-        path: String::new(),
-        root_file_path: String::new(),
+        path: path.to_string(),
+        root_file_path: path.to_string(),
         metadata,
         manifest_items,
         spine_items,

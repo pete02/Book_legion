@@ -28,6 +28,7 @@ pub fn validate_spine(
             ErrorCode::EmptySpine,
             ValidationLocation::Spine,
         ));
+        return Err(result);
     }
     
     Ok(SpineInfo {

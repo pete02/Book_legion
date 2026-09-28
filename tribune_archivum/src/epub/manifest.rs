@@ -25,7 +25,7 @@ pub fn validate_manifest(
                 ErrorCode::InvalidManifestId,
                 ValidationLocation::ArchiveEntry { path: item.href.clone() },
             ));
-            continue;
+            // Don't return immediately - continue to collect all errors
         }
         
         // Check for duplicate IDs
@@ -34,6 +34,7 @@ pub fn validate_manifest(
                 ErrorCode::DuplicateManifestId,
                 ValidationLocation::ArchiveEntry { path: item.href.clone() },
             ));
+            // Don't return immediately - continue to collect all errors
         }
         
         // Check for missing media-type
@@ -44,7 +45,15 @@ pub fn validate_manifest(
             ));
         }
         
-        id_to_item.insert(item.id.clone(), item.clone());
+        // Only insert if ID is not empty and not a duplicate
+        if !item.id.is_empty() && !id_to_item.contains_key(&item.id) {
+            id_to_item.insert(item.id.clone(), item.clone());
+        }
+    }
+    
+    // Return error if we collected any errors
+    if !result.errors.is_empty() {
+        return Err(result);
     }
     
     Ok(ManifestInfo {
