@@ -24,7 +24,7 @@ mod tests {
     }
 
     /// Creates a temporary EPUB file with the given container.xml content
-    fn create_temp_epub(container_xml: &[u8], opf_path: &str) -> (TempDir, String) {
+    fn create_temp_epub(container_xml: &[u8], opf_path: Option<&str>) -> (TempDir, String) {
         let temp_dir = TempDir::new().unwrap();
         let epub_path = temp_dir.path().join("test.epub");
         
@@ -55,8 +55,10 @@ mod tests {
 </package>"#
         );
         
-        archive.start_file(opf_path, options).unwrap();
-        archive.write_all(opf_content.as_bytes()).unwrap();
+        if let Some(path) = opf_path {
+            archive.start_file(path, options).unwrap();
+            archive.write_all(opf_content.as_bytes()).unwrap();
+        }
         
         // Add a chapter file
         archive.start_file("chapter1.xhtml", options).unwrap();
@@ -74,7 +76,7 @@ mod tests {
     fn test_valid_container_xml() {
         let (temp_dir, epub_path) = create_temp_epub(
             &create_valid_container_xml("OEBPS/content.opf"),
-            "OEBPS/content.opf",
+            Some("OEBPS/content.opf"),
         );
         
         let file = File::open(&epub_path).unwrap();
@@ -178,7 +180,7 @@ mod tests {
             
             // Add container.xml without rootfile
             let container_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opf:endpoints">
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
   </rootfiles>
 </container>"#;
@@ -202,19 +204,18 @@ mod tests {
         let validation_result = result.unwrap_err();
         assert!(validation_result.errors.iter().any(|e| {
             e.code == ErrorCode::MissingOpfReference
-        }), "Should report MissingOpfReference error");
+        }), "Should report MissingOpfReference error: {:?}", validation_result);
     }
 
     #[test]
     fn test_invalid_opf_reference() {
         let (_temp_dir, epub_path) = create_temp_epub(
             &create_valid_container_xml("OEBPS/nonexistent.opf"),
-            "OEBPS/nonexistent.opf",
+            None
         );
         
         let file = File::open(&epub_path).unwrap();
         let mut archive = ZipArchive::new(file).unwrap();
-        
         let result = validate_container(&mut archive);
         
         assert!(result.is_err(), "Invalid OPF reference should fail validation");

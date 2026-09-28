@@ -242,7 +242,6 @@ mod tests {
         let result = validate_navigation(&mut archive, &opf, &manifest_info);
         
         assert!(result.is_err(), "Expected invalid EPUB3 nav XML to fail validation");
-        
         let error = result.unwrap_err();
         assert!(error.errors.iter().any(|e| e.code == ErrorCode::InvalidNavXml));
     }
@@ -357,9 +356,9 @@ mod tests {
   <nav epub:type="toc" id="toc" role="doc-toc">
     <ol>
       <li>
-        <a href="chapter1.xhtml">Chapter 1: "Quotes" & Ampersands</a>
+        <a href="chapter1.xhtml">Chapter 1: "Quotes" &amp; Ampersands</a>
         <ol>
-          <li><a href="chapter1.xhtml#section1">Section with <tags></a></li>
+          <li><a href="chapter1.xhtml#section1">Section with &lt;tags&gt;</a></li>
           <li><a href="chapter1.xhtml#section2">Section with emojis</a></li>
         </ol>
       </li>
@@ -376,7 +375,7 @@ mod tests {
         
         let result = validate_navigation(&mut archive, &opf, &manifest_info);
         
-        assert!(result.is_ok(), "Expected nav with special characters to pass validation");
+        assert!(result.is_ok(), "Expected nav with special characters to pass validation: {:?}", result.err());
         
         let nav_info = result.unwrap();
         assert_eq!(nav_info.toc_entries.len(), 1);

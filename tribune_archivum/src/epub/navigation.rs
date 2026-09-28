@@ -1,432 +1,263 @@
-use crate::archive::entry_exists;
-use crate::archive::read_entry;
-use crate::core::{ErrorCode, ManifestInfo, NavInfo, ValidationLocation, ValidationResult, ValidationError};
-use quick_xml::de::from_str;
+use crate::archive::{entry_exists, read_entry};
+use crate::core::{
+    ErrorCode, ManifestInfo, NavInfo, OpfPackage, TocEntry, ValidationError, ValidationLocation,
+    ValidationResult,
+};
+use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde::Deserialize;
+use std::error::Error;
 use zip::ZipArchive;
 
-/// EPUB3 navigation document root element
-#[derive(Debug, Deserialize)]
-struct NavDocument {
-    #[serde(rename = "body")]
-    body: NavBody,
-}
+type XmlResult<T> = Result<T, Box<dyn Error>>;
 
-#[derive(Debug, Deserialize)]
-struct NavBody {
-    #[serde(rename = "nav")]
-    nav_element: NavElement,
-}
+const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
+const NCX_MEDIA_TYPE: &str = "application/x-dtbncx+xml";
 
-#[derive(Debug, Deserialize)]
-struct NavElement {
-    #[serde(rename = "ol")]
-    ordered_list: Option<NavList>,
-}
+// ---- Shared intermediate representation ------------------------------------
 
-#[derive(Debug, Deserialize)]
-struct NavList {
-    #[serde(rename = "li")]
-    list_items: Vec<NavItem>,
-}
-
-#[derive(Debug, Deserialize)]
+/// One TOC node, independent of whether it came from an EPUB3 nav or an EPUB2 NCX.
+#[derive(Debug, Default)]
 struct NavItem {
-    #[serde(rename = "a", default)]
-    links: Vec<NavLink>,
-    #[serde(rename = "ol", default)]
-    subitems: Option<NavList>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NavLink {
-    #[serde(rename = "@href")]
-    href: String,
-    #[serde(rename = "#text", default)]
-    title: Option<String>,
-}
-
-/// Parsed navigation link with title
-#[derive(Debug, Clone)]
-struct ParsedNavLink {
-    href: String,
+    /// `None` = no link (e.g. a heading `<span>`); `Some("")` = link without a target.
+    href: Option<String>,
     title: String,
+    children: Vec<NavItem>,
 }
 
-/// Parsed navigation list item
-#[derive(Debug, Clone)]
-struct ParsedNavItem {
-    links: Vec<ParsedNavLink>,
-    subitems: Option<Vec<ParsedNavItem>>,
+/// Converts parsed items into `TocEntry`s, recording invalid entries.
+///
+/// - unlinked headings and fragment-only links are dropped, but their children are kept
+/// - links with an empty target are reported as `InvalidTocEntry`
+///
+/// `counter` numbers entries in document order and is used as the error location.
+fn collect_entries(
+    items: Vec<NavItem>,
+    counter: &mut usize,
+    result: &mut ValidationResult,
+) -> Vec<TocEntry> {
+    let mut out = Vec::new();
+    for item in items {
+        let index = *counter;
+        *counter += 1;
+        let children = collect_entries(item.children, counter, result);
+
+        match item.href.as_deref() {
+            None => out.extend(children),
+            Some("") => {
+                result.add_error(ValidationError::new(
+                    ErrorCode::InvalidTocEntry,
+                    ValidationLocation::TocEntry { index },
+                ));
+                out.extend(children);
+            }
+            Some(h) if h.starts_with('#') => out.extend(children),
+            Some(h) => out.push(TocEntry {
+                title: normalize_ws(&item.title),
+                href: h.to_string(),
+                children,
+            }),
+        }
+    }
+    out
 }
 
-/// EPUB2 NCX document root element
-#[derive(Debug, Deserialize)]
-struct NcxDocument {
-    #[serde(rename = "@xmlns")]
-    #[allow(dead_code)]
-    namespace: String,
-    #[serde(rename = "navMap")]
-    nav_map: NcxNavMap,
+fn normalize_ws(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-#[derive(Debug, Deserialize)]
-struct NcxNavMap {
-    #[serde(rename = "navPoint", default)]
-    nav_points: Vec<NcxNavPoint>,
+fn single_error(code: ErrorCode, location: ValidationLocation) -> ValidationResult {
+    let mut r = ValidationResult::new();
+    r.add_error(ValidationError::new(code, location));
+    r
 }
 
-#[derive(Debug, Deserialize)]
-struct NcxNavPoint {
-    #[serde(rename = "@id")]
-    #[allow(dead_code)]
-    id: String,
-    #[serde(rename = "navLabel")]
-    nav_label: NcxNavLabel,
-    #[serde(rename = "content")]
-    content: NcxContent,
-    #[serde(rename = "navPoint", default)]
-    children: Vec<NcxNavPoint>,
+fn decode(data: &[u8]) -> Option<&str> {
+    std::str::from_utf8(data.strip_prefix(UTF8_BOM).unwrap_or(data)).ok()
 }
 
-#[derive(Debug, Deserialize)]
-struct NcxNavLabel {
-    #[serde(rename = "text")]
-    text: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct NcxContent {
-    #[serde(rename = "@src")]
-    src: String,
-}
+// ---- Discovery -----------------------------------------------------------------
 
 /// Discovers and validates navigation documents (EPUB3 nav or EPUB2 NCX)
 pub fn validate_navigation(
     archive: &mut ZipArchive<std::fs::File>,
-    opf: &crate::core::OpfPackage,
+    _opf: &OpfPackage,
     manifest_info: &ManifestInfo,
 ) -> Result<NavInfo, ValidationResult> {
-    let mut result = ValidationResult::new();
-    
-    // Try to find EPUB3 nav document first
+    // Prefer the EPUB3 nav document
     if let Some(nav_path) = find_nav_document(manifest_info) {
         if entry_exists(archive, &nav_path) {
             return validate_epub3_nav(archive, &nav_path);
         }
     }
-    
-    // Fall back to EPUB2 NCX
-    if let Some(ncx_path) = find_ncx_document(opf, manifest_info) {
+
+    // Fall back to the EPUB2 NCX
+    if let Some(ncx_path) = find_ncx_document(manifest_info) {
         if entry_exists(archive, &ncx_path) {
             return validate_ncx(archive, &ncx_path);
         }
     }
-    
-    // No navigation document found
-    result.add_error(ValidationError::new(
-        ErrorCode::MissingNavDocument,
-        ValidationLocation::Root,
-    ));
-    
-    Err(result)
+
+    Err(single_error(ErrorCode::MissingNavDocument, ValidationLocation::Root))
 }
 
-/// Finds the EPUB3 navigation document from manifest
+/// The EPUB3 nav document is the manifest item with the `nav` property.
 fn find_nav_document(manifest_info: &ManifestInfo) -> Option<String> {
-    for item in &manifest_info.items {
-        if item.properties.contains(&"nav".to_string()) {
-            return Some(item.href.clone());
-        }
-    }
-    None
+    manifest_info
+        .items
+        .iter()
+        .find(|item| item.properties.iter().any(|p| p == "nav"))
+        .map(|item| item.href.clone())
 }
 
-/// Finds the EPUB2 NCX document from manifest or spine
-fn find_ncx_document(
-    opf: &crate::core::OpfPackage,
-    manifest_info: &ManifestInfo,
-) -> Option<String> {
-    // Try to find by media-type first
-    for item in &manifest_info.items {
-        if item.media_type == "application/x-dtbncx+xml" {
-            return Some(item.href.clone());
-        }
-    }
-    
-    // Fall back to spine toc reference
-    if let Some(toc_idref) = &opf.spine_items.first().and_then(|s| {
-        if s.properties.contains(&"nav".to_string()) {
-            Some(s.idref.clone())
-        } else {
-            None
-        }
-    }) {
-        if let Some(item) = manifest_info.id_to_item.get(toc_idref) {
-            return Some(item.href.clone());
-        }
-    }
-    
-    None
+/// The NCX is identified by its media type.
+fn find_ncx_document(manifest_info: &ManifestInfo) -> Option<String> {
+    manifest_info
+        .items
+        .iter()
+        .find(|item| item.media_type == NCX_MEDIA_TYPE)
+        .map(|item| item.href.clone())
 }
 
-/// Manually parses EPUB3 nav XML using EventReader to extract text content
-fn parse_nav_xml(nav_str: &str) -> Result<Vec<ParsedNavItem>, ()> {
-    let mut reader = Reader::from_str(nav_str);
-    reader.trim_text(true);
-    
-    let mut in_nav = false;
-    let mut in_ol = false;
-    let mut in_li = false;
-    let mut current_item = ParsedNavItem {
-        links: Vec::new(),
-        subitems: None,
-    };
-    let mut current_link = ParsedNavLink {
-        href: String::new(),
-        title: String::new(),
-    };
-    let mut in_a = false;
-    let mut in_sub_ol = false;
-    let mut sub_items: Vec<ParsedNavItem> = Vec::new();
-    let mut sub_current_item = ParsedNavItem {
-        links: Vec::new(),
-        subitems: None,
-    };
-    let mut sub_in_a = false;
-    let mut sub_current_link = ParsedNavLink {
-        href: String::new(),
-        title: String::new(),
-    };
-    
-    let mut result: Vec<ParsedNavItem> = Vec::new();
-    
+// ---- EPUB3 nav -------------------------------------------------------------------
+
+fn attr_value(e: &BytesStart, key: &[u8]) -> XmlResult<Option<String>> {
+    for a in e.attributes() {
+        let a = a?;
+        if a.key.as_ref() == key {
+            return Ok(Some(a.unescape_value()?.into_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// True for `<nav epub:type="toc">` (the prefix is ignored; the value is a token list).
+fn is_toc_nav(e: &BytesStart) -> XmlResult<bool> {
+    for a in e.attributes() {
+        let a = a?;
+        if a.key.local_name().as_ref() == b"type"
+            && a.unescape_value()?.split_whitespace().any(|t| t == "toc")
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Extracts the hierarchy of the `epub:type="toc"` nav.
+///
+/// Returns `Ok(None)` if the document has no toc nav. Titles are gathered from
+/// all text inside the first `<a>` of each `<li>`, so `<a><span>Title</span></a>`
+/// and `<a>Chapter <em>1</em></a>` both work, at any nesting depth.
+fn parse_toc_nav(xml: &str) -> XmlResult<Option<Vec<NavItem>>> {
+    let mut reader = Reader::from_str(xml);
+
+    let mut depth = 0usize;
+    let mut in_toc = false;
+    let mut found_toc = false;
+    let mut saw_root = false;
+    let mut in_anchor = false;
+    let mut open_items: Vec<NavItem> = Vec::new();
+    let mut roots: Vec<NavItem> = Vec::new();
+
     loop {
-        match reader.read_event() {
-            Ok(Event::Start(ref e)) => {
-                let local_name = e.name().0;
-                
-                eprintln!("DEBUG Start: local_name={:?}, in_nav={}, in_ol={}, in_li={}, in_sub_ol={}", 
-                         std::str::from_utf8(local_name).unwrap_or("invalid"), in_nav, in_ol, in_li, in_sub_ol);
-                
-                if local_name == b"nav" {
-                    eprintln!("DEBUG: Hit nav branch");
-                    in_nav = true;
-                } else if in_nav && local_name == b"ol" {
-                    eprintln!("DEBUG: Hit nav+ol branch");
-                    in_ol = true;
-                } else if in_sub_ol && local_name == b"li" {
-                    // Handle nested <li> first (before checking parent <li>)
-                    eprintln!("DEBUG: Hit sub_ol+li branch");
-                    sub_current_item = ParsedNavItem {
-                        links: Vec::new(),
-                        subitems: None,
-                    };
-                } else if in_ol && local_name == b"li" {
-                    eprintln!("DEBUG: Hit ol+li branch");
-                    in_li = true;
-                    eprintln!("DEBUG: Found <li>, creating current_item");
-                    current_item = ParsedNavItem {
-                        links: Vec::new(),
-                        subitems: None,
-                    };
-                } else if in_li && local_name == b"a" {
-                    in_a = true;
-                    eprintln!("DEBUG: Found <a> in <li>, creating current_link");
-                    current_link = ParsedNavLink {
-                        href: String::new(),
-                        title: String::new(),
-                    };
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"href" {
-                            current_link.href = String::from_utf8_lossy(&attr.value).to_string();
+        match reader.read_event()? {
+            Event::Start(e) => {
+                saw_root=true;
+                depth += 1;
+                match e.local_name().as_ref() {
+                    b"nav" if !found_toc => {
+                        if is_toc_nav(&e)? {
+                            in_toc = true;
+                            found_toc = true;
                         }
                     }
-                } else if in_li && local_name == b"ol" {
-                    eprintln!("DEBUG: Hit li+ol branch");
-                    in_sub_ol = true;
-                    sub_items = Vec::new();
-                    sub_current_item = ParsedNavItem {
-                        links: Vec::new(),
-                        subitems: None,
-                    };
-                } else if in_sub_ol && local_name == b"a" {
-                    sub_in_a = true;
-                    sub_current_link = ParsedNavLink {
-                        href: String::new(),
-                        title: String::new(),
-                    };
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"href" {
-                            sub_current_link.href = String::from_utf8_lossy(&attr.value).to_string();
+                    b"li" if in_toc => open_items.push(NavItem::default()),
+                    b"a" if in_toc => {
+                        // Only the first link of each <li> counts
+                        if let Some(item) = open_items.last_mut() {
+                            if item.href.is_none() {
+                                item.href = Some(attr_value(&e, b"href")?.unwrap_or_default());
+                                in_anchor = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Event::Empty(e) => {
+                saw_root=true;
+                // <a href="x"/>: a link without a title
+                if in_toc && e.local_name().as_ref() == b"a" {
+                    if let Some(item) = open_items.last_mut() {
+                        if item.href.is_none() {
+                            item.href = Some(attr_value(&e, b"href")?.unwrap_or_default());
                         }
                     }
                 }
             }
-            Ok(Event::Text(ref e)) => {
-                let text = e.unescape().unwrap_or_default();
-                let text = text.trim().to_string();
-                
-                if in_a {
-                    if !text.is_empty() {
-                        eprintln!("DEBUG: Setting current_link.title to '{}'", text);
-                        current_link.title = text;
-                    }
-                } else if sub_in_a {
-                    if !text.is_empty() {
-                        eprintln!("DEBUG: Setting sub_current_link.title to '{}'", text);
-                        sub_current_link.title = text;
-                    }
+            Event::Text(t) if in_anchor => {
+                if let Some(item) = open_items.last_mut() {
+                    item.title.push_str(&t.unescape()?);
                 }
             }
-            Ok(Event::End(ref e)) => {
-                let local_name = e.name().0;
-                
-                if local_name == b"a" {
-                    if in_a {
-                        current_item.links.push(current_link.clone());
-                        in_a = false;
-                    } else if sub_in_a {
-                        sub_current_item.links.push(sub_current_link.clone());
-                        sub_in_a = false;
-                    }
-                } else if local_name == b"li" {
-                    if in_sub_ol {
-                        eprintln!("DEBUG: Pushing sub_item with {} links", sub_current_item.links.len());
-                        sub_items.push(sub_current_item.clone());
-                        sub_in_a = false;
-                    } else if in_li {
-                        eprintln!("DEBUG: Pushing current_item with {} links", current_item.links.len());
-                        in_li = false;
-                        result.push(current_item.clone());
-                    }
-                } else if local_name == b"ol" {
-                    if in_sub_ol {
-                        in_sub_ol = false;
-                        current_item.subitems = Some(sub_items.clone());
-                    } else if in_ol {
-                        in_ol = false;
-                    }
-                } else if local_name == b"nav" {
-                    in_nav = false;
+            Event::CData(c) if in_anchor => {
+                if let Some(item) = open_items.last_mut() {
+                    item.title.push_str(&String::from_utf8_lossy(&c));
                 }
             }
-            Ok(Event::Eof) => {
-                break;
+            Event::End(e) => {
+                depth = depth.checked_sub(1).ok_or("unbalanced end tag")?;
+                match e.local_name().as_ref() {
+                    b"a" => in_anchor = false,
+                    b"li" if in_toc => {
+                        if let Some(item) = open_items.pop() {
+                            match open_items.last_mut() {
+                                Some(parent) => parent.children.push(item),
+                                None => roots.push(item),
+                            }
+                        }
+                    }
+                    b"nav" if in_toc => in_toc = false,
+                    _ => {}
+                }
             }
-            Err(_) => {
-                return Err(());
-            }
+            Event::Eof => break,
             _ => {}
         }
     }
-    
-    Ok(result)
+
+    if !saw_root {
+       return Err("invalid XML".into());
+    }
+
+    if depth != 0 {
+        return Err("unclosed element(s)".into());
+    }
+    Ok(found_toc.then_some(roots))
 }
 
-/// Validates the EPUB3 navigation document
-fn validate_epub3_nav(
-    archive: &mut ZipArchive<std::fs::File>,
-    nav_path: &str,
-) -> Result<NavInfo, ValidationResult> {
+fn parse_nav_document(nav_path: &str, xml: &str) -> Result<NavInfo, ValidationResult> {
+    let location = || ValidationLocation::Navigation { path: nav_path.to_string() };
+
+    let items = match parse_toc_nav(xml) {
+        Ok(Some(items)) => items,
+        Ok(None) => return Err(single_error(ErrorCode::MissingTocNav, location())),
+        Err(_) => return Err(single_error(ErrorCode::InvalidNavXml, location())),
+    };
+
     let mut result = ValidationResult::new();
-    
-    // Read nav document
-    let nav_data: Vec<u8> = match read_entry(archive, nav_path) {
-        Ok(data) => data,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::MissingNavDocument,
-                ValidationLocation::Navigation { path: nav_path.to_string() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    // Parse nav document
-    let nav_str = match String::from_utf8(nav_data.clone()) {
-        Ok(s) => s,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidNavXml,
-                ValidationLocation::Navigation { path: nav_path.to_string() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    // Parse nav document using manual EventReader parsing to extract text content
-    let nav_items = match parse_nav_xml(&nav_str) {
-        Ok(items) => items,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidNavXml,
-                ValidationLocation::Navigation { path: nav_path.to_string() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    // Check for toc navigation
-    let mut toc_entries = Vec::new();
-    
-    for (index, item) in nav_items.iter().enumerate() {
-        if let Some(link) = item.links.first() {
-            let title = link.title.clone();
-            let href = link.href.clone();
-            
-            // Skip fragment-only links and empty hrefs
-            if href.is_empty() || href.starts_with('#') {
-                // Add error for empty href, but skip fragment-only links silently
-                if href.is_empty() {
-                    result.add_error(ValidationError::new(
-                        ErrorCode::InvalidTocEntry,
-                        ValidationLocation::TocEntry { index },
-                    ));
-                }
-                continue;
-            }
-            
-            let mut entry = crate::core::TocEntry {
-                title,
-                href,
-                children: Vec::new(),
-            };
-            
-            // Process subitems
-            if let Some(sublist) = item.subitems.as_ref() {
-                for subitem in sublist {
-                    for sublink in &subitem.links {
-                        if !sublink.href.is_empty() && !sublink.href.starts_with('#') {
-                            entry.children.push(crate::core::TocEntry {
-                                title: sublink.title.clone(),
-                                href: sublink.href.clone(),
-                                children: Vec::new(),
-                            });
-                        }
-                    }
-                }
-            }
-            
-            toc_entries.push(entry);
-        }
-    }
-    
-    // Check for empty TOC
+    let mut counter = 0;
+    let toc_entries = collect_entries(items, &mut counter, &mut result);
+
     if toc_entries.is_empty() {
-        result.add_error(ValidationError::new(
-            ErrorCode::EmptyToc,
-            ValidationLocation::Navigation { path: nav_path.to_string() },
-        ));
+        result.add_error(ValidationError::new(ErrorCode::EmptyToc, location()));
     }
-    
-    // Return error if there are any validation errors
     if !result.errors.is_empty() {
         return Err(result);
     }
-    
+
     Ok(NavInfo {
         nav_path: Some(nav_path.to_string()),
         ncx_path: None,
@@ -434,59 +265,91 @@ fn validate_epub3_nav(
     })
 }
 
-/// Validates the EPUB2 NCX document
-fn validate_ncx(
+fn validate_epub3_nav(
     archive: &mut ZipArchive<std::fs::File>,
-    ncx_path: &str,
+    nav_path: &str,
 ) -> Result<NavInfo, ValidationResult> {
+    let location = || ValidationLocation::Navigation { path: nav_path.to_string() };
+
+    let data = read_entry(archive, nav_path)
+        .map_err(|_| single_error(ErrorCode::MissingNavDocument, location()))?;
+    let xml = decode(&data).ok_or_else(|| single_error(ErrorCode::InvalidNavXml, location()))?;
+    parse_nav_document(nav_path, xml)
+}
+
+// ---- EPUB2 NCX -------------------------------------------------------------------
+// The NCX is plain nested elements with no mixed content, so serde works well here.
+
+#[derive(Deserialize)]
+enum NcxRoot {
+    #[serde(rename = "ncx")]
+    Ncx(Ncx),
+}
+
+#[derive(Deserialize)]
+struct Ncx {
+    #[serde(rename = "navMap")]
+    nav_map: NcxNavMap,
+}
+
+#[derive(Deserialize)]
+struct NcxNavMap {
+    #[serde(rename = "navPoint", default)]
+    nav_points: Vec<NcxNavPoint>,
+}
+
+#[derive(Deserialize)]
+struct NcxNavPoint {
+    /// May be repeated (one per language); the first is used.
+    #[serde(rename = "navLabel", default)]
+    labels: Vec<NcxNavLabel>,
+    content: Option<NcxContent>,
+    #[serde(rename = "navPoint", default)]
+    children: Vec<NcxNavPoint>,
+}
+
+#[derive(Deserialize)]
+struct NcxNavLabel {
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct NcxContent {
+    #[serde(rename = "@src", default)]
+    src: String,
+}
+
+fn ncx_to_items(points: Vec<NcxNavPoint>) -> Vec<NavItem> {
+    points
+        .into_iter()
+        .map(|p| NavItem {
+            // A navPoint without <content> is treated as a link with no target (invalid)
+            href: Some(p.content.map(|c| c.src).unwrap_or_default()),
+            title: p.labels.into_iter().next().map(|l| l.text).unwrap_or_default(),
+            children: ncx_to_items(p.children),
+        })
+        .collect()
+}
+
+fn parse_ncx_document(ncx_path: &str, xml: &str) -> Result<NavInfo, ValidationResult> {
+    let location = || ValidationLocation::Ncx { path: ncx_path.to_string() };
+
+    let Ok(NcxRoot::Ncx(ncx)) = quick_xml::de::from_str::<NcxRoot>(xml) else {
+        return Err(single_error(ErrorCode::InvalidNcxXml, location()));
+    };
+
     let mut result = ValidationResult::new();
-    
-    // Read NCX document
-    let ncx_data: Vec<u8> = match read_entry(archive, ncx_path) {
-        Ok(data) => data,
-        Err(_) =>{
-            result.add_error(ValidationError::new(
-                ErrorCode::MissingNavDocument,
-                ValidationLocation::Navigation { path: ncx_path.to_string() },
-            ));
-            return Err(result)
-        },
-    };
-    
-    // Parse NCX document
-    let ncx_str = match String::from_utf8(ncx_data.clone()) {
-        Ok(s) => s,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidNcxXml,
-                ValidationLocation::Ncx { path: ncx_path.to_string() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    let ncx: NcxDocument = match from_str(&ncx_str) {
-        Ok(n) => n,
-        Err(_) => {
-            result.add_error(ValidationError::new(
-                ErrorCode::InvalidNcxXml,
-                ValidationLocation::Ncx { path: ncx_path.to_string() },
-            ));
-            return Err(result);
-        }
-    };
-    
-    // Extract TOC entries from navPoints
-    let toc_entries = extract_toc_entries(&ncx.nav_map.nav_points);
-    
-    // Check for empty TOC
+    let mut counter = 0;
+    let toc_entries = collect_entries(ncx_to_items(ncx.nav_map.nav_points), &mut counter, &mut result);
+
     if toc_entries.is_empty() {
-        result.add_error(ValidationError::new(
-            ErrorCode::EmptyToc,
-            ValidationLocation::Ncx { path: ncx_path.to_string() },
-        ));
+        result.add_error(ValidationError::new(ErrorCode::EmptyToc, location()));
     }
-    
+    if !result.errors.is_empty() {
+        return Err(result);
+    }
+
     Ok(NavInfo {
         nav_path: None,
         ncx_path: Some(ncx_path.to_string()),
@@ -494,21 +357,128 @@ fn validate_ncx(
     })
 }
 
-/// Recursively extracts TOC entries from NCX navPoints
-fn extract_toc_entries(nav_points: &[NcxNavPoint]) -> Vec<crate::core::TocEntry> {
-    nav_points
-        .iter()
-        .filter_map(|point| {
-            // Skip fragment-only links
-            if point.content.src.is_empty() || point.content.src.starts_with('#') {
-                return None;
-            }
-            
-            Some(crate::core::TocEntry {
-                title: point.nav_label.text.clone(),
-                href: point.content.src.clone(),
-                children: extract_toc_entries(&point.children),
-            })
-        })
-        .collect()
+fn validate_ncx(
+    archive: &mut ZipArchive<std::fs::File>,
+    ncx_path: &str,
+) -> Result<NavInfo, ValidationResult> {
+    let data = read_entry(archive, ncx_path).map_err(|_| {
+        single_error(
+            ErrorCode::MissingNavDocument,
+            ValidationLocation::Navigation { path: ncx_path.to_string() },
+        )
+    })?;
+    let xml = decode(&data).ok_or_else(|| {
+        single_error(ErrorCode::InvalidNcxXml, ValidationLocation::Ncx { path: ncx_path.to_string() })
+    })?;
+
+    parse_ncx_document(ncx_path, xml)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn codes(r: &ValidationResult) -> Vec<ErrorCode> {
+        r.errors.iter().map(|e| e.code).collect()
+    }
+
+    fn nav_doc(body: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Nav</title></head>
+<body>{body}</body></html>"#
+        )
+    }
+
+    #[test]
+    fn nav_titles_from_nested_markup_and_deep_nesting() {
+        let xml = nav_doc(
+            r#"<nav epub:type="toc"><h1>Contents</h1><ol>
+  <li><a href="c1.xhtml"><span>One</span></a>
+    <ol><li><a href="c1a.xhtml">Chapter <em>1</em>a</a>
+      <ol><li><a href="c1a1.xhtml">Deep</a></li></ol></li></ol></li>
+  <li><a href="c2.xhtml">Two</a></li>
+</ol></nav>"#,
+        );
+        let info = parse_nav_document("nav.xhtml", &xml).expect("should parse");
+        let e = &info.toc_entries;
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].title, "One");
+        assert_eq!(e[0].children[0].title, "Chapter 1a");
+        assert_eq!(e[0].children[0].children[0].href, "c1a1.xhtml");
+        assert_eq!(e[1].title, "Two");
+    }
+
+    #[test]
+    fn nav_ignores_non_toc_navs_and_keeps_children_of_headings_and_fragments() {
+        let xml = nav_doc(
+            r##"<nav epub:type="landmarks"><ol><li><a href="cover.xhtml">Cover</a></li></ol></nav>
+<nav epub:type="toc"><ol>
+  <li><span>Part I</span><ol><li><a href="a.xhtml">A</a></li></ol></li>
+  <li><a href="#frag">Skipped</a><ol><li><a href="b.xhtml">B</a></li></ol></li>
+</ol></nav>"##,
+        );
+        let info = parse_nav_document("nav.xhtml", &xml).expect("should parse");
+        let hrefs: Vec<_> = info.toc_entries.iter().map(|e| e.href.as_str()).collect();
+        assert_eq!(hrefs, vec!["a.xhtml", "b.xhtml"]);
+    }
+
+    #[test]
+    fn nav_without_toc_is_missing_toc_nav() {
+        let xml = nav_doc(r#"<nav epub:type="landmarks"><ol><li><a href="x.xhtml">X</a></li></ol></nav>"#);
+        assert_eq!(codes(&parse_nav_document("n", &xml).unwrap_err()), vec![ErrorCode::MissingTocNav]);
+    }
+
+    #[test]
+    fn nav_empty_href_and_empty_toc() {
+        let xml = nav_doc(r#"<nav epub:type="toc"><ol><li><a href="">Bad</a></li></ol></nav>"#);
+        let c = codes(&parse_nav_document("n", &xml).unwrap_err());
+        assert!(c.contains(&ErrorCode::InvalidTocEntry) && c.contains(&ErrorCode::EmptyToc), "{c:?}");
+    }
+
+    #[test]
+    fn nav_malformed_is_invalid_nav_xml() {
+        let xml = r#"<html><body><nav epub:type="toc"><ol><li><a href="a">A</a></li></ol>"#;
+        assert_eq!(codes(&parse_nav_document("n", xml).unwrap_err()), vec![ErrorCode::InvalidNavXml]);
+    }
+
+    const NCX: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="x"/></head>
+  <docTitle><text>Book</text></docTitle>
+  <navMap>
+    <navPoint id="n1" playOrder="1"><navLabel><text>One</text></navLabel><content src="c1.xhtml"/>
+      <navPoint id="n2" playOrder="2"><navLabel><text>One A</text></navLabel><content src="c1.xhtml#a"/></navPoint>
+    </navPoint>
+    <navPoint id="n3" playOrder="3"><navLabel><text>Two</text></navLabel><content src="c2.xhtml"/></navPoint>
+  </navMap>
+</ncx>"#;
+
+    #[test]
+    fn ncx_parses_with_doctype_and_nesting() {
+        let info = parse_ncx_document("toc.ncx", NCX).expect("should parse");
+        assert_eq!(info.toc_entries.len(), 2);
+        assert_eq!(info.toc_entries[0].children[0].title, "One A");
+        assert_eq!(info.ncx_path.as_deref(), Some("toc.ncx"));
+    }
+
+    #[test]
+    fn ncx_without_namespace_attribute_is_fine() {
+        let xml = NCX.replace(r#" xmlns="http://www.daisy.org/z3986/2005/ncx/""#, "");
+        assert!(parse_ncx_document("toc.ncx", &xml).is_ok());
+    }
+
+    #[test]
+    fn ncx_empty_navmap_is_an_error() {
+        let xml = r#"<ncx><navMap></navMap></ncx>"#;
+        assert_eq!(codes(&parse_ncx_document("toc.ncx", xml).unwrap_err()), vec![ErrorCode::EmptyToc]);
+    }
+
+    #[test]
+    fn ncx_wrong_root_or_malformed() {
+        assert_eq!(codes(&parse_ncx_document("t", "<html/>").unwrap_err()), vec![ErrorCode::InvalidNcxXml]);
+        assert_eq!(codes(&parse_ncx_document("t", "<ncx><navMap>").unwrap_err()), vec![ErrorCode::InvalidNcxXml]);
+    }
 }

@@ -13,7 +13,7 @@ struct ContainerRoot {
 
 #[derive(Debug, Deserialize)]
 struct RootFiles {
-    #[serde(rename = "rootfile")]
+    #[serde(rename = "rootfile", default)]
     root_files: Vec<RootFile>,
 }
 
@@ -23,7 +23,7 @@ struct RootFile {
     full_path: String,
 }
 
-/// Validates the container.xml file and discovers the OPF document
+/// validates the container.xml file and discovers the OPF document
 pub fn validate_container(
     archive: &mut ZipArchive<std::fs::File>,
 ) -> Result<OpfInfo, ValidationResult> {
