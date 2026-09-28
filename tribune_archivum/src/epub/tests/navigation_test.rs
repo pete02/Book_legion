@@ -599,4 +599,112 @@ mod tests {
         assert!(!entry.href.is_empty());
         assert!(!entry.children.is_empty());
     }
+
+    use crate::epub::navigation::parse_ncx_document;
+    use crate::epub::navigation::parse_nav_document;
+    use crate::core::ValidationResult;
+
+    fn codes(r: &ValidationResult) -> Vec<ErrorCode> {
+        r.errors.iter().map(|e| e.code).collect()
+    }
+
+    fn nav_doc(body: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Nav</title></head>
+<body>{body}</body></html>"#
+        )
+    }
+
+    #[test]
+    fn nav_titles_from_nested_markup_and_deep_nesting() {
+        let xml = nav_doc(
+            r#"<nav epub:type="toc"><h1>Contents</h1><ol>
+  <li><a href="c1.xhtml"><span>One</span></a>
+    <ol><li><a href="c1a.xhtml">Chapter <em>1</em>a</a>
+      <ol><li><a href="c1a1.xhtml">Deep</a></li></ol></li></ol></li>
+  <li><a href="c2.xhtml">Two</a></li>
+</ol></nav>"#,
+        );
+        let info = parse_nav_document("nav.xhtml", &xml).expect("should parse");
+        let e = &info.toc_entries;
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].title, "One");
+        assert_eq!(e[0].children[0].title, "Chapter 1a");
+        assert_eq!(e[0].children[0].children[0].href, "c1a1.xhtml");
+        assert_eq!(e[1].title, "Two");
+    }
+
+    #[test]
+    fn nav_ignores_non_toc_navs_and_keeps_children_of_headings_and_fragments() {
+        let xml = nav_doc(
+            r##"<nav epub:type="landmarks"><ol><li><a href="cover.xhtml">Cover</a></li></ol></nav>
+<nav epub:type="toc"><ol>
+  <li><span>Part I</span><ol><li><a href="a.xhtml">A</a></li></ol></li>
+  <li><a href="#frag">Skipped</a><ol><li><a href="b.xhtml">B</a></li></ol></li>
+</ol></nav>"##,
+        );
+        let info = parse_nav_document("nav.xhtml", &xml).expect("should parse");
+        let hrefs: Vec<_> = info.toc_entries.iter().map(|e| e.href.as_str()).collect();
+        assert_eq!(hrefs, vec!["a.xhtml", "b.xhtml"]);
+    }
+
+    #[test]
+    fn nav_without_toc_is_missing_toc_nav() {
+        let xml = nav_doc(r#"<nav epub:type="landmarks"><ol><li><a href="x.xhtml">X</a></li></ol></nav>"#);
+        assert_eq!(codes(&parse_nav_document("n", &xml).unwrap_err()), vec![ErrorCode::MissingTocNav]);
+    }
+
+    #[test]
+    fn nav_empty_href_and_empty_toc() {
+        let xml = nav_doc(r#"<nav epub:type="toc"><ol><li><a href="">Bad</a></li></ol></nav>"#);
+        let c = codes(&parse_nav_document("n", &xml).unwrap_err());
+        assert!(c.contains(&ErrorCode::InvalidTocEntry) && c.contains(&ErrorCode::EmptyToc), "{c:?}");
+    }
+
+    #[test]
+    fn nav_malformed_is_invalid_nav_xml() {
+        let xml = r#"<html><body><nav epub:type="toc"><ol><li><a href="a">A</a></li></ol>"#;
+        assert_eq!(codes(&parse_nav_document("n", xml).unwrap_err()), vec![ErrorCode::InvalidNavXml]);
+    }
+
+    const NCX: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="x"/></head>
+  <docTitle><text>Book</text></docTitle>
+  <navMap>
+    <navPoint id="n1" playOrder="1"><navLabel><text>One</text></navLabel><content src="c1.xhtml"/>
+      <navPoint id="n2" playOrder="2"><navLabel><text>One A</text></navLabel><content src="c1.xhtml#a"/></navPoint>
+    </navPoint>
+    <navPoint id="n3" playOrder="3"><navLabel><text>Two</text></navLabel><content src="c2.xhtml"/></navPoint>
+  </navMap>
+</ncx>"#;
+
+    #[test]
+    fn ncx_parses_with_doctype_and_nesting() {
+        let info = parse_ncx_document("toc.ncx", NCX).expect("should parse");
+        assert_eq!(info.toc_entries.len(), 2);
+        assert_eq!(info.toc_entries[0].children[0].title, "One A");
+        assert_eq!(info.ncx_path.as_deref(), Some("toc.ncx"));
+    }
+
+    #[test]
+    fn ncx_without_namespace_attribute_is_fine() {
+        let xml = NCX.replace(r#" xmlns="http://www.daisy.org/z3986/2005/ncx/""#, "");
+        assert!(parse_ncx_document("toc.ncx", &xml).is_ok());
+    }
+
+    #[test]
+    fn ncx_empty_navmap_is_an_error() {
+        let xml = r#"<ncx><navMap></navMap></ncx>"#;
+        assert_eq!(codes(&parse_ncx_document("toc.ncx", xml).unwrap_err()), vec![ErrorCode::EmptyToc]);
+    }
+
+    #[test]
+    fn ncx_wrong_root_or_malformed() {
+        assert_eq!(codes(&parse_ncx_document("t", "<html/>").unwrap_err()), vec![ErrorCode::InvalidNcxXml]);
+        assert_eq!(codes(&parse_ncx_document("t", "<ncx><navMap>").unwrap_err()), vec![ErrorCode::InvalidNcxXml]);
+    }
 }

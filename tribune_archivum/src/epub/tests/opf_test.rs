@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::core::ErrorCode::{self, MissingManifest};
+    use crate::core::ErrorCode;
     use crate::epub::parse_opf;
-    use crate::core::{ValidationError,ValidationLocation};
     /// Creates a minimal valid OP2 package document
     fn create_valid_opf_epub2() -> Vec<u8> {
         format!(
