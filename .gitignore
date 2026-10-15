@@ -12,3 +12,4 @@ temp
 *.tar
 *.tgz
 test
+.go
