@@ -8,7 +8,7 @@ on:
 jobs:
   tribune-logistica:
     name: Tribune Logistica (Go)
-    runs-on: Aria-ci
+    runs-on: go-ci
     defaults:
       run:
         working-directory: tribune_logistica
@@ -37,7 +37,7 @@ jobs:
 
   rust:
     name: Rust (${{ matrix.project }})
-    runs-on: Aria-ci
+    runs-on: rust-ci
     strategy:
       fail-fast: false
       matrix:
