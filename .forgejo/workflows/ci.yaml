@@ -11,7 +11,7 @@ permissions:
 jobs:
   tribune-logistica:
     name: Tribune Logistica (Go)
-    runs-on: ubuntu-latest
+    runs-on: Aria-ci
     defaults:
       run:
         working-directory: tribune_logistica
@@ -40,7 +40,7 @@ jobs:
 
   rust:
     name: Rust (${{ matrix.project }})
-    runs-on: ubuntu-latest
+    runs-on: Aria-ci
     strategy:
       fail-fast: false
       matrix:
