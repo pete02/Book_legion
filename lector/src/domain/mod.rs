@@ -1,10 +1,8 @@
+pub mod book;
 pub mod cover;
+pub mod cursor;
 pub mod library;
 pub mod login;
 pub mod series;
-pub mod book;
-pub mod cursor;
-pub mod text;
 pub mod tests;
-
-
+pub mod text;

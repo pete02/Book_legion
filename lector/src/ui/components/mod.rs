@@ -1,4 +1,4 @@
 pub mod card;
-pub use card::{Card};
+pub use card::Card;
 mod top_bar;
-pub use top_bar::{TopBar,TopBarEntry};
+pub use top_bar::{TopBar, TopBarEntry};

@@ -1,8 +1,7 @@
-use std::cmp::Ordering;
+use crate::{domain, infra::cursor as infra};
 use dioxus::logger::tracing;
 use serde::{Deserialize, Serialize};
-use crate::{domain, infra::cursor as infra};
-
+use std::cmp::Ordering;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cursor {
@@ -46,9 +45,9 @@ impl Ord for BookCursor {
 }
 
 impl BookCursor {
-    pub fn new( book_id: &str, chapter: usize, index: usize) -> BookCursor {
-        let username=domain::login::current_name();
-        if username ==""{
+    pub fn new(book_id: &str, chapter: usize, index: usize) -> BookCursor {
+        let username = domain::login::current_name();
+        if username == "" {
             tracing::error!("Could not get any username");
         }
         BookCursor {
@@ -59,21 +58,17 @@ impl BookCursor {
     }
 }
 
-pub async fn load_bookcursor(book_id: String)->BookCursor{
-    let username=domain::login::current_name();
-    if username ==""{
+pub async fn load_bookcursor(book_id: String) -> BookCursor {
+    let username = domain::login::current_name();
+    if username == "" {
         tracing::error!("Could not get any username");
     }
-    match infra::fetch_cursor(&book_id).await{
+    match infra::fetch_cursor(&book_id).await {
         Ok(c) => return c,
-        Err(_) => return  BookCursor::new(&book_id, 0, 0),
+        Err(_) => return BookCursor::new(&book_id, 0, 0),
     }
 }
 
-
-
-pub async fn save_bookcursor(cursor:BookCursor){
-    let _=infra::save_cursor(&cursor).await;
+pub async fn save_bookcursor(cursor: BookCursor) {
+    let _ = infra::save_cursor(&cursor).await;
 }
-
-

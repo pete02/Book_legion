@@ -1,8 +1,5 @@
-use dioxus::prelude::*;
 use crate::{Route, styles};
-
-
-
+use dioxus::prelude::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TopBarEntry {
@@ -21,11 +18,19 @@ pub fn TopBar(
 
     use_effect(move || {
         let mut check = move || {
-            let Some(window) = web_sys::window() else { return };
+            let Some(window) = web_sys::window() else {
+                return;
+            };
             let Some(doc) = window.document() else { return };
-            let Some(probe) = doc.get_element_by_id("topbar-probe") else { return };
-            let Some(root) = doc.get_element_by_id("topbar-root") else { return };
-            let _ = hamburger.try_write().map(|mut h| *h = probe.scroll_width() > root.client_width());
+            let Some(probe) = doc.get_element_by_id("topbar-probe") else {
+                return;
+            };
+            let Some(root) = doc.get_element_by_id("topbar-root") else {
+                return;
+            };
+            let _ = hamburger
+                .try_write()
+                .map(|mut h| *h = probe.scroll_width() > root.client_width());
         };
 
         check(); // measure on first mount
@@ -132,7 +137,9 @@ fn extra_button(
     on_extra: &Option<Callback<()>>,
 ) -> Element {
     if show_extra() {
-        if let Some(on_extra) = on_extra.clone() && let Some(text) = text_extra {
+        if let Some(on_extra) = on_extra.clone()
+            && let Some(text) = text_extra
+        {
             return rsx! {
                 button {
                     class: "bg-red-600 hover:bg-red-700 active:bg-red-800

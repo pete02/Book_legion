@@ -1,49 +1,46 @@
-use dioxus::{logger::tracing, prelude::*};
 use crate::infra::{self, login};
-
-
+use dioxus::{logger::tracing, prelude::*};
 
 pub struct User {
     pub username: String,
     pub refresh_token: Option<String>,
     pub auth_token: Option<String>,
-    pub pin: String
+    pub pin: String,
 }
 
-pub fn current_name()->String{
+pub fn current_name() -> String {
     let user: Signal<User> = use_context::<Signal<User>>();
     user.read().username.clone()
 }
 
-pub fn current_auth()->Option<String>{
+pub fn current_auth() -> Option<String> {
     let user: Signal<User> = use_context::<Signal<User>>();
     user.read().auth_token.clone()
 }
 
-pub fn current_pin()->String{
+pub fn current_pin() -> String {
     let user: Signal<User> = use_context::<Signal<User>>();
     user.read().pin.clone()
 }
 
-pub fn set_auth(auth: Option<String>){
+pub fn set_auth(auth: Option<String>) {
     let mut user: Signal<User> = use_context::<Signal<User>>();
-    user.with_mut(|f|f.auth_token=auth);
+    user.with_mut(|f| f.auth_token = auth);
 }
 
-pub fn set_pin(pin: String){
+pub fn set_pin(pin: String) {
     let mut user: Signal<User> = use_context::<Signal<User>>();
-    user.with_mut(|f|f.pin=pin);
+    user.with_mut(|f| f.pin = pin);
 }
 
-pub fn current_refresh()->Option<String>{
+pub fn current_refresh() -> Option<String> {
     let user: Signal<User> = use_context::<Signal<User>>();
     user.read().refresh_token.clone()
 }
 
-
-pub fn set_refresh(refresh: Option<String>){
+pub fn set_refresh(refresh: Option<String>) {
     let mut user: Signal<User> = use_context::<Signal<User>>();
-    user.with_mut(|f|f.refresh_token=refresh);
+    user.with_mut(|f| f.refresh_token = refresh);
 }
 
 pub fn restore_user_from_storage() -> User {
@@ -65,7 +62,7 @@ pub fn restore_user_from_storage() -> User {
         .ok()
         .flatten();
 
-    let username=web_sys::window()
+    let username = web_sys::window()
         .unwrap()
         .session_storage()
         .unwrap()
@@ -73,7 +70,7 @@ pub fn restore_user_from_storage() -> User {
         .get_item("username")
         .ok()
         .flatten();
-    let pin =web_sys::window()
+    let pin = web_sys::window()
         .unwrap()
         .session_storage()
         .unwrap()
@@ -82,8 +79,8 @@ pub fn restore_user_from_storage() -> User {
         .ok()
         .flatten();
 
-    tracing::debug!("Got refresh: {:?}",refresh_token);
-    tracing::debug!("Got auth: {:?}",auth_token);
+    tracing::debug!("Got refresh: {:?}", refresh_token);
+    tracing::debug!("Got auth: {:?}", auth_token);
 
     User {
         username: username.unwrap_or_default(),
@@ -94,7 +91,11 @@ pub fn restore_user_from_storage() -> User {
 }
 
 pub fn persist_user(user: &User) {
-    let storage = web_sys::window().unwrap().session_storage().unwrap().unwrap();
+    let storage = web_sys::window()
+        .unwrap()
+        .session_storage()
+        .unwrap()
+        .unwrap();
     if let Some(rt) = &user.refresh_token {
         storage.set_item("refresh_token", rt).unwrap();
     }
@@ -105,15 +106,15 @@ pub fn persist_user(user: &User) {
     storage.set_item("username", &user.username).unwrap();
 }
 
-pub async fn refresh_auth()->Result<(), String>{
-    let refresh= current_refresh().unwrap_or_default();
+pub async fn refresh_auth() -> Result<(), String> {
+    let refresh = current_refresh().unwrap_or_default();
     if refresh == "" {
         set_auth(None);
         set_refresh(None);
-        return Err("No refresh token available".into())
+        return Err("No refresh token available".into());
     }
 
-    let new_auth= match infra::auth::refresh_auth_token(&refresh).await {
+    let new_auth = match infra::auth::refresh_auth_token(&refresh).await {
         Ok(auth) => auth,
         Err(e) => {
             set_auth(None);
@@ -127,22 +128,26 @@ pub async fn refresh_auth()->Result<(), String>{
     Ok(())
 }
 
-
-pub fn attempt_login(username: String, password: String, error:Signal<String>, loading:Signal<bool>) {
+pub fn attempt_login(
+    username: String,
+    password: String,
+    error: Signal<String>,
+    loading: Signal<bool>,
+) {
     spawn({
         let mut user = use_context::<Signal<User>>();
         let mut error = error.clone();
-        let mut loading=loading.clone();
+        let mut loading = loading.clone();
         async move {
             loading.set(true);
             match login::login(&username, &password).await {
                 Ok(resp) => {
                     tracing::debug!("Login response: {:?}", resp);
-                    let new_user=User{
+                    let new_user = User {
                         username: username.clone(),
                         auth_token: Some(resp.auth_token),
                         refresh_token: Some(resp.refresh_token),
-                        pin: resp.pin
+                        pin: resp.pin,
                     };
                     if new_user.username == "" {
                         tracing::error!("Error in logging in with the username");

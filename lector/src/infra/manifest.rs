@@ -1,5 +1,4 @@
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "mock")]
 use serde_json::json;
@@ -9,7 +8,6 @@ use dioxus::{logger::tracing, prelude::trace};
 
 #[cfg(feature = "mock")]
 use crate::{Route::Library, domain};
-
 
 #[derive(Deserialize)]
 pub struct ManifestResponse {
@@ -41,7 +39,10 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
 
 #[cfg(feature = "mock")]
 pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::Error>> {
-    tracing::debug!("mock fetch, alt mode: {:?}", library::read_library_mode()!=library::LibraryMode::Normal);
+    tracing::debug!(
+        "mock fetch, alt mode: {:?}",
+        library::read_library_mode() != library::LibraryMode::Normal
+    );
     let manifest_json = match library::read_library_mode() {
         library::LibraryMode::Normal => json!({
             "series": [
@@ -73,8 +74,8 @@ pub async fn fetch_manifest() -> Result<Vec<ManifestEntry>, Box<dyn std::error::
         }),
     };
 
-    let manifest: ManifestResponse= serde_json::from_value(manifest_json.clone())
-        .map_err(|e| e.to_string())?;
+    let manifest: ManifestResponse =
+        serde_json::from_value(manifest_json.clone()).map_err(|e| e.to_string())?;
 
     Ok(manifest.series)
 }

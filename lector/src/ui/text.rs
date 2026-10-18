@@ -1,6 +1,13 @@
-use dioxus::{logger::{self, tracing}, prelude::*};
+use dioxus::{
+    logger::{self, tracing},
+    prelude::*,
+};
 
-use crate::{Route, domain::{self, text}, ui::components::{TopBar, TopBarEntry}};
+use crate::{
+    Route,
+    domain::{self, text},
+    ui::components::{TopBar, TopBarEntry},
+};
 
 #[component]
 pub fn Text(book_id: String) -> Element {
@@ -18,11 +25,10 @@ pub fn Text(book_id: String) -> Element {
 
     let mut moved_page: Signal<bool> = use_signal(|| false);
 
-
     use_effect(move || {
-        spawn(async move{
+        spawn(async move {
             tracing::debug!("load cursro");
-            let bc=domain::cursor::load_bookcursor(b_signal()).await;
+            let bc = domain::cursor::load_bookcursor(b_signal()).await;
             chapter_idx.set(bc.cursor.chapter);
             offset.set(Some(bc.cursor.index as i64));
             tracing::info!("cursor: {:?}", bc.cursor);
@@ -30,19 +36,17 @@ pub fn Text(book_id: String) -> Element {
     });
 
     use_effect(move || {
-
-        if chapter_idx() == usize::MAX{
+        if chapter_idx() == usize::MAX {
             return;
         }
 
         let book_id = b_signal();
         spawn(async move {
             text::get_new_chapter(chapter_idx(), &book_id, chapter_html).await;
-            
         });
     });
-    
-    use_effect(move || { 
+
+    use_effect(move || {
         tracing::info!("start checking page offset");
         if moved_page() {
             return;
@@ -68,13 +72,11 @@ pub fn Text(book_id: String) -> Element {
                 tracing::info!("resolved page: {}", page);
                 is_restoring.set(false);
                 current_page.set(page);
-            }else{
+            } else {
                 tracing::error!("could not resolve page")
             }
         });
     });
-
-
 
     use_effect(move || {
         if chapter_html().is_none() {
@@ -91,7 +93,8 @@ pub fn Text(book_id: String) -> Element {
     use_effect(move || {
         if let Some(html) = chapter_html() {
             spawn(async move {
-                let eval = document::eval(r#"
+                let eval = document::eval(
+                    r#"
                     const html = await dioxus.recv();
                     const host = document.getElementById("book-content");
 
@@ -114,7 +117,8 @@ pub fn Text(book_id: String) -> Element {
                             ${html}
                         `;
                     }
-                "#);
+                "#,
+                );
 
                 let _ = eval.send(html);
                 total_pages.set(text::measure_total_pages("book-content"))
@@ -122,9 +126,9 @@ pub fn Text(book_id: String) -> Element {
         }
     });
 
-    use_effect(move ||{
-        if current_page()==-1 || *is_restoring.peek() || !moved_page(){ 
-            return
+    use_effect(move || {
+        if current_page() == -1 || *is_restoring.peek() || !moved_page() {
+            return;
         }
 
         spawn(async move {
@@ -135,10 +139,17 @@ pub fn Text(book_id: String) -> Element {
         });
     });
 
-
     let top_entries = vec![
-        TopBarEntry { name: "Library".into(), path: Route::Library {} },
-        TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
+        TopBarEntry {
+            name: "Library".into(),
+            path: Route::Library {},
+        },
+        TopBarEntry {
+            name: "Book".into(),
+            path: Route::Book {
+                book_id: book_id.clone(),
+            },
+        },
     ];
 
     if chapter_html().is_none() {

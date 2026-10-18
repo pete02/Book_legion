@@ -1,14 +1,12 @@
 use scraper::{Html, Selector};
-use std::{error::Error};
 use std::collections::HashSet;
+use std::error::Error;
 
 use crate::driver::List;
 
-
-
 pub fn fetch_element_by_selector(html: &str, selector_str: &str) -> Result<String, Box<dyn Error>> {
     let document = Html::parse_document(html);
-    let selector=Selector::parse(selector_str).map_err(|_| "this is an error")?;
+    let selector = Selector::parse(selector_str).map_err(|_| "this is an error")?;
     if let Some(element) = document.select(&selector).next() {
         Ok(element.html())
     } else {
@@ -16,15 +14,13 @@ pub fn fetch_element_by_selector(html: &str, selector_str: &str) -> Result<Strin
     }
 }
 
-
 pub fn extract_links(
     html_fragment: &str,
-    list:&List,
+    list: &List,
     attr_filter: Option<(&str, &str)>,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-
-    let row_selector=Selector::parse(&list.selector).map_err(|_| "this was a mistake")?;
-    let wrapped_html = format!("<{}>{}</{}>", list.wrapper,html_fragment,list.wrapper);
+    let row_selector = Selector::parse(&list.selector).map_err(|_| "this was a mistake")?;
+    let wrapped_html = format!("<{}>{}</{}>", list.wrapper, html_fragment, list.wrapper);
     let document = Html::parse_fragment(&wrapped_html);
     let link_selector = Selector::parse("a")?;
 
@@ -56,14 +52,17 @@ pub fn extract_links(
 pub fn extract_text(html: &str, selector: &str) -> Option<String> {
     let document = Html::parse_fragment(html);
     let sel = Selector::parse(selector).ok()?;
-    document.select(&sel).next().map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+    document
+        .select(&sel)
+        .next()
+        .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
 }
 #[allow(dead_code)]
 pub fn strip_tags(html_fragment: &str, tags: &Vec<String>) -> Result<String, Box<dyn Error>> {
     let mut html = html_fragment.to_string();
 
     for tag in tags {
-        let selector = Selector::parse(tag).map_err(|_|"this was a mistake")?;
+        let selector = Selector::parse(tag).map_err(|_| "this was a mistake")?;
         let document = Html::parse_fragment(&html);
 
         for element in document.select(&selector) {
@@ -84,7 +83,6 @@ pub fn strip_top_level_tags(
     html_fragment: &str,
     tags: &Vec<String>,
 ) -> Result<String, Box<dyn Error>> {
-
     let document = Html::parse_fragment(html_fragment);
 
     let mut first_div: Option<ElementRef> = None;

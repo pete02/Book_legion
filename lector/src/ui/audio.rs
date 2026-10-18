@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 use dioxus::prelude::*;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use gloo_net::websocket::futures::WebSocket;
 use gloo_net::websocket::Message;
+use gloo_net::websocket::futures::WebSocket;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use wasm_bindgen::closure::Closure;
@@ -12,17 +12,18 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
 use crate::domain::login;
-use crate::{domain, ui::components::{TopBar, TopBarEntry, card::Cover}, Route, assets};
+use crate::{
+    Route, assets, domain,
+    ui::components::{TopBar, TopBarEntry, card::Cover},
+};
 
-
-#[derive(Debug, Deserialize,Serialize,  Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AudioHeader {
     id: String,
     chapter: i32,
     start_offset: i32,
     end_offset: i32,
 }
-
 
 #[derive(Debug)]
 struct AudioChunk {
@@ -41,22 +42,26 @@ const AUDIO_ELEMENT_ID: &str = "chunk-audio-player";
 
 #[component]
 pub fn Audio(book_id: String) -> Element {
-
     let status = use_signal(|| "Disconnected".to_string());
     let connected = use_signal(|| false);
     let show_extra = use_signal(|| false);
     let queue: Signal<VecDeque<AudioChunk>> = use_signal(VecDeque::new);
     let sender: Signal<Option<Sender>> = use_signal(|| None);
-    let playing = use_signal(||true);
+    let playing = use_signal(|| true);
     let current_header: Signal<Option<AudioHeader>> = use_signal(|| None);
-    
 
     let top_entries = vec![
-        TopBarEntry { name: "Library".into(), path: Route::Library {} },
-        TopBarEntry { name: "Book".into(), path: Route::Book { book_id: book_id.clone() } },
+        TopBarEntry {
+            name: "Library".into(),
+            path: Route::Library {},
+        },
+        TopBarEntry {
+            name: "Book".into(),
+            path: Route::Book {
+                book_id: book_id.clone(),
+            },
+        },
     ];
-
-
 
     rsx! {
         div {
@@ -69,7 +74,7 @@ pub fn Audio(book_id: String) -> Element {
                 queue,
                 sender,
             }
-             WakeLock { playing } 
+             WakeLock { playing }
             AudioPlayer {
                 queue,
                 playing,
@@ -159,7 +164,6 @@ fn WebSocketConnection(
                     break; // stop retrying; login guard takes it from here
                 }
 
-
                 dioxus::logger::tracing::info!("Connecting websocket for {book_id}");
                 status.set("Connecting...".into());
 
@@ -173,12 +177,12 @@ fn WebSocketConnection(
                     }
                 };
 
-
                 connected.set(true);
                 status.set("Connected".into());
                 let _ = ws
                     .send(Message::Text(
-                        json!({"type": "auth", "token": &domain::login::current_auth()}).to_string(),
+                        json!({"type": "auth", "token": &domain::login::current_auth()})
+                            .to_string(),
                     ))
                     .await;
                 let (tx, mut rx) = ws.split();
@@ -349,19 +353,20 @@ fn AudioPlayer(
 use crate::infra::book::fetch_book_progress;
 #[component]
 pub fn TimeBar(book_id: String, headers: Signal<Option<AudioHeader>>) -> Element {
-
-    let mut progress: Signal<f64> = use_signal(||0.0);
+    let mut progress: Signal<f64> = use_signal(|| 0.0);
 
     use_effect(move || {
-        let b=book_id.clone();
-        if headers().is_none(){
-            return
+        let b = book_id.clone();
+        if headers().is_none() {
+            return;
         }
 
-        spawn(async move{
-            match fetch_book_progress(&b).await{
-                Err(_)=>{},
-                Ok(value)=>{ progress.set(value.progress); }
+        spawn(async move {
+            match fetch_book_progress(&b).await {
+                Err(_) => {}
+                Ok(value) => {
+                    progress.set(value.progress);
+                }
             }
         });
     });
@@ -387,7 +392,6 @@ pub fn TimeBar(book_id: String, headers: Signal<Option<AudioHeader>>) -> Element
     }
 }
 
-
 // ---------------------------------------------------------------------
 // Screen wake lock (keeps the device from sleeping while audio plays)
 // ---------------------------------------------------------------------
@@ -405,7 +409,9 @@ async fn request_wake_lock() -> Option<JsValue> {
     }
     let request_fn = js_sys::Reflect::get(&wake_lock, &JsValue::from_str("request")).ok()?;
     let request_fn: js_sys::Function = request_fn.dyn_into().ok()?;
-    let promise = request_fn.call1(&wake_lock, &JsValue::from_str("screen")).ok()?;
+    let promise = request_fn
+        .call1(&wake_lock, &JsValue::from_str("screen"))
+        .ok()?;
     let promise: js_sys::Promise = promise.dyn_into().ok()?;
     wasm_bindgen_futures::JsFuture::from(promise).await.ok()
 }

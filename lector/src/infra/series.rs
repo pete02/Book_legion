@@ -1,9 +1,7 @@
+use crate::infra::auth::post_with_auth;
+use crate::infra::auth::{delete_with_auth, get_with_auth};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::infra::auth::{get_with_auth,delete_with_auth};
-use crate::infra::auth::post_with_auth;
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BookEntry {
@@ -16,13 +14,11 @@ pub struct BookEntry {
     pub file_path: String,
 }
 
-
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std::error::Error>> {
-
     let url = format!("/api/v1/series/{}", series_id);
     let resp = get_with_auth(&url).await?;
-    
+
     if !resp.ok() {
         return Err(format!("series request failed: {}", resp.status()).into());
     }
@@ -31,12 +27,11 @@ pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std
     Ok(books)
 }
 
-
 #[cfg(not(feature = "mock"))]
 pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("/api/v1/deleteseries/{}", series_id);
     let resp = delete_with_auth(&url).await?;
-    
+
     if !resp.ok() {
         return Err(format!("series request failed: {}", resp.status()).into());
     }
@@ -44,17 +39,17 @@ pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-
 #[cfg(feature = "mock")]
 pub async fn delete_series(series_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     info!("deleted the series");
     Ok(())
 }
 
-
 #[cfg(not(feature = "mock"))]
-pub async fn update_series_name(series_id: &str, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-
+pub async fn update_series_name(
+    series_id: &str,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("/api/v1/updateseries/{}", series_id);
     let body = serde_json::json!({ "name": name }).to_string();
     let resp = post_with_auth(&url, body).await?;
@@ -67,7 +62,10 @@ pub async fn update_series_name(series_id: &str, name: &str) -> Result<(), Box<d
 }
 
 #[cfg(feature = "mock")]
-pub async fn update_series_name(series_id: &str, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn update_series_name(
+    series_id: &str,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("updated series {} name to {}", series_id, name);
     Ok(())
 }
@@ -104,17 +102,15 @@ pub async fn fetch_series(series_id: &str) -> Result<Vec<BookEntry>, Box<dyn std
                 file_path: "/path/to/book3.epub".into(),
             },
         ],
-        "s2" => vec![
-            BookEntry {
-                id: "b3".into(),
-                title: "Book Three".into(),
-                author_id: "a2".into(),
-                series_id: "s2".into(),
-                series_name: Some("Series Two".into()),
-                series_order: 1,
-                file_path: "/path/to/book3.epub".into(),
-            },
-        ],
+        "s2" => vec![BookEntry {
+            id: "b3".into(),
+            title: "Book Three".into(),
+            author_id: "a2".into(),
+            series_id: "s2".into(),
+            series_name: Some("Series Two".into()),
+            series_order: 1,
+            file_path: "/path/to/book3.epub".into(),
+        }],
         _ => vec![],
     };
 

@@ -1,16 +1,15 @@
-use dioxus::prelude::*;
 use crate::{
-    Route,
-    domain,
-    infra,
+    Route, domain, infra,
     ui::components::{TopBar, TopBarEntry},
 };
+use dioxus::prelude::*;
 #[component]
 pub fn SeriesEdit(series_id: String) -> Element {
     let title = use_signal(|| "".to_owned());
     let mut delete_signal = use_signal(|| true);
 
-    let books: Signal<Vec<domain::cover::CardData>> = domain::series::use_series(series_id.clone(), title);
+    let books: Signal<Vec<domain::cover::CardData>> =
+        domain::series::use_series(series_id.clone(), title);
 
     use_effect(move || {
         delete_signal.set(books().is_empty());
@@ -26,10 +25,15 @@ pub fn SeriesEdit(series_id: String) -> Element {
     });
 
     let top_entries = vec![
-        TopBarEntry { name: "Library".into(), path: Route::Library {} },
+        TopBarEntry {
+            name: "Library".into(),
+            path: Route::Library {},
+        },
         TopBarEntry {
             name: "Series".into(),
-            path: Route::Series { series_id: series_id.clone() },
+            path: Route::Series {
+                series_id: series_id.clone(),
+            },
         },
     ];
 
@@ -94,7 +98,6 @@ pub fn SeriesEdit(series_id: String) -> Element {
         }
     }
 }
-
 
 #[component]
 fn SaveButton(series_id: String, draft: Signal<String>) -> Element {

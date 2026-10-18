@@ -81,7 +81,7 @@ pub const TOPBAR: &str = "
     z-index: 100;
 ";
 
-pub const CHAPTER_BUTTON: &str="
+pub const CHAPTER_BUTTON: &str = "
     all: unset;
     box-sizing: border-box;
     display: block;
@@ -93,7 +93,6 @@ pub const CHAPTER_BUTTON: &str="
     word-break: break-word;
     overflow-wrap: anywhere;
 ";
-
 
 // styles.rs
 

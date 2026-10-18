@@ -1,6 +1,5 @@
 use dioxus::{logger::tracing, prelude::*};
 
-
 use wasm_bindgen::JsCast;
 use web_sys::Document;
 use web_sys::HtmlElement;
@@ -9,8 +8,6 @@ use crate::domain;
 use crate::domain::cursor::BookCursor;
 use crate::infra;
 use regex::Regex;
-
-
 
 use dioxus::document;
 
@@ -93,7 +90,7 @@ pub fn compute_total_pages(scroll_width: f64, client_width: f64) -> Option<i32> 
     if client_width <= 0.0 {
         return None;
     }
-    let pages = (scroll_width / client_width).ceil() as i32 -1;
+    let pages = (scroll_width / client_width).ceil() as i32 - 1;
     Some(pages.max(1))
 }
 
@@ -118,12 +115,9 @@ pub async fn measure_current_page_html_offset() -> Option<i64> {
     }
 }
 
-
-pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize, book_id: &str){
-    dioxus::logger::tracing::info!(
-        "page {page} -> html offset at top of page: {index}"
-    );
-    let cursor=BookCursor::new(book_id, chapter_idx, index as usize);
+pub async fn save_cursor(page: i32, index: i64, chapter_idx: usize, book_id: &str) {
+    dioxus::logger::tracing::info!("page {page} -> html offset at top of page: {index}");
+    let cursor = BookCursor::new(book_id, chapter_idx, index as usize);
     domain::cursor::save_bookcursor(cursor).await;
 }
 
@@ -152,7 +146,7 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     // Matches the exact shape the Go backend emits, including the stray `&`
     // before the first query param (`?&file=`) as well as the plain `?file=` form.
     let pattern = format!(
-    r#"/api/v1/books/{}/file\?file=([^"'&\s]+)"#,
+        r#"/api/v1/books/{}/file\?file=([^"'&\s]+)"#,
         regex::escape(book_id)
     );
 
@@ -167,19 +161,21 @@ async fn inline_file_urls_as_blobs(book_id: &str, html: &str) -> String {
     // Dedupe by the *full matched URL* so we only fetch each asset once,
     // even if it's referenced multiple times in the chapter (e.g. shared CSS).
     let mut targets: HashMap<String, String> = HashMap::new(); // full_url -> encoded_file_path
-    let captures= re.captures_iter(html);
+    let captures = re.captures_iter(html);
     tracing::info!("found {} file urls", re.captures_iter(html).count());
-    for cap in  captures{
+    for cap in captures {
         let full_url = cap.get(0).unwrap().as_str().to_string();
         let encoded_file = cap.get(1).unwrap().as_str().to_string();
         targets.entry(full_url).or_insert(encoded_file);
     }
 
     // Fetch all of them concurrently.
-    let fetches = targets.into_iter().map(|(full_url, encoded_file)| async move {
-        let result = infra::book::fetch_book_file_as_blob_url(book_id, &encoded_file).await;
-        (full_url, result)
-    });
+    let fetches = targets
+        .into_iter()
+        .map(|(full_url, encoded_file)| async move {
+            let result = infra::book::fetch_book_file_as_blob_url(book_id, &encoded_file).await;
+            (full_url, result)
+        });
 
     let results = futures::future::join_all(fetches).await;
 
@@ -234,8 +230,6 @@ pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> 
 
     let host_rect = host.get_bounding_client_rect();
 
-
-
     let local_x = rect_left - host_rect.left();
     tracing::info!(
         "offset={offset}, local_offset={local_offset}, \
@@ -243,8 +237,8 @@ pub fn resolve_offset_to_page(offset: i64, column_width_px: f64) -> Option<i32> 
          local_x={}, node_text={:?}",
         host_rect.left(),
         rect_left - host_rect.left(),
-            node.text_content(),
-        );
+        node.text_content(),
+    );
 
     Some(((local_x / column_width_px).floor() as i32).max(0))
 }
@@ -285,10 +279,7 @@ fn find_node_at_offset(
             *last_text_len = len as u32;
 
             if target < *current + len {
-                return Some((
-                    node.clone(),
-                    (target - *current) as u32,
-                ));
+                return Some((node.clone(), (target - *current) as u32));
             }
 
             *current += len;
@@ -299,13 +290,8 @@ fn find_node_at_offset(
 
         for i in 0..children.length() {
             if let Some(child) = children.item(i) {
-                if let Some(result) = visit(
-                    &child,
-                    target,
-                    current,
-                    last_text_node,
-                    last_text_len,
-                ) {
+                if let Some(result) = visit(&child, target, current, last_text_node, last_text_len)
+                {
                     return Some(result);
                 }
             }
@@ -321,9 +307,7 @@ fn find_node_at_offset(
         &mut last_text_node,
         &mut last_text_len,
     )
-    .or_else(|| {
-        last_text_node.map(|node| (node, last_text_len))
-    })
+    .or_else(|| last_text_node.map(|node| (node, last_text_len)))
 }
 /// Returns the viewport-relative x position of the caret at `local_offset`
 /// within `node`'s text. Tries a non-collapsed range first (more reliably

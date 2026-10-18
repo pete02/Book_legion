@@ -1,6 +1,6 @@
 use epub_builder::{EpubBuilder, EpubContent, ReferenceType, ZipLibrary};
-use std::fs::{self, File};
 use regex::Regex;
+use std::fs::{self, File};
 
 pub struct Chapter {
     pub num: usize,
@@ -14,45 +14,51 @@ pub struct MyEpub {
 }
 #[allow(dead_code)]
 impl MyEpub {
-
-    pub fn new(title: &str,  author: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(title: &str, author: &str) -> Result<Self, Box<dyn std::error::Error>> {
         fs::create_dir_all(title)?;
 
-        let file = File::create(format!("{}/{}.epub",title,title))?;
+        let file = File::create(format!("{}/{}.epub", title, title))?;
         let mut builder = EpubBuilder::new(ZipLibrary::new()?)?;
 
         // metadata
         builder.metadata("title", title)?;
         builder.metadata("author", author)?;
         builder.metadata("lang", "en")?;
-        let mut book=Self { builder, file };
+        let mut book = Self { builder, file };
         book.create_title_page(title, author)?;
 
         Ok(book)
     }
-    pub fn new_with_path(title: &str,  author: &str,path:&str) -> Result<Self, Box<dyn std::error::Error>> {
-        fs::create_dir_all(format!("{}/{}",path,title))?;
+    pub fn new_with_path(
+        title: &str,
+        author: &str,
+        path: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        fs::create_dir_all(format!("{}/{}", path, title))?;
 
-        let file = File::create(format!("{}/{}.epub",path,title))?;
+        let file = File::create(format!("{}/{}.epub", path, title))?;
         let mut builder = EpubBuilder::new(ZipLibrary::new()?)?;
 
         // metadata
         builder.metadata("title", title)?;
         builder.metadata("author", author)?;
         builder.metadata("lang", "en")?;
-        let mut book=Self { builder, file };
+        let mut book = Self { builder, file };
         book.create_title_page(title, author)?;
 
         Ok(book)
     }
-    
-    pub fn generate(self)->Result<(),Box<dyn std::error::Error>>{
+
+    pub fn generate(self) -> Result<(), Box<dyn std::error::Error>> {
         self.builder.generate(self.file)?;
         Ok(())
     }
 
-
-    pub fn create_title_page(&mut self, title:&str, author:&str)->Result<(),Box<dyn std::error::Error>>{
+    pub fn create_title_page(
+        &mut self,
+        title: &str,
+        author: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let title_page_html = format!(
             r#"
             <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -87,7 +93,7 @@ impl MyEpub {
             </body>
             </html>
             "#,
-            title,title,author
+            title, title, author
         );
 
         // Add the title page and mark it as the cover
@@ -99,16 +105,18 @@ impl MyEpub {
         Ok(())
     }
 
-    pub fn add_chapter(&mut self,chapter:&Chapter)->Result<(),Box<dyn std::error::Error>>{
+    pub fn add_chapter(&mut self, chapter: &Chapter) -> Result<(), Box<dyn std::error::Error>> {
         let filename = format!("chapter{}.xhtml", chapter.num + 1);
 
         let re = Regex::new(r"(?i)\b(ch\.?|chapter)\s*[:\-]?\s*\d+").unwrap();
 
-        let mut normalized=chapter.title.clone();
+        let mut normalized = chapter.title.clone();
         if re.is_match(&chapter.title) {
-            normalized=re.replace(&chapter.title, format!("Chapter {}", chapter.num)).to_string();
+            normalized = re
+                .replace(&chapter.title, format!("Chapter {}", chapter.num))
+                .to_string();
         }
-        println!("{}",normalized);
+        println!("{}", normalized);
         let chapter_content = format!(
             r#"
             <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -145,5 +153,4 @@ impl MyEpub {
         )?;
         Ok(())
     }
-
 }

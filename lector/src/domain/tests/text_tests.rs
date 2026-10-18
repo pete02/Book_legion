@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod page_count_tests {
-    
+
     use crate::domain::text::compute_total_pages;
     #[test]
     fn exact_multiple_gives_correct_page_count() {
@@ -34,8 +34,6 @@ mod page_count_tests {
 }
 
 // domain/text_tests.rs  (or a #[cfg(test)] mod at the bottom of text.rs)
-
-
 
 use wasm_bindgen_test::*;
 use web_sys::{Element, ShadowRootInit, ShadowRootMode};
@@ -126,7 +124,7 @@ fn resolve_offset_to_page_tests() {
     // ---------------------------------------------------------------------
     // Basic first-column lookup
     // ---------------------------------------------------------------------
-    let diagnosis=false;
+    let diagnosis = false;
     //diagnosis
     {
         if diagnosis {
@@ -141,10 +139,9 @@ fn resolve_offset_to_page_tests() {
             );
 
             assert!(false, "Diagnosis failed")
-        }else{
+        } else {
             assert!(true)
         }
-        
     }
 
     {
@@ -168,13 +165,10 @@ fn resolve_offset_to_page_tests() {
     // ---------------------------------------------------------------------
     {
         let _fixture = three_page_fixture();
-        let page=             resolve_offset_to_page(10, 200.0);
+        let page = resolve_offset_to_page(10, 200.0);
 
-        web_sys::console::log_1(
-            &format!("offset 10 => {:?}", page).into(),
-        );
+        web_sys::console::log_1(&format!("offset 10 => {:?}", page).into());
 
-        
         assert_eq!(
             page,
             Some(1),
@@ -363,4 +357,3 @@ fn resolve_offset_to_page_tests() {
         );
     }
 }
-

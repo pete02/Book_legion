@@ -1,20 +1,14 @@
-
 use super::*;
 use xmltree::{Element, XMLNode};
 
 const MEDIA_TYPE: &str = "application/oebps-package+xml";
 
 fn archive_files() -> Vec<String> {
-    return vec![
-        "EPUB/content.opf".to_owned(),
-        "EPUB/other.opf".to_owned(),
-    ]
+    return vec!["EPUB/content.opf".to_owned(), "EPUB/other.opf".to_owned()];
 }
 
 fn rootfile(path: &str, media_type: &str) -> String {
-    return format!(
-        r#"<rootfile full-path="{path}" media-type="{media_type}"/>"#
-    )
+    return format!(r#"<rootfile full-path="{path}" media-type="{media_type}"/>"#);
 }
 
 fn document(rootfiles: &str) -> Vec<u8> {
@@ -39,9 +33,7 @@ fn parsed_rootfiles(xml: &[u8]) -> Element {
         .children
         .iter()
         .find_map(|node| match node {
-            XMLNode::Element(element) if element.name == "rootfiles" => {
-                Some(element.clone())
-            }
+            XMLNode::Element(element) if element.name == "rootfiles" => Some(element.clone()),
             _ => None,
         })
         .unwrap()
@@ -52,9 +44,7 @@ fn rootfile_elements(rootfiles: &Element) -> Vec<&Element> {
         .children
         .iter()
         .filter_map(|node| match node {
-            XMLNode::Element(element) if element.name == "rootfile" => {
-                Some(element)
-            }
+            XMLNode::Element(element) if element.name == "rootfile" => Some(element),
             _ => None,
         })
         .collect()
@@ -118,30 +108,21 @@ fn rejects_malformed_xml() {
 fn rejects_parent_directory_traversal() {
     let xml = document(&rootfile("../EPUB/content.opf", MEDIA_TYPE));
 
-    assert_eq!(
-        verify(&xml),
-        Err(ContainerError::InvalidRootfilePath)
-    );
+    assert_eq!(verify(&xml), Err(ContainerError::InvalidRootfilePath));
 }
 
 #[test]
 fn rejects_absolute_paths() {
     let xml = document(&rootfile("/EPUB/content.opf", MEDIA_TYPE));
 
-    assert_eq!(
-        verify(&xml),
-        Err(ContainerError::InvalidRootfilePath)
-    );
+    assert_eq!(verify(&xml), Err(ContainerError::InvalidRootfilePath));
 }
 
 #[test]
 fn rejects_percent_encoding() {
     let xml = document(&rootfile("EPUB/content%2Eopf", MEDIA_TYPE));
 
-    assert_eq!(
-        verify(&xml),
-        Err(ContainerError::InvalidRootfilePath)
-    );
+    assert_eq!(verify(&xml), Err(ContainerError::InvalidRootfilePath));
 }
 
 #[test]
@@ -158,10 +139,7 @@ fn rejects_missing_package_file() {
 
 #[test]
 fn rejects_wrong_media_type() {
-    let xml = document(&rootfile(
-        "EPUB/content.opf",
-        "text/plain",
-    ));
+    let xml = document(&rootfile("EPUB/content.opf", "text/plain"));
 
     assert_eq!(verify(&xml), Err(ContainerError::MissingRootfile));
 }
@@ -185,6 +163,6 @@ fn preserves_unrelated_rootfiles_children() {
 
     assert!(rootfiles.children.iter().any(|node| {
         return matches!(node, XMLNode::Element(element)
-            if element.name == "metadata")
+            if element.name == "metadata");
     }));
 }

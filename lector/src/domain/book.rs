@@ -1,17 +1,20 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::{domain, infra::{self, book::BookInfo}};
+use crate::{
+    domain,
+    infra::{self, book::BookInfo},
+};
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct BookData{
+pub struct BookData {
     pub chapters: Vec<String>,
     pub current_chapter: usize,
     pub title: String,
     pub author: String,
     pub series_id: String,
 }
-fn error_book(err: String)->BookData{
-    BookData{
+fn error_book(err: String) -> BookData {
+    BookData {
         title: "error in getting book".to_string(),
         author: err,
         series_id: "".to_string(),
@@ -20,12 +23,13 @@ fn error_book(err: String)->BookData{
     }
 }
 
-
 pub fn get_book_info(book_id: String) -> Resource<BookInfo> {
     use_resource(move || {
         let id = book_id.clone();
         async move {
-            infra::book::fetch_book(&id).await.unwrap_or_else(|_| BookInfo::new())
+            infra::book::fetch_book(&id)
+                .await
+                .unwrap_or_else(|_| BookInfo::new())
         }
     })
 }
@@ -40,9 +44,9 @@ pub fn update_book(info: BookInfo) {
 #[allow(dead_code)]
 pub fn delete_book(book_id: String) {
     info!("delete_book called for: {}", book_id);
-    use_effect(move ||{
-        let b=book_id.clone();
-            info!("triggered1");
+    use_effect(move || {
+        let b = book_id.clone();
+        info!("triggered1");
         spawn(async move {
             info!("triggered");
             if let Err(e) = infra::book::delete_book(&b).await {
@@ -52,57 +56,61 @@ pub fn delete_book(book_id: String) {
     });
 }
 
-pub async fn load_book(book_id: String,)->BookData{
-    let mut chs=Vec::new();
+pub async fn load_book(book_id: String) -> BookData {
+    let mut chs = Vec::new();
     let cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
-    let chapters=infra::chapters::fetch_book_nav(&book_id).await;
-    let book=infra::book::fetch_book(&book_id).await;
+    let chapters = infra::chapters::fetch_book_nav(&book_id).await;
+    let book = infra::book::fetch_book(&book_id).await;
 
-    match chapters{
-        Err(_)=>{},
-        Ok(vec)=>{
-            for entry in vec{
+    match chapters {
+        Err(_) => {}
+        Ok(vec) => {
+            for entry in vec {
                 chs.push(entry.title);
             }
         }
     }
-    let data=match book {
-        Err(e)=>error_book(e),
-        Ok(a)=>BookData { 
-            chapters: chs, 
-            current_chapter: cursor.cursor.chapter, 
-            title: a.title, 
-            author: a.author_id, 
-            series_id: a.series_id, 
-        }
-
+    let data = match book {
+        Err(e) => error_book(e),
+        Ok(a) => BookData {
+            chapters: chs,
+            current_chapter: cursor.cursor.chapter,
+            title: a.title,
+            author: a.author_id,
+            series_id: a.series_id,
+        },
     };
 
     return data;
-
 }
 
 pub fn use_book(book_id: String) -> Signal<BookData> {
     let book = use_signal(|| error_book("test".to_string()));
-    use_effect(move ||{
-        let mut book=book.clone();
-        let book_id=book_id.clone();
-        spawn(async move{
+    use_effect(move || {
+        let mut book = book.clone();
+        let book_id = book_id.clone();
+        spawn(async move {
             book.set(load_book(book_id).await);
         });
     });
     book
 }
 
-
-pub fn select_chapter(book: Signal<BookData>, progress: Signal<f64>, index: usize, book_id: String) {
+pub fn select_chapter(
+    book: Signal<BookData>,
+    progress: Signal<f64>,
+    index: usize,
+    book_id: String,
+) {
     let mut book = book;
     let mut progress = progress;
 
-    
     tracing::info!("select_chapter: setting current_chapter to {}", index);
     book.with_mut(|f| f.current_chapter = index);
-    tracing::info!("select_chapter: book.current_chapter is now {}", book().current_chapter);
+    tracing::info!(
+        "select_chapter: book.current_chapter is now {}",
+        book().current_chapter
+    );
 
     spawn(async move {
         let mut cursor = domain::cursor::load_bookcursor(book_id.clone()).await;
@@ -124,25 +132,24 @@ pub fn select_chapter(book: Signal<BookData>, progress: Signal<f64>, index: usiz
 }
 
 #[allow(dead_code)]
-pub async fn get_book_progress(book_id: String)->f64{
-    match infra::book::fetch_book_progress(&book_id).await{
-        Err(_)=>return 0.0,
-        Ok(p)=>return p.progress
+pub async fn get_book_progress(book_id: String) -> f64 {
+    match infra::book::fetch_book_progress(&book_id).await {
+        Err(_) => return 0.0,
+        Ok(p) => return p.progress,
     }
 }
 
-
-pub fn get_chapter_progress(book_id: String)->Signal<f64>{
-    let progress=use_signal(||0.0);
+pub fn get_chapter_progress(book_id: String) -> Signal<f64> {
+    let progress = use_signal(|| 0.0);
     use_effect(move || {
-        let mut progress=progress.clone();
-        let book_id=book_id.clone();
-        spawn(async move{
-            match infra::book::fetch_chapter_progress(&book_id).await{
-                Err(_)=>progress.set(0.0),
-                Ok(p)=>progress.set(p.progress)
+        let mut progress = progress.clone();
+        let book_id = book_id.clone();
+        spawn(async move {
+            match infra::book::fetch_chapter_progress(&book_id).await {
+                Err(_) => progress.set(0.0),
+                Ok(p) => progress.set(p.progress),
             }
         });
     });
-    return progress
+    return progress;
 }

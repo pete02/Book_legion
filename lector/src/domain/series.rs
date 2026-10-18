@@ -1,41 +1,42 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::infra::{self, series};
 use crate::domain::cover::{CardData, create_cover_path};
+use crate::infra::{self, series};
 
-async fn load_series(series_id: String, title: Signal<String>) -> Result<Vec<CardData>, Box<dyn std::error::Error>>{
-    let mut books=Vec::new();
-    let mut title=title.clone();
+async fn load_series(
+    series_id: String,
+    title: Signal<String>,
+) -> Result<Vec<CardData>, Box<dyn std::error::Error>> {
+    let mut books = Vec::new();
+    let mut title = title.clone();
 
-    let mut series=series::fetch_series(&series_id).await?;
-    series.sort_by_key(|b|b.series_order);
+    let mut series = series::fetch_series(&series_id).await?;
+    series.sort_by_key(|b| b.series_order);
 
-    for entry in series{
-        if title() == ""{
-            if let Some(name)=entry.series_name{
+    for entry in series {
+        if title() == "" {
+            if let Some(name) = entry.series_name {
                 title.set(name);
             }
         }
 
-        let b=CardData{
+        let b = CardData {
             name: entry.title,
-            path: format!("/books/{}",entry.id),
-            pic_path: create_cover_path(entry.id)
+            path: format!("/books/{}", entry.id),
+            pic_path: create_cover_path(entry.id),
         };
         books.push(b);
     }
 
     return Ok(books);
-
 }
 
-
 #[allow(dead_code)]
-pub fn delete_series(series_id:String){
-    spawn(async move{
-        match infra::series::delete_series(&series_id).await{
-            Ok(_)=>{}
-            Err(_)=>error!("Could not delete the series")
+pub fn delete_series(series_id: String) {
+    spawn(async move {
+        match infra::series::delete_series(&series_id).await {
+            Ok(_) => {}
+            Err(_) => error!("Could not delete the series"),
         }
     });
 }
@@ -62,14 +63,14 @@ pub fn get_book_count(series_id: Memo<String>) -> Resource<i32> {
 pub fn use_series(book_id: String, title: Signal<String>) -> Signal<Vec<CardData>> {
     let mut books = use_signal(Vec::new);
     use_effect(move || {
-        let  book_id=book_id.clone();
+        let book_id = book_id.clone();
         spawn(async move {
             match load_series(book_id, title).await {
                 Ok(data) => books.set(data),
                 Err(e) => {
-                    tracing::error!("Err in loading library: {}",e);
+                    tracing::error!("Err in loading library: {}", e);
                     books.set(Vec::new());
-                 }
+                }
             }
         });
     });

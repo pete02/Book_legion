@@ -1,11 +1,13 @@
 // src/archive/testkit.rs
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::super::*;
-    use std::{assert_eq, io::{Cursor, Write}};
-    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
-
+    use std::{
+        assert_eq,
+        io::{Cursor, Write},
+    };
+    use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
     #[derive(Default)]
     pub struct ZipBuilder {
@@ -14,14 +16,18 @@ mod tests{
     }
 
     impl ZipBuilder {
-        pub fn new() -> Self { Self::default() }
+        pub fn new() -> Self {
+            Self::default()
+        }
 
         pub fn stored(mut self, name: &str, data: &[u8]) -> Self {
-            self.entries.push((name.into(), data.into(), CompressionMethod::Stored));
+            self.entries
+                .push((name.into(), data.into(), CompressionMethod::Stored));
             self
         }
         pub fn deflated(mut self, name: &str, data: &[u8]) -> Self {
-            self.entries.push((name.into(), data.into(), CompressionMethod::Deflated));
+            self.entries
+                .push((name.into(), data.into(), CompressionMethod::Deflated));
             self
         }
         pub fn symlink(mut self, name: &str, target: &str) -> Self {
@@ -32,11 +38,16 @@ mod tests{
         pub fn build(self) -> Vec<u8> {
             let mut zw = ZipWriter::new(Cursor::new(Vec::new()));
             for (name, data, method) in self.entries {
-                zw.start_file(name, SimpleFileOptions::default().compression_method(method)).unwrap();
+                zw.start_file(
+                    name,
+                    SimpleFileOptions::default().compression_method(method),
+                )
+                .unwrap();
                 zw.write_all(&data).unwrap();
             }
             for (name, target) in self.symlinks {
-                zw.add_symlink(name, target, SimpleFileOptions::default()).unwrap();
+                zw.add_symlink(name, target, SimpleFileOptions::default())
+                    .unwrap();
             }
             zw.finish().unwrap().into_inner()
         }
@@ -53,15 +64,20 @@ mod tests{
     #[test]
     fn reads_entries_into_map() {
         let files = verify_archive(&minimal_valid(), &Limits::default()).unwrap();
-        assert_eq!(files.len(),2, "expected 1 fie, got {:?}", files);
-        assert!(files.contains(&"mimetype".to_string()) && files.contains(&"META-INF/container.xml".to_string()), "Expected to contain mimetype and container.xml, got: {:?}",files);
+        assert_eq!(files.len(), 2, "expected 1 fie, got {:?}", files);
+        assert!(
+            files.contains(&"mimetype".to_string())
+                && files.contains(&"META-INF/container.xml".to_string()),
+            "Expected to contain mimetype and container.xml, got: {:?}",
+            files
+        );
     }
 
     #[test]
-    fn reader_rejects_zips_with_too_many_entries(){
-        let mut lims=Limits::default();
-        lims.entry_count=10;
-        let zip=ZipBuilder::new()
+    fn reader_rejects_zips_with_too_many_entries() {
+        let mut lims = Limits::default();
+        lims.entry_count = 10;
+        let zip = ZipBuilder::new()
             .deflated("1", b"<container/>")
             .deflated("2", b"<container/>")
             .deflated("3", b"<container/>")
@@ -75,27 +91,24 @@ mod tests{
             .deflated("11", b"<container/>")
             .build();
 
-        let err= verify_archive(&zip, &lims);
+        let err = verify_archive(&zip, &lims);
 
         assert!(err.is_err());
         assert_eq!(err.unwrap_err(), ArchiveError::TooManyFiles);
-
     }
     #[test]
-    fn reader_accepts_with_exact_lfile_limit_count(){
-        let mut lims=Limits::default();
-        let filenames= ["1","2","3","4","5"];
-        lims.entry_count=5;
-        let mut zip=ZipBuilder::new();
-        for n in filenames{
-            zip=zip.deflated(n, b"test");
+    fn reader_accepts_with_exact_lfile_limit_count() {
+        let mut lims = Limits::default();
+        let filenames = ["1", "2", "3", "4", "5"];
+        lims.entry_count = 5;
+        let mut zip = ZipBuilder::new();
+        for n in filenames {
+            zip = zip.deflated(n, b"test");
         }
 
-        let files= verify_archive(&zip.build(), &lims);
+        let files = verify_archive(&zip.build(), &lims);
 
         assert!(files.is_ok());
-
-
     }
 
     #[test]
@@ -118,23 +131,22 @@ mod tests{
         }
     }
     #[test]
-    fn reject_path_errs(){
-        let tests=[
+    fn reject_path_errs() {
+        let tests = [
             ("root/../../file", ArchiveError::PathTraversal),
             ("/root/file", ArchiveError::AbsolutePath),
-            ("root\\backslash",ArchiveError::BackSlash),
+            ("root\\backslash", ArchiveError::BackSlash),
             ("root/nullbyte\0", ArchiveError::NullByte),
             ("root/file\tname", ArchiveError::ControlCharacter),
         ];
 
-        for (input,expected) in tests{
+        for (input, expected) in tests {
             assert_eq!(
                 normalize_path(input).unwrap_err(),
                 expected,
                 "Failed for input {input}"
             )
         }
-
     }
 
     use zip::write::{ExtendedFileOptions, FileOptions};
@@ -169,11 +181,8 @@ mod tests{
         {
             let mut zip = ZipWriter::new(&mut bytes);
 
-            zip.start_file(
-                "normal.txt",
-                FileOptions::<ExtendedFileOptions>::default(),
-            )
-            .unwrap();
+            zip.start_file("normal.txt", FileOptions::<ExtendedFileOptions>::default())
+                .unwrap();
             zip.write_all(b"normal").unwrap();
 
             zip.add_symlink(
@@ -216,9 +225,7 @@ mod tests{
 
     #[test]
     fn rejects_per_entry_size_limit() {
-        let bytes = ZipBuilder::new()
-            .stored("large", b"1234567890")
-            .build();
+        let bytes = ZipBuilder::new().stored("large", b"1234567890").build();
 
         let limits = Limits {
             size_limit: 100,
@@ -256,9 +263,7 @@ mod tests{
 
     #[test]
     fn allows_entry_at_per_entry_limit() {
-        let bytes = ZipBuilder::new()
-            .stored("file", b"12345")
-            .build();
+        let bytes = ZipBuilder::new().stored("file", b"12345").build();
 
         let limits = Limits {
             size_limit: 5,
@@ -287,4 +292,3 @@ mod tests{
         assert!(verify_archive(&bytes, &limits).is_ok());
     }
 }
-

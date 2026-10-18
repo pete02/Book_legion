@@ -1,4 +1,3 @@
-
 use std::{
     collections::HashMap,
     io::Cursor,
@@ -39,9 +38,8 @@ pub fn verify_opf(
 
     let cover_path = find_guide_cover(&package, opf_path, archive_files)?;
 
-    let repaired = merge_manifests(&mut package)?
-        | merge_spines(&mut package)?
-        | strip_guides(&mut package);
+    let repaired =
+        merge_manifests(&mut package)? | merge_spines(&mut package)? | strip_guides(&mut package);
 
     let mut xml = Vec::new();
 
@@ -58,8 +56,7 @@ pub fn verify_opf(
 }
 
 fn parse_opf(bytes: &[u8]) -> Result<Element, OpfError> {
-    Element::parse(Cursor::new(bytes))
-        .map_err(|_| OpfError::MalformedXml)
+    Element::parse(Cursor::new(bytes)).map_err(|_| OpfError::MalformedXml)
 }
 
 fn direct_elements<'a>(
@@ -76,10 +73,13 @@ fn direct_elements_mut<'a>(
     parent: &'a mut Element,
     name: &'static str,
 ) -> impl Iterator<Item = &'a mut Element> {
-    parent.children.iter_mut().filter_map(move |node| match node {
-        XMLNode::Element(element) if element.name == name => Some(element),
-        _ => None,
-    })
+    parent
+        .children
+        .iter_mut()
+        .filter_map(move |node| match node {
+            XMLNode::Element(element) if element.name == name => Some(element),
+            _ => None,
+        })
 }
 
 fn merge_manifests(package: &mut Element) -> Result<bool, OpfError> {
@@ -116,18 +116,14 @@ fn merge_manifests(package: &mut Element) -> Result<bool, OpfError> {
     Ok(true)
 }
 
-fn append_manifest_items(
-    target: &mut Element,
-    source: Element,
-) -> Result<(), OpfError> {
-    let mut ids: HashMap<String, HashMap<String, String>> =
-        direct_elements(target, "item")
-            .filter_map(|item| {
-                item.attributes
-                    .get("id")
-                    .map(|id| (id.clone(), item.attributes.clone()))
-            })
-            .collect();
+fn append_manifest_items(target: &mut Element, source: Element) -> Result<(), OpfError> {
+    let mut ids: HashMap<String, HashMap<String, String>> = direct_elements(target, "item")
+        .filter_map(|item| {
+            item.attributes
+                .get("id")
+                .map(|id| (id.clone(), item.attributes.clone()))
+        })
+        .collect();
 
     for node in source.children {
         let XMLNode::Element(item) = &node else {
@@ -222,16 +218,10 @@ fn append_spine_items(target: &mut Element, source: Element) {
     }
 }
 
-fn insert_at_original_position(
-    children: &mut Vec<XMLNode>,
-    element: Element,
-    name: &str,
-) {
+fn insert_at_original_position(children: &mut Vec<XMLNode>, element: Element, name: &str) {
     let position = children
         .iter()
-        .position(|node| {
-            matches!(node, XMLNode::Element(existing) if existing.name == name)
-        })
+        .position(|node| matches!(node, XMLNode::Element(existing) if existing.name == name))
         .unwrap_or(children.len());
 
     children.insert(position, XMLNode::Element(element));
@@ -240,9 +230,9 @@ fn insert_at_original_position(
 fn strip_guides(package: &mut Element) -> bool {
     let original_len = package.children.len();
 
-    package.children.retain(|node| {
-        !matches!(node, XMLNode::Element(element) if element.name == "guide")
-    });
+    package
+        .children
+        .retain(|node| !matches!(node, XMLNode::Element(element) if element.name == "guide"));
 
     package.children.len() != original_len
 }
@@ -276,10 +266,7 @@ fn find_guide_cover(
     Ok(None)
 }
 
-fn resolve_relative_path(
-    opf_path: &str,
-    href: &str,
-) -> Result<String, OpfError> {
+fn resolve_relative_path(opf_path: &str, href: &str) -> Result<String, OpfError> {
     if href.is_empty()
         || href.starts_with('/')
         || href.contains('\\')

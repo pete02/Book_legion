@@ -1,6 +1,7 @@
 {
     "explorer.excludeGitIgnore": false,
     "files.exclude": {
-        "": true
+        "": true,
+        "**/.git": false
     }
 }

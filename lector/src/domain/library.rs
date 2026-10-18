@@ -1,13 +1,12 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::infra::manifest::{self, ManifestEntry};
 use crate::domain::cover::{CardData, create_cover_path};
+use crate::infra::manifest::{self, ManifestEntry};
 #[derive(Clone, PartialEq, Debug, Eq, Hash)]
 pub enum LibraryMode {
     Normal,
     Alt(String), // the key itself, doubling as both flag and credential
 }
-
 
 /// Read/write access from anywhere below the provider.
 pub fn use_library_mode() -> Signal<LibraryMode> {
@@ -25,11 +24,8 @@ pub fn read_library_mode() -> LibraryMode {
     use_library_mode().read().cloned()
 }
 
-
 pub fn get_library() -> Resource<Vec<ManifestEntry>> {
-    use_resource(move || async move {
-        manifest::fetch_manifest().await.unwrap_or_default()
-    })
+    use_resource(move || async move { manifest::fetch_manifest().await.unwrap_or_default() })
 }
 
 async fn load_library() -> Result<Vec<CardData>, Box<dyn std::error::Error>> {

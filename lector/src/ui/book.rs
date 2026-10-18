@@ -1,7 +1,14 @@
 use dioxus::{logger::tracing, prelude::*};
 
-
-use crate::{Route, domain::{self, book::{BookData, use_book}}, styles, ui::{ components::{TopBar, TopBarEntry, card::Cover}}};
+use crate::{
+    Route,
+    domain::{
+        self,
+        book::{BookData, use_book},
+    },
+    styles,
+    ui::components::{TopBar, TopBarEntry, card::Cover},
+};
 
 #[component]
 pub fn Book(book_id: String) -> Element {
@@ -16,15 +23,21 @@ pub fn Book(book_id: String) -> Element {
         },
         TopBarEntry {
             name: "Series".into(),
-            path: Route::Series { series_id: book().series_id },
+            path: Route::Series {
+                series_id: book().series_id,
+            },
         },
         TopBarEntry {
             name: "Listen".into(),
-            path: Route::Audio { book_id: book_id.clone() },
+            path: Route::Audio {
+                book_id: book_id.clone(),
+            },
         },
         TopBarEntry {
             name: "Read".into(),
-            path: Route::Text { book_id: book_id.clone() },
+            path: Route::Text {
+                book_id: book_id.clone(),
+            },
         },
     ];
 
@@ -89,7 +102,7 @@ pub fn Book(book_id: String) -> Element {
                 }
             }
         }
-    }
+    };
 }
 
 #[component]
@@ -111,7 +124,7 @@ fn ChapterList(
                 ) {
                     let top = (current_elem.get_bounding_client_rect().top()
                         - list_elem.get_bounding_client_rect().top())
-                        .floor();
+                    .floor();
                     list_elem.set_scroll_top(top as i32);
                 } else {
                     tracing::error!("could not find chapter list elements");
@@ -130,7 +143,7 @@ fn ChapterList(
                 ) {
                     let top = (current_elem.get_bounding_client_rect().top()
                         - list_elem.get_bounding_client_rect().top())
-                        .floor();
+                    .floor();
                     list_elem.set_scroll_top(top as i32);
                 }
             }
@@ -138,8 +151,8 @@ fn ChapterList(
     });
 
     return rsx! {
-        ul {
-            style: "
+            ul {
+                style: "
                 list-style: none;
                 padding: 0;
                 margin: 0;
@@ -147,43 +160,43 @@ fn ChapterList(
                 scrollbar-width: none;
                 -ms-overflow-style: none;
             ",
-            id: "chapterlist",
-            class: "no-scrollbar",
-            {
-                chapters.iter().enumerate().map(|(idx, chapter)| {
-                    let is_current = idx == current;
-                    tracing::debug!("current chapter check for: {}, {}", idx, is_current);
-                    let id = book_id.clone();
-                    let row_id = format!("chapter-row-{idx}");
-                    rsx! {
-                        li {
-                            key: "{idx}-{is_current}",
-                            class: if is_current { "current-chapter" } else { "" },
-                            id: "{row_id}",
-                            button {
+                id: "chapterlist",
+                class: "no-scrollbar",
+                {
+                    chapters.iter().enumerate().map(|(idx, chapter)| {
+                        let is_current = idx == current;
+                        tracing::debug!("current chapter check for: {}, {}", idx, is_current);
+                        let id = book_id.clone();
+                        let row_id = format!("chapter-row-{idx}");
+                        rsx! {
+                            li {
                                 key: "{idx}-{is_current}",
-                                onclick: move |_| {
-                                    domain::book::select_chapter(book, progress, idx, id.clone());
-                                },
-                                style: format!(
-                                    "{} border-left: 4px solid {}; font-weight: {};",
-                                    styles::CHAPTER_BUTTON,
-                                    if is_current { "#3b82f6" } else { "transparent" },
-                                    if is_current { "bold" } else { "normal" },
-                                ),
-                                span { "{chapter}" }
-                                if is_current {
-                                    span {
-                                        key: "{idx}-{is_current}",
-                                        style: "font-size: 0.85em; color: #6b7280;",
-                                        "    {(progress() * 100.0).round()}%"
+                                class: if is_current { "current-chapter" } else { "" },
+                                id: "{row_id}",
+                                button {
+                                    key: "{idx}-{is_current}",
+                                    onclick: move |_| {
+                                        domain::book::select_chapter(book, progress, idx, id.clone());
+                                    },
+                                    style: format!(
+                                        "{} border-left: 4px solid {}; font-weight: {};",
+                                        styles::CHAPTER_BUTTON,
+                                        if is_current { "#3b82f6" } else { "transparent" },
+                                        if is_current { "bold" } else { "normal" },
+                                    ),
+                                    span { "{chapter}" }
+                                    if is_current {
+                                        span {
+                                            key: "{idx}-{is_current}",
+                                            style: "font-size: 0.85em; color: #6b7280;",
+                                            "    {(progress() * 100.0).round()}%"
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                })
-}
-        }
+                    })
     }
+            }
+        };
 }

@@ -1,19 +1,20 @@
-use reqwasm::http::Request;
 use crate::domain::{self, library};
+use reqwasm::http::Request;
 
-pub async fn get_with_auth(
-    url: &str,
-) -> Result<reqwasm::http::Response, String> {
+pub async fn get_with_auth(url: &str) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
     let mut pin = match domain::library::read_library_mode() {
-        library::LibraryMode::Normal=>"4328".to_owned(),
-        library::LibraryMode::Alt(p) => p
+        library::LibraryMode::Normal => "4328".to_owned(),
+        library::LibraryMode::Alt(p) => p,
     };
-    if pin =="" {
-        pin="4892".into()
+    if pin == "" {
+        pin = "4892".into()
     }
     let resp = Request::get(url)
-        .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
+        .header(
+            "Authorization",
+            &format!("Bearer {}", auth_token.unwrap_or_default()),
+        )
         .header("Pin", &pin)
         .send()
         .await
@@ -23,11 +24,11 @@ pub async fn get_with_auth(
         return Ok(resp);
     }
 
-    if domain::login::refresh_auth().await.is_err(){
-        return Err("could not refresh auth token".into())
+    if domain::login::refresh_auth().await.is_err() {
+        return Err("could not refresh auth token".into());
     }
 
-    let new_auth=domain::login::current_auth().unwrap_or_default();
+    let new_auth = domain::login::current_auth().unwrap_or_default();
     let retry_resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .header("Pin", &pin)
@@ -43,13 +44,14 @@ pub async fn get_with_auth(
     Ok(retry_resp)
 }
 
-pub async fn delete_with_auth(
-    url: &str
-) -> Result<reqwasm::http::Response, String> {
+pub async fn delete_with_auth(url: &str) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
 
     let resp = Request::delete(url)
-        .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
+        .header(
+            "Authorization",
+            &format!("Bearer {}", auth_token.unwrap_or_default()),
+        )
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -58,10 +60,10 @@ pub async fn delete_with_auth(
         return Ok(resp);
     }
 
-    if domain::login::refresh_auth().await.is_err(){
-        return Err("could not refresh auth token".into())
+    if domain::login::refresh_auth().await.is_err() {
+        return Err("could not refresh auth token".into());
     }
-    let new_auth=domain::login::current_auth().unwrap_or_default();    
+    let new_auth = domain::login::current_auth().unwrap_or_default();
     let retry_resp = Request::get(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .send()
@@ -76,16 +78,14 @@ pub async fn delete_with_auth(
     Ok(retry_resp)
 }
 
-
-pub async fn post_with_auth(
-    url: &str,
-    body: String,
-) -> Result<reqwasm::http::Response, String> {
+pub async fn post_with_auth(url: &str, body: String) -> Result<reqwasm::http::Response, String> {
     let auth_token = domain::login::current_auth();
 
-
     let resp = Request::post(url)
-        .header("Authorization", &format!("Bearer {}", auth_token.unwrap_or_default()))
+        .header(
+            "Authorization",
+            &format!("Bearer {}", auth_token.unwrap_or_default()),
+        )
         .header("Content-Type", "application/json")
         .body(&body)
         .send()
@@ -96,10 +96,10 @@ pub async fn post_with_auth(
         return Ok(resp);
     }
 
-    if domain::login::refresh_auth().await.is_err(){
-        return Err("could not refresh auth token".into())
+    if domain::login::refresh_auth().await.is_err() {
+        return Err("could not refresh auth token".into());
     }
-    let new_auth=domain::login::current_auth().unwrap_or_default();
+    let new_auth = domain::login::current_auth().unwrap_or_default();
     let retry_resp = Request::post(url)
         .header("Authorization", &format!("Bearer {}", new_auth))
         .header("Content-Type", "application/json")
@@ -130,9 +130,7 @@ pub async fn refresh_auth_token(refresh_token: &str) -> Result<String, String> {
     }
 
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let new_token = json["auth_token"]
-        .as_str()
-        .ok_or("Invalid response")?;
+    let new_token = json["auth_token"].as_str().ok_or("Invalid response")?;
     Ok(new_token.to_string())
 }
 
@@ -145,7 +143,10 @@ pub async fn post_with_auth_with_headers(
     let token = domain::login::current_auth(); // however you currently attach auth
 
     let mut req = gloo_net::http::Request::post(url)
-        .header("Authorization", &format!("Bearer {}", token.unwrap_or_default()))
+        .header(
+            "Authorization",
+            &format!("Bearer {}", token.unwrap_or_default()),
+        )
         .header("Content-Type", "application/json");
 
     for (k, v) in extra_headers {

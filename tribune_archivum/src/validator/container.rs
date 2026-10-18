@@ -31,8 +31,7 @@ pub fn verify_container(
 ) -> Result<ContainerResult, ContainerError> {
     let mut container = parse_container(bytes)?;
 
-    let rootfiles = find_rootfiles_mut(&mut container)
-        .ok_or(ContainerError::MissingRootfile)?;
+    let rootfiles = find_rootfiles_mut(&mut container).ok_or(ContainerError::MissingRootfile)?;
 
     let (selected, package_path) = select_rootfile(rootfiles, archive_files)?;
 
@@ -95,10 +94,8 @@ fn keep_only_rootfile(rootfiles: &mut Element, selected: usize) {
 
 /// Returns true if the attribute had to be changed.
 fn set_full_path(rootfiles: &mut Element, package_path: &str) -> bool {
-    let Some(XMLNode::Element(rootfile)) = rootfiles
-        .children
-        .iter_mut()
-        .find(|node| is_rootfile(node))
+    let Some(XMLNode::Element(rootfile)) =
+        rootfiles.children.iter_mut().find(|node| is_rootfile(node))
     else {
         return false;
     };

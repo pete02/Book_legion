@@ -8,7 +8,6 @@ use dioxus::prelude::info;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 // infra/book.rs
 pub struct BookInfo {
@@ -23,10 +22,9 @@ pub struct BookInfo {
     pub grant_access: String, // comma-separated usernames, UI-only, not persisted as a body field
 }
 
-
 impl BookInfo {
-    pub fn new()->BookInfo{
-        BookInfo{
+    pub fn new() -> BookInfo {
+        BookInfo {
             id: "".to_string(),
             title: "".to_string(),
             author_id: "".to_string(),
@@ -56,11 +54,10 @@ pub async fn delete_book(book_id: &str) -> Result<(), String> {
     }
 }
 #[cfg(feature = "mock")]
-pub async fn delete_book(book_id: &str)-> Result<(),String>{
+pub async fn delete_book(book_id: &str) -> Result<(), String> {
     info!("delete a booK: {}", book_id);
     Ok(())
 }
-
 
 #[cfg(not(feature = "mock"))]
 pub async fn save_book(book: &BookInfo) -> Result<(), String> {
@@ -75,7 +72,8 @@ pub async fn save_book(book: &BookInfo) -> Result<(), String> {
         "series_order": book.series_order,
         "series_name": book.series_name,
         "file_path": book.file_path,
-    }).to_string();
+    })
+    .to_string();
 
     let access = book.grant_access.trim();
     let headers: Vec<(&str, &str)> = if access.is_empty() {
@@ -105,7 +103,6 @@ pub async fn fetch_book_file_as_blob_url(
     Ok("data:,".to_string())
 }
 
-
 use wasm_bindgen::JsValue;
 
 #[cfg(not(feature = "mock"))]
@@ -113,17 +110,14 @@ pub async fn fetch_book_file_as_blob_url(
     book_id: &str,
     file_path: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    
-    let url = format!(
-        "/api/v1/books/{}/file?file={}",
-        book_id,
-        file_path
-    );
+    let url = format!("/api/v1/books/{}/file?file={}", book_id, file_path);
     let resp = get_with_auth(&url).await?;
     if !resp.ok() {
         return Err(format!(
             "Failed to fetch file {} for book {}: {}",
-            file_path, book_id, resp.status()
+            file_path,
+            book_id,
+            resp.status()
         )
         .into());
     }
@@ -133,10 +127,7 @@ pub async fn fetch_book_file_as_blob_url(
         .get("content-type")
         .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    let bytes = resp
-        .binary()
-        .await
-        .map_err(|e| e.to_string())?;
+    let bytes = resp.binary().await.map_err(|e| e.to_string())?;
 
     let blob_url = bytes_to_blob_url(&bytes, &content_type)
         .map_err(|e| format!("failed to create blob url: {e:?}"))?;
@@ -156,14 +147,11 @@ fn bytes_to_blob_url(bytes: &[u8], content_type: &str) -> Result<String, JsValue
     web_sys::Url::create_object_url_with_blob(&blob)
 }
 
-
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
     let url = format!("/api/v1/books/{}", book_id);
 
-    let resp = get_with_auth(&url)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = get_with_auth(&url).await.map_err(|e| e.to_string())?;
 
     if !resp.ok() {
         return Err(format!("Failed to fetch book {}: {}", book_id, resp.status()).into());
@@ -208,7 +196,7 @@ pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
         },
     };
 
-    if mock_book.title.contains("Mock"){
+    if mock_book.title.contains("Mock") {
         return Err("no book found".into());
     }
 
@@ -219,39 +207,38 @@ pub async fn fetch_book(book_id: &str) -> Result<BookInfo, String> {
 pub async fn fetch_chapter_progress(
     book_id: &str,
 ) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
-    let url = format!(
-        "/api/v1/books/{}/chapterprogress",
-        book_id
-    );
+    let url = format!("/api/v1/books/{}/chapterprogress", book_id);
 
     let resp = get_with_auth(&url).await?;
-    if !resp.ok(){
-        return Err(format!("Failed to fetch chapter progress {}: {}", book_id, resp.status()).into());
-
+    if !resp.ok() {
+        return Err(format!(
+            "Failed to fetch chapter progress {}: {}",
+            book_id,
+            resp.status()
+        )
+        .into());
     }
-    let chapter:ProgressResponse=resp.json().await.map_err(|e| e.to_string())?;
+    let chapter: ProgressResponse = resp.json().await.map_err(|e| e.to_string())?;
 
     Ok(chapter)
 }
-
-
-
 
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_book_progress(
     book_id: &str,
 ) -> Result<ProgressResponse, Box<dyn std::error::Error>> {
-    let url = format!(
-        "/api/v1/books/{}/bookprogress",
-        book_id
-    );
+    let url = format!("/api/v1/books/{}/bookprogress", book_id);
 
     let resp = get_with_auth(&url).await?;
-    if !resp.ok(){
-        return Err(format!("Failed to fetch book progress {}: {}", book_id, resp.status()).into());
-
+    if !resp.ok() {
+        return Err(format!(
+            "Failed to fetch book progress {}: {}",
+            book_id,
+            resp.status()
+        )
+        .into());
     }
-    let bookprogress:ProgressResponse=resp.json().await.map_err(|e| e.to_string())?;
+    let bookprogress: ProgressResponse = resp.json().await.map_err(|e| e.to_string())?;
 
     Ok(bookprogress)
 }
@@ -297,20 +284,17 @@ pub async fn fetch_book_progress(
 }
 
 #[cfg(not(feature = "mock"))]
-pub async fn fetch_cover(
-    book_id: &str, width: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn fetch_cover(book_id: &str, width: &str) -> Result<String, Box<dyn std::error::Error>> {
     use dioxus::logger::tracing;
 
-    let url = format!(
-        "/api/v1/books/{}/cover?width={}",
-        book_id, width
-    );
+    let url = format!("/api/v1/books/{}/cover?width={}", book_id, width);
     tracing::info!("fetching cover for book: {}", book_id);
     let resp = get_with_auth(&url).await?;
     if !resp.ok() {
         return Err(format!(
             "Failed to fetch cover for book {}: {}",
-            book_id, resp.status()
+            book_id,
+            resp.status()
         )
         .into());
     }
@@ -320,10 +304,7 @@ pub async fn fetch_cover(
         .get("content-type")
         .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    let bytes = resp
-        .binary()
-        .await
-        .map_err(|e| e.to_string())?;
+    let bytes = resp.binary().await.map_err(|e| e.to_string())?;
 
     let blob_url = bytes_to_blob_url(&bytes, &content_type)
         .map_err(|e| format!("failed to create blob url: {e:?}"))?;
@@ -334,10 +315,7 @@ pub async fn fetch_cover(
 #[cfg(feature = "mock")]
 use crate::assets;
 #[cfg(feature = "mock")]
-pub async fn fetch_cover(
-    book_id: &str,
-    width: &str
-) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn fetch_cover(book_id: &str, width: &str) -> Result<String, Box<dyn std::error::Error>> {
     use dioxus::logger::tracing;
 
     tracing::info!("[mock] fetching cover for book: {}", book_id);

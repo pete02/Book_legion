@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
 use dioxus::prelude::*;
-#[cfg(feature = "mock")]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "mock")]
 use std::sync::Arc;
+#[cfg(feature = "mock")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Serialize)]
 struct LoginRequest<'a> {
@@ -21,20 +21,22 @@ pub struct LoginResponse {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 
 pub struct ChangePinRequest {
-	pub pin: String
+    pub pin: String,
 }
-
 
 #[cfg(feature = "mock")]
 static LOGIN_COUNTER: once_cell::sync::Lazy<Arc<AtomicUsize>> =
     once_cell::sync::Lazy::new(|| Arc::new(AtomicUsize::new(1)));
 
 #[cfg(not(feature = "mock"))]
-pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Box<dyn std::error::Error>> {
+pub async fn login(
+    username: &str,
+    password: &str,
+) -> Result<LoginResponse, Box<dyn std::error::Error>> {
     use crate::infra::auth::post_with_auth;
 
     let body = LoginRequest { username, password };
-    let resp = post_with_auth("/api/v1/login",serde_json::to_string(&body)?)
+    let resp = post_with_auth("/api/v1/login", serde_json::to_string(&body)?)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -55,14 +57,13 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Box<
 #[cfg(feature = "mock")]
 pub async fn login(username: &str, password: &str) -> Result<LoginResponse, String> {
     use dioxus::logger::tracing;
-    
 
     if username.is_empty() || password.is_empty() {
         return Err("username and password must be provided".into());
     }
     let counter = LOGIN_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-    /* 
+    /*
     if counter % 2 == 1 {
         tracing::debug!("deny login");
         return Err("mock login failed on odd attempt".into());
@@ -74,20 +75,27 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResponse, Stri
         auth_token: "mock_auth_token".into(),
         refresh_token: "mock_refresh_token".into(),
         pin: "0000".into(),
-
     })
 }
 
-use crate::infra::auth::post_with_auth;
 use crate::domain;
+use crate::infra::auth::post_with_auth;
 
 #[cfg(not(feature = "mock"))]
 pub async fn change_pin(new_pin: &str) -> Result<(), String> {
-    if new_pin == ""{
+    if new_pin == "" {
         return Err("New PIN cannot be empty".into());
     }
-    let resp= post_with_auth("/api/v1/changepin", serde_json::to_string(&ChangePinRequest { pin: new_pin.into() }).unwrap()).await.map_err(|e|e.to_string())?;
-    if !resp.ok(){
+    let resp = post_with_auth(
+        "/api/v1/changepin",
+        serde_json::to_string(&ChangePinRequest {
+            pin: new_pin.into(),
+        })
+        .unwrap(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    if !resp.ok() {
         return Err("Failed to change PIN".into());
     }
     let request: ChangePinRequest = resp

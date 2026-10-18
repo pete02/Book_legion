@@ -1,18 +1,17 @@
 use dioxus::logger::tracing;
-use dioxus::{prelude::*};
+use dioxus::prelude::*;
 
 use crate::domain::library;
-use crate::ui::components::Card;
-use crate::{domain::login};
+use crate::domain::login;
 use crate::styles;
+use crate::ui::components::Card;
 
 #[component]
 pub fn Library() -> Element {
-    let mut mode: Signal<library::LibraryMode> =library::use_library_mode();
+    let mut mode: Signal<library::LibraryMode> = library::use_library_mode();
     let mut query = use_signal(String::new);
 
     let library = library::use_library(mode);
-
 
     return rsx! {
         div { style: styles::CONTAINER_STYLE,
@@ -41,19 +40,19 @@ pub fn Library() -> Element {
                 },
             }
 
-            div { 
+            div {
                 style: styles::GRID_STYLE,
                 {
                     library.iter()
                         .filter(|e| e.name.to_ascii_lowercase().contains(&query().to_ascii_lowercase()))
-                        .map(|entry| rsx!( 
-                            Card{ 
-                                key: "{entry.path}-{entry.pic_path}", 
-                                entry: entry.clone() 
-                            } 
+                        .map(|entry| rsx!(
+                            Card{
+                                key: "{entry.path}-{entry.pic_path}",
+                                entry: entry.clone()
+                            }
                         ))
                 }
             }
         }
-    }
+    };
 }

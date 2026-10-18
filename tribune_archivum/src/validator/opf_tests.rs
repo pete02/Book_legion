@@ -1,9 +1,7 @@
-
 use super::*;
 use xmltree::{Element, XMLNode};
 
-const MANIFEST_ITEM: &str =
-    r#"<item id="chapter" href="chapter.xhtml"
+const MANIFEST_ITEM: &str = r#"<item id="chapter" href="chapter.xhtml"
            media-type="application/xhtml+xml"/>"#;
 
 const SPINE_ITEM: &str = r#"<itemref idref="chapter"/>"#;
@@ -38,10 +36,14 @@ fn parse(xml: &[u8]) -> Element {
 }
 
 fn elements<'a>(parent: &'a Element, name: &str) -> Vec<&'a Element> {
-    parent.children.iter().filter_map(|node| match node {
-        XMLNode::Element(element) if element.name == name => Some(element),
-        _ => None,
-    }).collect()
+    parent
+        .children
+        .iter()
+        .filter_map(|node| match node {
+            XMLNode::Element(element) if element.name == name => Some(element),
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -61,38 +63,24 @@ fn accepts_valid_package() {
 
 #[test]
 fn rejects_malformed_xml() {
-    assert_eq!(
-        verify(b"<package><manifest>"),
-        Err(OpfError::MalformedXml)
-    );
+    assert_eq!(verify(b"<package><manifest>"), Err(OpfError::MalformedXml));
 }
 
 #[test]
 fn rejects_wrong_root_element() {
-    assert_eq!(
-        verify(b"<container/>"),
-        Err(OpfError::InvalidPackageRoot)
-    );
+    assert_eq!(verify(b"<container/>"), Err(OpfError::InvalidPackageRoot));
 }
 
 #[test]
 fn rejects_missing_manifest() {
-    let xml = opf(
-        "",
-        "<spine/>",
-        "",
-    );
+    let xml = opf("", "<spine/>", "");
 
     assert_eq!(verify(&xml), Err(OpfError::MissingManifest));
 }
 
 #[test]
 fn rejects_missing_spine() {
-    let xml = opf(
-        "<manifest/>",
-        "",
-        "",
-    );
+    let xml = opf("<manifest/>", "", "");
 
     assert_eq!(verify(&xml), Err(OpfError::MissingSpine));
 }
@@ -216,11 +204,7 @@ fn resolves_cover_relative_to_opf_location() {
 
 #[test]
 fn leaves_guide_absent_when_no_cover_is_declared() {
-    let xml = opf(
-        "<manifest/>",
-        "<spine/>",
-        "<guide/>",
-    );
+    let xml = opf("<manifest/>", "<spine/>", "<guide/>");
 
     let result = verify(&xml).unwrap();
 

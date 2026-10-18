@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PrettySpineItem {
     pub index: usize,
@@ -6,31 +5,30 @@ pub struct PrettySpineItem {
     pub title: String,
 }
 
-
-
-
 use crate::infra::auth::get_with_auth;
 #[cfg(not(feature = "mock"))]
 pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, String> {
     let url = format!("/api/v1/books/{}/nav", book_id);
 
-    let resp = get_with_auth(&url)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = get_with_auth(&url).await.map_err(|e| e.to_string())?;
 
     if !resp.ok() {
-        return Err(format!("Failed to fetch chapters for {}: {}", book_id, resp.status()).into());
+        return Err(format!(
+            "Failed to fetch chapters for {}: {}",
+            book_id,
+            resp.status()
+        )
+        .into());
     }
 
     let chapters: Vec<PrettySpineItem> = resp.json().await.map_err(|e| e.to_string())?;
     Ok(chapters)
 }
 
-
 #[cfg(feature = "mock")]
 pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, String> {
-    use serde_json::json;
     use serde_json::Value;
+    use serde_json::json;
 
     // JSON data per book_id
     let json_data: Value = match book_id {
@@ -59,9 +57,7 @@ pub async fn fetch_book_nav(book_id: &str) -> Result<Vec<PrettySpineItem>, Strin
 pub async fn fetch_chapter(book_id: &str, chapter_index: usize) -> Result<String, String> {
     let url = format!("/api/v1/books/{}/chapters/{}", book_id, chapter_index);
 
-    let resp = get_with_auth(&url)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = get_with_auth(&url).await.map_err(|e| e.to_string())?;
 
     if !resp.ok() {
         return Err(format!(
@@ -80,8 +76,8 @@ pub async fn fetch_chapter(book_id: &str, chapter_index: usize) -> Result<String
 #[cfg(feature = "mock")]
 pub async fn fetch_chapter(book_id: &str, chapter_index: usize) -> Result<String, String> {
     // Paste your mock data here
-    if(book_id=="b3"){
-      return Err("b3 tests failure".to_string())
+    if (book_id == "b3") {
+        return Err("b3 tests failure".to_string());
     }
 
     let chapter = match (book_id, chapter_index) {

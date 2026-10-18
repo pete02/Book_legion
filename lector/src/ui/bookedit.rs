@@ -1,9 +1,10 @@
-use dioxus::prelude::*;
 use crate::{
-    Route, domain::{
-        self, book::get_book_info, library::get_library
-    }, infra, ui::components::{TopBar, TopBarEntry}
+    Route,
+    domain::{self, book::get_book_info, library::get_library},
+    infra,
+    ui::components::{TopBar, TopBarEntry},
 };
+use dioxus::prelude::*;
 
 #[component]
 pub fn BookEdit(book_id: String) -> Element {
@@ -19,10 +20,15 @@ pub fn BookEdit(book_id: String) -> Element {
     });
 
     let top_entries = vec![
-        TopBarEntry { name: "Library".into(), path: Route::Library {} },
+        TopBarEntry {
+            name: "Library".into(),
+            path: Route::Library {},
+        },
         TopBarEntry {
             name: "Book".into(),
-            path: Route::Book { book_id: book_id.clone() },
+            path: Route::Book {
+                book_id: book_id.clone(),
+            },
         },
     ];
 
@@ -69,9 +75,7 @@ fn EditBookInfo(book_id: String, mut draft: Signal<Option<BookInfo>>) -> Element
     // Track just the currently-selected series id. use_memo only notifies
     // subscribers when the *value* changes, so editing the title/author/etc.
     // won't trigger a refetch below — only actually switching series does.
-    let series_id_memo = use_memo(move || {
-        draft().map(|b| b.series_id.clone()).unwrap_or_default()
-    });
+    let series_id_memo = use_memo(move || draft().map(|b| b.series_id.clone()).unwrap_or_default());
 
     // Reload the book count for whatever series is currently selected in the
     // draft (not necessarily the book's originally-saved series). Because
@@ -204,7 +208,6 @@ fn EditBookInfo(book_id: String, mut draft: Signal<Option<BookInfo>>) -> Element
     }
 }
 
-
 #[component]
 fn Buttons(book_id: String, draft: Signal<Option<BookInfo>>) -> Element {
     rsx! {
@@ -214,7 +217,6 @@ fn Buttons(book_id: String, draft: Signal<Option<BookInfo>>) -> Element {
 
     }
 }
-
 
 #[component]
 fn DeleteButton(book_id: String) -> Element {
@@ -252,7 +254,6 @@ fn DeleteButton(book_id: String) -> Element {
         }
     }
 }
-
 
 #[component]
 fn CancelButton(book_id: String) -> Element {
@@ -308,7 +309,6 @@ fn SaveButton(book_id: String, draft: Signal<Option<BookInfo>>) -> Element {
         }
     }
 }
-
 
 use crate::infra::book::BookInfo;
 /// Immutable-friendly draft updater

@@ -1,30 +1,31 @@
 use dioxus::prelude::*;
 
-use crate::{Route, domain, styles, ui::components::{Card, TopBar, TopBarEntry}};
-
+use crate::{
+    Route, domain, styles,
+    ui::components::{Card, TopBar, TopBarEntry},
+};
 
 #[component]
-pub fn Series(series_id:String) -> Element {
-    let title=use_signal(||"".to_owned());
-    let mut delete_signal=Signal::new(false);
-    let nav=use_navigator();
-    let entries = vec![
-        TopBarEntry {
-            name: "Library".into(),
-            path: Route::Library {  }
-        },
-    ];
+pub fn Series(series_id: String) -> Element {
+    let title = use_signal(|| "".to_owned());
+    let mut delete_signal = Signal::new(false);
+    let nav = use_navigator();
+    let entries = vec![TopBarEntry {
+        name: "Library".into(),
+        path: Route::Library {},
+    }];
 
-    let books: Signal<Vec<domain::cover::CardData>>=domain::series::use_series(series_id.clone(),title);
-    use_effect(move||{
-        if books().len() == 0{
+    let books: Signal<Vec<domain::cover::CardData>> =
+        domain::series::use_series(series_id.clone(), title);
+    use_effect(move || {
+        if books().len() == 0 {
             delete_signal.set(true);
-        }else{
+        } else {
             delete_signal.set(false);
         }
 
-        if books().len()==1{
-            let book=&books()[0];
+        if books().len() == 1 {
+            let book = &books()[0];
             nav.push(book.path.clone());
         }
     });
@@ -34,12 +35,12 @@ pub fn Series(series_id:String) -> Element {
             TopBar { entries: entries, show_extra: use_signal(||true), text_extra: Some("Edit".to_string()), on_extra: Callback::new(move |_| {nav.push(Route::SeriesEdit{ series_id: series_id.clone() });}) }
             h1 { style: styles::HEADER_STYLE, "{title}" }
 
-            div { 
+            div {
                 style: styles::GRID_STYLE,
                 {
                     books.iter().map(|entry| rsx!( Card{ entry: entry.clone() } ))
                 }
             }
         }
-    }
+    };
 }

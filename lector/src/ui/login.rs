@@ -1,8 +1,7 @@
-use dioxus::prelude::*;
 use crate::domain::{self, login::User};
-use crate::styles;
 use crate::infra::login;
-
+use crate::styles;
+use dioxus::prelude::*;
 
 #[component]
 pub fn LoginGuard(children: Element) -> Element {
@@ -126,7 +125,7 @@ fn Login() -> Element {
                 }
 
                 div { style: styles::LOGIN_ERROR, "{error}" }
-  
+
             }
         }
     }
