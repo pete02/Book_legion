@@ -1,7 +1,6 @@
 
 use std::{
-    io::{Cursor,Read},
-    path::{Component, Path, PathBuf}
+    ffi::OsStr, io::{Cursor,Read}, path::{Component, Path, PathBuf}
 };
 use zip::{ZipArchive,read::ZipFile};
 
@@ -95,16 +94,15 @@ fn verify_entry<R: Read>(entry: &ZipFile<'_, R>, limits: &Limits)->Result<(Strin
 
 
 
-
-
 fn normalize_path(path: &str) -> Result<PathBuf, ArchiveError> {
-    if path.contains('\\'){
+    if path.contains('\\') {
         return Err(ArchiveError::BackSlash);
     }
 
-    if path.contains('\0'){
+    if path.contains('\0') {
         return Err(ArchiveError::NullByte);
     }
+
     if path.chars().any(char::is_control) {
         return Err(ArchiveError::ControlCharacter);
     }
@@ -118,24 +116,31 @@ fn normalize_path(path: &str) -> Result<PathBuf, ArchiveError> {
     let mut normalized = PathBuf::new();
 
     for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !normalized.pop() {
-                    return Err(ArchiveError::PathTraversal);
-                }
-            }
-            Component::Normal(component) => {
-                normalized.push(component);
-            }
-            Component::RootDir | Component::Prefix(_) => {
-                return Err(ArchiveError::AbsolutePath);
-            }
-        }
+        apply_component(&mut normalized, component)?;
     }
 
     Ok(normalized)
 }
+
+fn apply_component(normalized: &mut PathBuf, component: Component<'_>) -> Result<(), ArchiveError> {
+    match component {
+        Component::CurDir => {}
+        Component::ParentDir => {
+            if !normalized.pop() {
+                return Err(ArchiveError::PathTraversal);
+            }
+        }
+        Component::Normal(component) => {
+            normalized.push(component);
+        }
+        Component::RootDir | Component::Prefix(_) => {
+            return Err(ArchiveError::AbsolutePath);
+        }
+    }
+
+    Ok(())
+}
+
 
 
 #[cfg(test)]

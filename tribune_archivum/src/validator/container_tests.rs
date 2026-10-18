@@ -5,14 +5,14 @@ use xmltree::{Element, XMLNode};
 const MEDIA_TYPE: &str = "application/oebps-package+xml";
 
 fn archive_files() -> Vec<String> {
-    vec![
+    return vec![
         "EPUB/content.opf".to_owned(),
         "EPUB/other.opf".to_owned(),
     ]
 }
 
 fn rootfile(path: &str, media_type: &str) -> String {
-    format!(
+    return format!(
         r#"<rootfile full-path="{path}" media-type="{media_type}"/>"#
     )
 }
@@ -184,7 +184,7 @@ fn preserves_unrelated_rootfiles_children() {
     let rootfiles = parsed_rootfiles(&result.xml);
 
     assert!(rootfiles.children.iter().any(|node| {
-        matches!(node, XMLNode::Element(element)
+        return matches!(node, XMLNode::Element(element)
             if element.name == "metadata")
     }));
 }
