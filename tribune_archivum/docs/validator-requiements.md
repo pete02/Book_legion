@@ -68,11 +68,8 @@ Note: the OPF may live anywhere in the zip, since moving it would require rewrit
 |---|---|---|
 | S1 | Spine has at least one `itemref`. | REJECT |
 | S2 | Every `itemref/@idref` matches a manifest item. | FIX (drop dangling refs) |
-| S3 | Every spine item has media type `application/xhtml+xml`. | FIX (convert `text/html` by renaming/re-serializing); STRIP non-content items from the spine |
-| S4 | No `linear="no"` attributes. All items are linear. | FIX (remove the attribute; log it) |
-| S5 | No duplicate idrefs in the spine. | FIX (keep first) |
-| S6 | `spine/@page-progression-direction` is absent or `ltr`. | REJECT for `rtl` if unsupported, otherwise FIX |
-| S7 | No `rendition:layout` of `pre-paginated` (fixed layout), no `rendition:*` overrides. | REJECT for fixed layout |
+| S3 | No `linear="no"` attributes. All items are linear. | FIX (remove the attribute; log it) |
+| S4 | No duplicate idrefs in the spine. | FIX (keep first) |
 
 **The spine is the chapter list.** The reader's "chapter N" is spine item N. Chapter indices and cursors never depend on the nav document.
 

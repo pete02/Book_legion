@@ -407,7 +407,7 @@ fn spine_references(opf: &Element) -> HashSet<String> {
 }
 
 fn is_allowed_media_type(media_type: &str) -> bool {
-    matches!(
+    return matches!(
         media_type,
         "application/xhtml+xml"
             | "text/css"
@@ -420,7 +420,7 @@ fn is_allowed_media_type(media_type: &str) -> bool {
             | "font/woff"
             | "font/ttf"
             | "font/otf"
-    )
+    );
 }
 
 /// Content decides first (magic bytes, then text markers). The extension is only a
