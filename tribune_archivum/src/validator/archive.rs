@@ -5,9 +5,6 @@ use std::{
 };
 use zip::{ZipArchive,read::ZipFile};
 
-
-
-
 #[derive(Debug, PartialEq)]
 pub enum ArchiveError{
     NotAZip,

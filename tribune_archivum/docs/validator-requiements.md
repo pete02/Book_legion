@@ -34,22 +34,20 @@ Anything the validator checks must be either satisfied by the fixer or a REJECT.
 | Z3 | No symlinks, no encrypted entries. | REJECT |
 | Z4 | Size limits: total uncompressed <= 500 MB, per entry <= 100 MB, entry count <= 10,000, compression ratio <= 100:1 per entry. (Tune the numbers to your needs.) | REJECT |
 | Z5 | `mimetype` is the first entry, stored uncompressed, content exactly `application/epub+zip`. | FIX (repack) |
-| Z6 | No DRM: no `META-INF/rights.xml`; `META-INF/encryption.xml` is absent, or lists only font obfuscation algorithms. | REJECT for DRM; FIX (de-obfuscate fonts, then remove the file) otherwise |
-| Z7 | All entry names are valid UTF-8 and use only a safe character set (no control characters). | FIX or REJECT |
+| Z6 | All entry names are valid UTF-8 and use only a safe character set (no control characters). | FIX or REJECT |
 
 ### 2.2 Container and package document (C, O)
 
 | ID | Requirement | On violation |
 |---|---|---|
 | C1 | `META-INF/container.xml` exists and is well-formed XML. | REJECT |
-| C2 | It contains **exactly one** `<rootfile>`, with `media-type="application/oebps-package+xml"` and a `full-path` that ends in `.opf`. | FIX (pick the first matching rootfile, drop the others) |
+| C2 | It contains **exactly one existing** `<rootfile>`, with `media-type="application/oebps-package+xml"` and a `full-path` that ends in `.opf`. | FIX (pick the first matching rootfile, drop the others) |
 | C3 | `full-path` is a normalized relative path (no leading `/`, no `..`, no percent-encoding) and the file exists. | FIX / REJECT if missing |
 | O1 | The OPF is well-formed XML with root element `package`. | REJECT |
-| O2 | Required metadata is present and non-empty: `dc:identifier`, `dc:title`, `dc:language`. | FIX (UUID / filename-derived title / `und`) |
-| O3 | `package/@unique-identifier` resolves to a `dc:identifier`. | FIX |
-| O4 | `package/@version` is `3.0`. | FIX (set it, add `dcterms:modified`) |
-| O5 | Exactly one `<meta property="dcterms:modified">` with an ISO timestamp. | FIX |
-| O6 | The OPF has no `<guide>` element. | STRIP (after using it to locate a cover) |
+| O2 | The OPF has no `<guide>` element. | STRIP (after using it to locate a cover) |
+| O3 | Exactly one `<manifest> ` element. | Merge the two manifests into one, removing any duplicates. Refuse any epub without manifest |
+| O4 | Exactly one `<spine> ` element. | Merge the two manifests into one, removing any duplicates. Refuse any epub without spine |
+
 
 Note: the OPF may live anywhere in the zip, since moving it would require rewriting references. The onboarder records `opf_path` in the DB, and the reader uses that instead of parsing `container.xml` on every request. (`container.xml` is still required, because other tools and a re-export will want it.)
 

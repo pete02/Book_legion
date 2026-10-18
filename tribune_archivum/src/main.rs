@@ -1,5 +1,5 @@
 #![warn(clippy::cognitive_complexity)]
-mod archive;
+mod validator;
 
 
 

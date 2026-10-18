@@ -6,4 +6,5 @@ edition = "2024"
 
 [dependencies]
 zip = "7.4.0"
+xmltree = "0.11"
 
