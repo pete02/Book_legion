@@ -79,7 +79,7 @@ Nav is used **only for titles and the table-of-contents UI**. It never determine
 
 | ID | Requirement | On violation |
 |---|---|---|
-| N1 | Exactly one manifest item has `id="nav"`, and that same item has `properties="nav"` and `media-type="application/xhtml+xml"`. | FIX |
+| N1 | Exactly one manifest item has `id="nav"`, and that same item has `properties="nav"` and `media-type="application/xhtml+xml"`. | REJECT |
 | N2 | The nav item is **not** in the spine. | FIX (remove from the spine) |
 | N3 | The nav file is well-formed XML and contains exactly one `<nav epub:type="toc">` (other `<nav>` elements such as landmarks and page-list are removed). | FIX |
 | N4 | The toc `<nav>` contains a single `<ol>` with nested `<li><a href>` entries (and optionally a nested `<ol>`). Every `<li>` has an `<a>` (no `<span>`-only headings). | FIX (convert spans, flatten odd structures) |
