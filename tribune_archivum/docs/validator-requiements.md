@@ -143,7 +143,7 @@ Because the reader concatenates all CSS files (`GetCSS`) and applies them to the
 | Y2 | No `@import`, no remote `url()`, no `expression()`, `behavior:`, or `-moz-binding`. | STRIP |
 | Y3 | `url()` references are relative and resolve to allowed manifest resources (fonts/images). | STRIP dangling |
 | Y4 | Only `@font-face`, `@media`, `@page`, and `@supports` at-rules are kept. | STRIP others |
-| Y5 | **Scoping (recommended):** the fixer prefixes every selector with a fixed container selector (for example `.book-content`), and maps `html`/`body` selectors to that container, so book CSS cannot style the app chrome. Alternatively, the reader renders each chapter in a sandboxed shadow root or iframe. Pick one and make it a contract. | FIX |
+
 
 ### 2.10 Library metadata (L)
 

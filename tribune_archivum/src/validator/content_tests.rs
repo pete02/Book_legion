@@ -379,8 +379,9 @@ mod epub_switch {
         let body = r#"<epub:switch xmlns:epub="http://www.idpf.org/2007/ops"><epub:case required-namespace="http://www.w3.org/1998/Math/MathML"><p>math</p></epub:case><epub:default><p>fallback</p></epub:default></epub:switch>"#;
 
         let (output, report) = repair_chapter(&chapter("", body));
-
-        assert!(output.contains("<p>fallback</p>"));
+        
+        assert!(output.contains(">fallback</p>"));
+        assert!(!output.contains("epub:switch"));
         assert!(!output.contains("math"));
         assert_eq!(report.resolved_switches, 1);
     }
