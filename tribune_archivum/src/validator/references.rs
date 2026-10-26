@@ -487,7 +487,7 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-fn normalize_path(path: &str) -> Option<String> {
+pub fn normalize_path(path: &str) -> Option<String> {
     if path.is_empty() || path.starts_with('/') || path.contains('\\') || path.contains('\0') {
         return None;
     }

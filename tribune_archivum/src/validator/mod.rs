@@ -5,3 +5,4 @@ pub mod opf;
 pub mod spine;
 pub mod content;
 pub mod references;
+pub mod metadata;
