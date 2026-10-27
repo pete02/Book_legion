@@ -1,6 +1,9 @@
 #![warn(clippy::cognitive_complexity)]
 
 mod validator;
-mod generate_broken_zips;
+//mod generate_broken_zips;
 
-fn main() {}
+fn main() {
+    let chec=validator::verify_ebook("./target/broken_epubs/valid.epub", "OEBPS/content.opf");
+    println!("{:?}",chec)
+}

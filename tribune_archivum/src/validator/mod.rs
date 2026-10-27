@@ -1,9 +1,9 @@
-use std::{error::Error, fs, io::{Cursor, Read}, path::Path};
+use std::{ fs, io::{Cursor, Read}, path::Path};
 use zip::ZipArchive;
 
 pub mod errors;
 
-use errors::{ChapterError, CoverError, ManifestError, SpineError, ZipError, ValidationError, NavError};
+use errors::{ChapterError, CoverError, ManifestError, SpineError, ZipError, ValidationError, NavError, ReadFail};
 
 use crate::validator::errors::PackageError;
 
@@ -55,8 +55,17 @@ fn get_book(zip_path: &str) -> Result<ZipArchive<Cursor<Vec<u8>>>, ZipError> {
 
 
 fn get_package(book: &mut ZipArchive<Cursor<Vec<u8>>>, opf_path: &str)->Result<Package, PackageError>{
-    let opf = read_zip_text(book, opf_path).map_err(|_|PackageError::MissingOpf(opf_path.to_string()))?;
+    let opf = read_zip_text(book, opf_path).map_err(|e| match e {
+        ReadFail::NotFound   => PackageError::MissingOpf(opf_path.to_string()),
+        ReadFail::Unreadable => PackageError::MissingOpf(opf_path.to_string()), // no ReadError variant for chapters
+        ReadFail::NotUtf8    => PackageError::MalformedFile(opf_path.to_string()),
+    })?;
     let doc = roxmltree::Document::parse(&opf).map_err(|_|PackageError::MalformedFile(opf_path.to_string()))?;
+
+    if !doc.root_element().has_tag_name("package") {
+        return Err(PackageError::MalformedFile(opf_path.to_string()));
+    }
+
     Ok(Package{
         manifest: get_manifest(&doc)?,
         spine: get_spine(&doc)?
@@ -126,15 +135,16 @@ fn check_spine_id_duplication(spine: &[SpineItem]) -> Result<(), SpineError> {
 
     Ok(())
 }
+use zip::result::ZipError as ZipLibError;
 
-
-fn read_zip_text(
-    book: &mut ZipArchive<Cursor<Vec<u8>>>,
-    path: &str,
-) -> Result<String, Box<dyn Error>> {
-    let mut text = String::new();
-    book.by_name(path)?.read_to_string(&mut text)?;
-    Ok(text)
+fn read_zip_text(book: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<String, ReadFail> {
+    let mut file = book.by_name(path).map_err(|e| match e {
+        ZipLibError::FileNotFound => ReadFail::NotFound,
+        _ => ReadFail::Unreadable,
+    })?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|_| ReadFail::Unreadable)?;
+    String::from_utf8(bytes).map_err(|_| ReadFail::NotUtf8)
 }
 
 fn resolve_href(opf_path: &str, href: &str) -> Result<String, &'static str> {
@@ -147,6 +157,7 @@ fn resolve_href(opf_path: &str, href: &str) -> Result<String, &'static str> {
 
     Ok(path.to_string_lossy().into_owned())
 }
+
 fn check_cover(
     book: &mut ZipArchive<Cursor<Vec<u8>>>,
     opf_path: &str,
@@ -156,9 +167,10 @@ fn check_cover(
         .find(|x| x.id == "cover")
         .ok_or(CoverError::MissingId)?;
 
-    if !cover.media_type.starts_with("image/") {
+    if !matches!(cover.media_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
         return Err(CoverError::UnsupportedMediaType(cover.media_type.clone()));
     }
+
     let path = resolve_href(opf_path, &cover.href).map_err(|_|CoverError::PathEscape(cover.href.clone()))?;
     let mut data = Vec::new();
 
@@ -169,7 +181,11 @@ fn check_cover(
     .map_err(|_| CoverError::ReadError(path.clone()))?;
     
     
-    image::load_from_memory(&data).map_err(|_|CoverError::InvalidImage(path.clone()))?;
+    let img=image::load_from_memory(&data).map_err(|_|CoverError::InvalidImage(path.clone()))?;
+    let (w, h) = (img.width(), img.height());
+    if !(100..=10_000).contains(&w) || !(100..=10_000).contains(&h) {
+        return Err(CoverError::InvalidImage(format!("{path}: {w}x{h}, must be 100-10000 px")));
+    }
 
     Ok(())
 }
@@ -192,8 +208,11 @@ fn check_nav(
     let path = resolve_href(opf_path, &nav.href)
         .map_err(|_| NavError::PathEscape(nav.href.clone()))?;
 
-    let text = read_zip_text(book, &path)
-        .map_err(|_| NavError::MissingFile(path.clone()))?;
+    let text = read_zip_text(book, &path).map_err(|e| match e {
+        ReadFail::NotFound   => NavError::MissingFile(path.clone()),
+        ReadFail::Unreadable => NavError::MissingFile(path.clone()), // no ReadError variant for chapters
+        ReadFail::NotUtf8    => NavError::MalformedFile(path.clone()),
+    })?;
 
     let doc = roxmltree::Document::parse(&text)
         .map_err(|_| NavError::MalformedFile(path.clone()))?;
@@ -262,10 +281,17 @@ fn verify_chapter(
     }
 
     let path = resolve_href(opf_path, &entry.href).map_err(|_| ChapterError::PathEscape(entry.href.clone()))?;
-    let text = read_zip_text(book, &path).map_err(|_|ChapterError::MissingFile(path.clone()))?;
+    let text = read_zip_text(book, &path).map_err(|e| match e {
+        ReadFail::NotFound   => ChapterError::MissingFile(path.clone()),
+        ReadFail::Unreadable => ChapterError::MissingFile(path.clone()), // no ReadError variant for chapters
+        ReadFail::NotUtf8    => ChapterError::MalformedFile(path.clone()),
+    })?;
     roxmltree::Document::parse(&text).map_err(|_|ChapterError::MalformedFile(path.clone()))?;
 
     Ok(())
 }
 
 
+
+#[cfg(test)]
+mod validator_tests;

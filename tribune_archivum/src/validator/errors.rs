@@ -126,8 +126,19 @@ pub enum NavError {
 
     #[error("TOC contains no entries")]
     EmptyToc,
+
 }
 
+#[derive(Debug, Error)]
+pub enum ReadFail{
+    #[error("File could not be read")]
+    Unreadable,
+    #[error("File not utf8")]
+    NotUtf8,
+    #[error("File not found")]
+    NotFound
+
+}
 
 #[derive(Debug, Error)]
 pub enum ChapterError {
