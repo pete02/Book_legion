@@ -3,5 +3,8 @@
     "files.exclude": {
         "": true,
         "**/.git": false
+    },
+    "chat.tools.terminal.autoApprove": {
+        "cargo test": true
     }
 }

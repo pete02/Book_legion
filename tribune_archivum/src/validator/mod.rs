@@ -1,6 +1,6 @@
-use std::{ fs, io::{Cursor, Read}, path::Path};
+use std::{ fs, io::Read, path::Path};
 use zip::ZipArchive;
-
+use std::fs::File;
 pub mod errors;
 
 use errors::{ChapterError, CoverError, ManifestError, SpineError, ZipError, ValidationError, NavError, ReadFail};
@@ -40,21 +40,48 @@ pub fn verify_ebook(zip_path: &str, opf_path: &str) -> Result<(), ValidationErro
     Ok(())
 }
 
-fn get_book(zip_path: &str) -> Result<ZipArchive<Cursor<Vec<u8>>>, ZipError> {
-    let bytes = fs::read(zip_path).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            ZipError::ZipFileMissing
-        } else {
-            ZipError::Internal(Box::new(error))
-        }
-    })?;
+const MAX_TOTAL_SIZE: u128 = 500 * 1_000_000;
+const MAX_FILE_SIZE: u64= 100*1_000_000;
+const MAX_COMPRESSION_RATIO: u128 = 100;
+const MAX_FILE_AMOUNT: u64=10000;
 
-    ZipArchive::new(Cursor::new(bytes))
-        .map_err(|error| ZipError::Internal(Box::new(error)))
+fn get_book(zip_path: &str) -> Result<ZipArchive<File>, ZipError> {
+    if !fs::exists(zip_path).map_err(|e|ZipError::Internal(Box::new(e)))? {
+        return Err(ZipError::ZipFileMissing)
+    }
+
+    let file_size = fs::metadata(zip_path).map_err(|e|ZipError::Internal(Box::new(e)))?.len() as u128;
+    if file_size > MAX_TOTAL_SIZE {
+        return Err(ZipError::ZipFileSizeError)
+    }
+
+    let file = File::open(zip_path).map_err(|e|ZipError::Internal(Box::new(e)))?;
+    let mut archive = ZipArchive::new(file).map_err(|e|ZipError::Internal(Box::new(e)))?;
+
+    if let Some(total) = archive.decompressed_size() {
+        if total > MAX_TOTAL_SIZE || total > file_size * MAX_COMPRESSION_RATIO {
+            return Err(ZipError::ZipFileSizeError)
+        }
+    }
+
+    let mut file_numbers=0;
+    for i in 0..archive.len(){
+        file_numbers+=1;
+        if file_numbers>MAX_FILE_AMOUNT{
+            return Err(ZipError::ZipFileAmountError)
+        }
+
+        let file=archive.by_index(i).map_err(|e|ZipError::Internal(Box::new(e)))?;
+        if file.size() >MAX_FILE_SIZE{
+            return Err(ZipError::ZipFileTooLarge(file.name().to_owned()));
+        }
+    }
+
+    Ok(archive)
 }
 
 
-fn get_package(book: &mut ZipArchive<Cursor<Vec<u8>>>, opf_path: &str)->Result<Package, PackageError>{
+fn get_package(book: &mut ZipArchive<File>, opf_path: &str) -> Result<Package, PackageError>{
     let opf = read_zip_text(book, opf_path).map_err(|e| match e {
         ReadFail::NotFound   => PackageError::MissingOpf(opf_path.to_string()),
         ReadFail::Unreadable => PackageError::MissingOpf(opf_path.to_string()), // no ReadError variant for chapters
@@ -137,7 +164,7 @@ fn check_spine_id_duplication(spine: &[SpineItem]) -> Result<(), SpineError> {
 }
 use zip::result::ZipError as ZipLibError;
 
-fn read_zip_text(book: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<String, ReadFail> {
+fn read_zip_text(book: &mut ZipArchive<File>, path: &str) -> Result<String, ReadFail> {
     let mut file = book.by_name(path).map_err(|e| match e {
         ZipLibError::FileNotFound => ReadFail::NotFound,
         _ => ReadFail::Unreadable,
@@ -159,7 +186,7 @@ fn resolve_href(opf_path: &str, href: &str) -> Result<String, &'static str> {
 }
 
 fn check_cover(
-    book: &mut ZipArchive<Cursor<Vec<u8>>>,
+    book: &mut ZipArchive<File>,
     opf_path: &str,
     manifest: &[Item],
 ) -> Result<(), CoverError> {
@@ -192,7 +219,7 @@ fn check_cover(
 
 
 fn check_nav(
-    book: &mut ZipArchive<Cursor<Vec<u8>>>,
+    book: &mut ZipArchive<File>,
     opf_path: &str,
     manifest: &[Item],
 ) -> Result<(), NavError> {
@@ -267,7 +294,7 @@ fn check_nav(
 
 
 fn verify_chapter(
-    book: &mut ZipArchive<Cursor<Vec<u8>>>,
+    book: &mut ZipArchive<File>,
     item: &SpineItem,
     opf_path: &str,
     manifest: &[Item],

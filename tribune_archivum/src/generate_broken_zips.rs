@@ -303,6 +303,20 @@ breakers! {
     y3_dangling_url(fs)          { add_css(fs, "p { background: url(missing.png); }"); }
     y4_disallowed_at_rule(fs)    { add_css(fs, "@keyframes k { from { color: red; } to { color: blue; } }"); }
 
+    // ---- extra breakers to exercise validator variants that had no fixture yet
+    v1_cover_file_missing(fs)    { remove(fs, COVER); }
+    v1_cover_path_escape(fs)     { replace(fs, OPF, "href=\"cover.png\"", "href=\"../evil.png\""); }
+    n1_nav_file_missing(fs)      { remove(fs, NAV); }
+    n1_nav_malformed(fs)         { replace(fs, NAV, "</nav>", ""); }
+    n3_no_toc_nav(fs)            { replace(fs, NAV, "epub:type=\"toc\"", ""); }
+    n9_fragment_href(fs)         { replace(fs, NAV, "<li><a href=\"ch2.xhtml\">Chapter Two</a></li>", "<li><a href=\"#frag\">Chapter Two</a></li>"); }
+    n9_escape_href(fs)           { replace(fs, NAV, "<li><a href=\"ch2.xhtml\">Chapter Two</a></li>", "<li><a href=\"../x.xhtml\">Chapter Two</a></li>"); }
+    n9_target_not_in_manifest(fs){ replace(fs, NAV, "<li><a href=\"ch2.xhtml\">Chapter Two</a></li>", "<li><a href=\"stray.xhtml\">Stray</a></li>"); }
+    s1_missing_idref(fs)         { add_itemref(fs, "<itemref/>"); }
+    x3_chapter_file_missing(fs)  { add_item(fs, "<item id=\"gone\" href=\"gone.xhtml\" media-type=\"application/xhtml+xml\"/>"); add_itemref(fs, "<itemref idref=\"gone\"/>"); }
+    x3_chapter_wrong_type(fs)    { add_item(fs, "<item id=\"snd\" href=\"a.mp3\" media-type=\"audio/mpeg\"/>"); add_itemref(fs, "<itemref idref=\"snd\"/>"); }
+    x3_chapter_escape(fs)        { add_item(fs, "<item id=\"esc\" href=\"../../x.xhtml\" media-type=\"application/xhtml+xml\"/>"); add_itemref(fs, "<itemref idref=\"esc\"/>"); }
+
     // ---- last: byte-level and destructive breakers (these mask others, so they go at the end)
     x1_latin1_not_utf8(fs)       { replace(fs, CH2, "World.", "Café"); if let Some(f) = fs.iter_mut().find(|f| f.name == CH2) { f.data = String::from_utf8_lossy(&f.data).chars().map(|c| c as u8).collect(); } }
     x1_bom(fs)                   { if let Some(f) = fs.iter_mut().find(|f| f.name == CH2) { f.data.splice(0..0, [0xEF, 0xBB, 0xBF]); } }
