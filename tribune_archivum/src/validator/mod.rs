@@ -14,10 +14,10 @@ struct Package {
 }
 
 #[derive(Debug)]
-struct Item {
-    id: String,
-    href: String,
-    media_type: String,
+pub struct Item {
+    pub id: String,
+    pub href: String,
+    pub media_type: String,
 }
 
 #[derive(Debug)]
@@ -164,7 +164,7 @@ fn check_spine_id_duplication(spine: &[SpineItem]) -> Result<(), SpineError> {
 }
 use zip::result::ZipError as ZipLibError;
 
-fn read_zip_text(book: &mut ZipArchive<File>, path: &str) -> Result<String, ReadFail> {
+pub fn read_zip_text(book: &mut ZipArchive<File>, path: &str) -> Result<String, ReadFail> {
     let mut file = book.by_name(path).map_err(|e| match e {
         ZipLibError::FileNotFound => ReadFail::NotFound,
         _ => ReadFail::Unreadable,
@@ -255,33 +255,7 @@ fn check_nav(
     let mut entries = 0;
 
     for li in toc.descendants().filter(|node| node.has_tag_name("li")) {
-        let link = li.descendants()
-            .find(|node| node.has_tag_name("a") && node.attribute("href").is_some())
-            .ok_or(NavError::MissingHref)?;
-
-        let label = link.text().unwrap_or("").trim();
-        if label.is_empty() {
-            return Err(NavError::EmptyLabel);
-        }
-
-        let href = link.attribute("href").unwrap();
-        if href.starts_with('#') || href.starts_with("data:") {
-            return Err(NavError::InvalidHref(href.to_string()));
-        }
-
-        let target = href.split('#').next().unwrap();
-        let target_path = resolve_href(&path, target)
-            .map_err(|_| NavError::PathEscape(href.to_string()))?;
-
-        let target_in_manifest = manifest.iter().any(|item| {
-            resolve_href(opf_path, &item.href)
-                .is_ok_and(|item_path| item_path == target_path)
-        });
-
-        if !target_in_manifest {
-            return Err(NavError::TargetNotInManifest(href.to_string()));
-        }
-
+        check_link(li, manifest, &path, opf_path)?;
         entries += 1;
     }
 
@@ -292,6 +266,37 @@ fn check_nav(
     Ok(())
 }
 
+
+fn check_link(li: roxmltree::Node<'_,'_>, manifest: &[Item], path: &str, opf_path: &str)->Result<(), NavError>{
+    let link = li.descendants()
+    .find(|node| node.has_tag_name("a") && node.attribute("href").is_some())
+    .ok_or(NavError::MissingHref)?;
+
+    let label = link.text().unwrap_or("").trim();
+    if label.is_empty() {
+        return Err(NavError::EmptyLabel);
+    }
+
+    let href = link.attribute("href").unwrap();
+    if href.starts_with('#') || href.starts_with("data:") {
+        return Err(NavError::InvalidHref(href.to_string()));
+    }
+
+    let target = href.split('#').next().unwrap();
+    let target_path = resolve_href(&path, target)
+        .map_err(|_| NavError::PathEscape(href.to_string()))?;
+
+    let target_in_manifest = manifest.iter().any(|item| {
+        resolve_href(opf_path, &item.href)
+            .is_ok_and(|item_path| item_path == target_path)
+    });
+
+    if !target_in_manifest {
+        return Err(NavError::TargetNotInManifest(href.to_string()));
+    }
+
+    Ok(())
+}
 
 fn verify_chapter(
     book: &mut ZipArchive<File>,
